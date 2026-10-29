@@ -275,21 +275,21 @@ public struct MyTrailsView: View {
                 VStack(alignment: .leading, spacing: 0) {
                     // Image / Cover Bed: Authentic media or architectural cartographic header
                     let heroMedia = hero.moments.filter { m in
-                        ((m.hasPhoto || m.mediaType == "photo") && m.resolvedPhotoURL(trailId: hero.id) != nil)
-                        || ((m.hasVideo || m.mediaType == "video") && (m.resolvedVideoURL(trailId: hero.id) != nil || m.resolvedVideoThumbnailURL(trailId: hero.id) != nil))
+                        ((m.hasPhoto || m.mediaType == "photo") && m.resolvedPhotoURL(trailId: hero.id, fallbackTrailId: hero.inspiredByTrailId) != nil)
+                        || ((m.hasVideo || m.mediaType == "video") && (m.resolvedVideoURL(trailId: hero.id, fallbackTrailId: hero.inspiredByTrailId) != nil || m.resolvedVideoThumbnailURL(trailId: hero.id, fallbackTrailId: hero.inspiredByTrailId) != nil))
                     }
 
                     ZStack(alignment: .bottomLeading) {
                         if let first = heroMedia.first {
                             if first.hasVideo || first.mediaType == "video",
-                               let thumbURL = first.resolvedVideoThumbnailURL(trailId: hero.id),
+                               let thumbURL = first.resolvedVideoThumbnailURL(trailId: hero.id, fallbackTrailId: hero.inspiredByTrailId),
                                let uiImage = UIImage(contentsOfFile: thumbURL.path) {
                                 Image(uiImage: uiImage)
                                     .resizable()
                                     .scaledToFill()
                                     .frame(height: 240)
                                     .clipped()
-                            } else if let photoURL = first.resolvedPhotoURL(trailId: hero.id),
+                            } else if let photoURL = first.resolvedPhotoURL(trailId: hero.id, fallbackTrailId: hero.inspiredByTrailId),
                                       let uiImage = UIImage(contentsOfFile: photoURL.path) {
                                 Image(uiImage: uiImage)
                                     .resizable()
@@ -313,18 +313,36 @@ public struct MyTrailsView: View {
                         // Top Hardware Badge
                         VStack {
                             HStack {
-                                HStack(spacing: 5) {
-                                    Circle()
-                                        .fill(AppColors.primary)
-                                        .frame(width: 6, height: 6)
-                                    Text("Saved on this iPhone")
-                                        .font(AppFonts.labelSpatial)
-                                        .foregroundColor(AppColors.primary)
+                                if hero.isRetrace {
+                                    HStack(spacing: 5) {
+                                        Image(systemName: "figure.walk.motion")
+                                            .font(.system(size: 11, weight: .bold))
+                                        Text("RETRACE")
+                                            .font(AppFonts.labelSpatial)
+                                        if let sim = hero.retraceSimilarityIndex {
+                                            Text("· \(Int(sim * 100))% MATCH")
+                                                .font(AppFonts.labelSpatial)
+                                        }
+                                    }
+                                    .foregroundColor(.white)
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 5)
+                                    .background(Color(hex: "#00838F"))
+                                    .clipShape(Capsule())
+                                } else {
+                                    HStack(spacing: 5) {
+                                        Circle()
+                                            .fill(AppColors.primary)
+                                            .frame(width: 6, height: 6)
+                                        Text("Saved on this iPhone")
+                                            .font(AppFonts.labelSpatial)
+                                            .foregroundColor(AppColors.primary)
+                                    }
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 5)
+                                    .background(AppColors.pureWhite.opacity(0.92))
+                                    .clipShape(Capsule())
                                 }
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 5)
-                                .background(AppColors.pureWhite.opacity(0.92))
-                                .clipShape(Capsule())
 
                                 Spacer()
 
@@ -353,9 +371,19 @@ public struct MyTrailsView: View {
                                 .foregroundColor(AppColors.pureWhite)
                                 .multilineTextAlignment(.leading)
 
-                            Text("A trail by \(hero.authorName)")
-                                .font(AppFonts.bodySmall)
-                                .foregroundColor(AppColors.surfaceContainerHigh.opacity(0.9))
+                            HStack(spacing: 6) {
+                                Text("A trail by \(hero.authorName)")
+                                    .font(AppFonts.bodySmall)
+                                    .foregroundColor(AppColors.surfaceContainerHigh.opacity(0.9))
+
+                                if let refTitle = hero.retraceReferenceTrailTitle {
+                                    Text("·")
+                                        .foregroundColor(AppColors.surfaceContainerHigh.opacity(0.6))
+                                    Text("Retraced from “\(refTitle)”")
+                                        .font(AppFonts.caption)
+                                        .foregroundColor(Color(hex: "#00E5FF"))
+                                }
+                            }
                         }
                         .padding(16)
                     }
@@ -476,19 +504,31 @@ public struct MyTrailsView: View {
                             // Left Icon Thumbnail
                             ZStack {
                                 RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                    .fill(AppColors.surfaceContainerHigh)
+                                    .fill(trail.isRetrace ? Color(hex: "#00838F").opacity(0.12) : AppColors.surfaceContainerHigh)
                                     .frame(width: 44, height: 44)
 
-                                Image(systemName: trail.floorCode == "LVL 02" ? "sunset.fill" : "square.3.layers.3d.down.right")
+                                Image(systemName: trail.isRetrace ? "figure.walk.motion" : (trail.floorCode == "LVL 02" ? "sunset.fill" : "square.3.layers.3d.down.right"))
                                     .font(.system(size: 18))
-                                    .foregroundColor(AppColors.primary)
+                                    .foregroundColor(trail.isRetrace ? Color(hex: "#00838F") : AppColors.primary)
                             }
 
                             VStack(alignment: .leading, spacing: 3) {
-                                Text(trail.title)
-                                    .font(AppFonts.headlineSmall)
-                                    .foregroundColor(AppColors.deepInk)
-                                    .lineLimit(1)
+                                HStack(spacing: 6) {
+                                    Text(trail.title)
+                                        .font(AppFonts.headlineSmall)
+                                        .foregroundColor(AppColors.deepInk)
+                                        .lineLimit(1)
+
+                                    if trail.isRetrace {
+                                        Text("RETRACE")
+                                            .font(.system(size: 9, weight: .bold))
+                                            .foregroundColor(.white)
+                                            .padding(.horizontal, 6)
+                                            .padding(.vertical, 2)
+                                            .background(Color(hex: "#00838F"))
+                                            .clipShape(Capsule())
+                                    }
+                                }
 
                                 HStack(spacing: 6) {
                                     Text(trail.placeName)
@@ -501,17 +541,32 @@ public struct MyTrailsView: View {
                                     Text("\(trail.moments.count) moments")
                                         .font(AppFonts.labelSpatial)
                                         .foregroundColor(AppColors.secondary)
+
+                                    if let sim = trail.retraceSimilarityIndex {
+                                        Text("·")
+                                            .foregroundColor(AppColors.outline)
+                                        Text("\(Int(sim * 100))% match")
+                                            .font(AppFonts.labelSpatial)
+                                            .foregroundColor(Color(hex: "#00838F"))
+                                    }
                                 }
 
-                                HStack(spacing: 4) {
-                                    Circle()
-                                        .fill(AppColors.primary)
-                                        .frame(width: 5, height: 5)
-                                    Text("Saved on this iPhone")
-                                        .font(AppFonts.labelSpatial)
-                                        .foregroundColor(AppColors.primary)
+                                if let refTitle = trail.retraceReferenceTrailTitle {
+                                    Text("Retraced from “\(refTitle)”")
+                                        .font(AppFonts.caption)
+                                        .foregroundColor(AppColors.secondary)
+                                        .lineLimit(1)
+                                } else {
+                                    HStack(spacing: 4) {
+                                        Circle()
+                                            .fill(AppColors.primary)
+                                            .frame(width: 5, height: 5)
+                                        Text("Saved on this iPhone")
+                                            .font(AppFonts.labelSpatial)
+                                            .foregroundColor(AppColors.primary)
+                                    }
+                                    .padding(.top, 2)
                                 }
-                                .padding(.top, 2)
                             }
 
                             Spacer()

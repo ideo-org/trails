@@ -20,6 +20,7 @@ public struct TrailJournalDetailView: View {
     // Revisit & Presentation Replay
     @State private var showingRevisitReplay: Bool = false
     @State private var showingRetraceView: Bool = false
+    @State private var selectedLinkedTrail: TrailDetail? = nil
 
     // Media Viewer Sheets
     @State private var selectedPhotoURL: URL?
@@ -63,6 +64,11 @@ public struct TrailJournalDetailView: View {
                         // MARK: - 2. Title & Curatorial Attribution
                         titleAndAttributionSection
 
+                        // MARK: - 2.5 Retrace Provenance Card (if this is a retraced walk)
+                        if trail.isRetrace {
+                            retraceProvenanceCard
+                        }
+
                         // MARK: - 3. Author's Personal Notes Callout
                         if !trail.personalNotes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                             authorNotesCallout(trail.personalNotes)
@@ -79,10 +85,15 @@ public struct TrailJournalDetailView: View {
                         // MARK: - 6. Narrative Timeline: Moments Along This Trail
                         narrativeTimelineSection
 
-                        // MARK: - 6. End of Journal Entry Divider
+                        // MARK: - 6.5 Retrace Walks & Replays (if this is an original reference trail)
+                        if !trail.isRetrace {
+                            retraceHistorySection
+                        }
+
+                        // MARK: - 7. End of Journal Entry Divider
                         journalConcludedMarker
 
-                        // MARK: - 7. Bottom Trail Management Actions
+                        // MARK: - 8. Bottom Trail Management Actions
                         bottomManagementActions
 
                         Spacer(minLength: 40)
@@ -115,7 +126,7 @@ public struct TrailJournalDetailView: View {
                             .scaledToFit()
                             .frame(width: 20, height: 20)
                             .clipShape(Circle())
-                        Text("Your Saved Trail")
+                        Text(trail.isRetrace ? "Retraced Trail Record" : "Your Saved Trail")
                             .font(AppFonts.headlineSmall)
                             .foregroundColor(AppColors.primary)
                     }
@@ -147,6 +158,10 @@ public struct TrailJournalDetailView: View {
                         }
                     }
                 }
+            }
+            // Fullscreen Linked Trail Detail View
+            .fullScreenCover(item: $selectedLinkedTrail) { linkedTrail in
+                TrailJournalDetailView(trail: linkedTrail)
             }
             // Fullscreen Revisit Spatial Memory Replay
             .fullScreenCover(isPresented: $showingRevisitReplay) {
@@ -220,8 +235,8 @@ public struct TrailJournalDetailView: View {
 
     private var mediaMoments: [SpatialMoment] {
         trail.moments.filter { m in
-            ((m.hasPhoto || m.mediaType == "photo") && m.resolvedPhotoURL(trailId: trail.id) != nil)
-            || ((m.hasVideo || m.mediaType == "video") && (m.resolvedVideoURL(trailId: trail.id) != nil || m.resolvedVideoThumbnailURL(trailId: trail.id) != nil))
+            ((m.hasPhoto || m.mediaType == "photo") && m.resolvedPhotoURL(trailId: trail.id, fallbackTrailId: trail.inspiredByTrailId) != nil)
+            || ((m.hasVideo || m.mediaType == "video") && (m.resolvedVideoURL(trailId: trail.id, fallbackTrailId: trail.inspiredByTrailId) != nil || m.resolvedVideoThumbnailURL(trailId: trail.id, fallbackTrailId: trail.inspiredByTrailId) != nil))
         }
     }
 
@@ -233,7 +248,7 @@ public struct TrailJournalDetailView: View {
                     ForEach(Array(mediaMoments.enumerated()), id: \.element.id) { index, moment in
                         ZStack(alignment: .center) {
                             if moment.hasVideo || moment.mediaType == "video" {
-                                if let thumbURL = moment.resolvedVideoThumbnailURL(trailId: trail.id),
+                                if let thumbURL = moment.resolvedVideoThumbnailURL(trailId: trail.id, fallbackTrailId: trail.inspiredByTrailId),
                                    let uiImage = UIImage(contentsOfFile: thumbURL.path) {
                                     Image(uiImage: uiImage)
                                         .resizable()
@@ -262,7 +277,7 @@ public struct TrailJournalDetailView: View {
                                     )
                                     .shadow(color: Color.black.opacity(0.25), radius: 6)
                             } else {
-                                if let photoURL = moment.resolvedPhotoURL(trailId: trail.id),
+                                if let photoURL = moment.resolvedPhotoURL(trailId: trail.id, fallbackTrailId: trail.inspiredByTrailId),
                                    let uiImage = UIImage(contentsOfFile: photoURL.path) {
                                     Image(uiImage: uiImage)
                                         .resizable()
@@ -285,10 +300,10 @@ public struct TrailJournalDetailView: View {
                         .onTapGesture {
                             Haptics.selection()
                             if moment.hasVideo || moment.mediaType == "video" {
-                                if let videoURL = moment.resolvedVideoURL(trailId: trail.id) {
+                                if let videoURL = moment.resolvedVideoURL(trailId: trail.id, fallbackTrailId: trail.inspiredByTrailId) {
                                     selectedVideoURL = videoURL
                                 }
-                            } else if let photoURL = moment.resolvedPhotoURL(trailId: trail.id) {
+                            } else if let photoURL = moment.resolvedPhotoURL(trailId: trail.id, fallbackTrailId: trail.inspiredByTrailId) {
                                 selectedPhotoURL = photoURL
                                 selectedPhotoTitle = moment.title
                             }
@@ -355,20 +370,40 @@ public struct TrailJournalDetailView: View {
             // Top Status & Counter Strip
             VStack {
                 HStack {
-                    HStack(spacing: 6) {
-                        Circle()
-                            .fill(AppColors.primary)
-                            .frame(width: 7, height: 7)
-                        Text("SAVED ON THIS IPHONE")
-                            .font(AppFonts.labelSpatial)
-                            .foregroundColor(AppColors.primary)
-                            .tracking(1.0)
+                    if trail.isRetrace {
+                        HStack(spacing: 6) {
+                            Image(systemName: "figure.walk.motion")
+                                .font(.system(size: 11, weight: .bold))
+                            Text("RETRACE")
+                                .font(AppFonts.labelSpatial)
+                                .tracking(1.0)
+                            if let sim = trail.retraceSimilarityIndex {
+                                Text("· \(Int(sim * 100))% MATCH")
+                                    .font(AppFonts.labelSpatial)
+                            }
+                        }
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(Color(hex: "#00838F"))
+                        .clipShape(Capsule())
+                        .shadow(color: Color.black.opacity(0.12), radius: 4, x: 0, y: 2)
+                    } else {
+                        HStack(spacing: 6) {
+                            Circle()
+                                .fill(AppColors.primary)
+                                .frame(width: 7, height: 7)
+                            Text("SAVED ON THIS IPHONE")
+                                .font(AppFonts.labelSpatial)
+                                .foregroundColor(AppColors.primary)
+                                .tracking(1.0)
+                        }
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(Color.white.opacity(0.92))
+                        .clipShape(Capsule())
+                        .shadow(color: Color.black.opacity(0.08), radius: 4, x: 0, y: 2)
                     }
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 5)
-                    .background(Color.white.opacity(0.92))
-                    .clipShape(Capsule())
-                    .shadow(color: Color.black.opacity(0.08), radius: 4, x: 0, y: 2)
 
                     Spacer()
 
@@ -482,6 +517,81 @@ public struct TrailJournalDetailView: View {
                 }
             }
         }
+    }
+
+    // MARK: - 2.5 Retrace Provenance Card
+
+    private var retraceProvenanceCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                ZStack {
+                    Circle()
+                        .fill(Color(hex: "#00838F").opacity(0.18))
+                        .frame(width: 28, height: 28)
+                    Image(systemName: "figure.walk.motion")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundColor(Color(hex: "#00838F"))
+                }
+
+                Text("RETRACED TRAIL RECORD")
+                    .font(AppFonts.labelSpatial)
+                    .foregroundColor(Color(hex: "#00838F"))
+                    .tracking(1.0)
+
+                Spacer()
+
+                if let sim = trail.retraceSimilarityIndex {
+                    Text("\(Int(sim * 100))% MATCH")
+                        .font(AppFonts.labelSpatial)
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(Color(hex: "#00838F"))
+                        .clipShape(Capsule())
+                }
+            }
+
+            if let refTitle = trail.retraceReferenceTrailTitle {
+                Text("Retraced from “\(refTitle)”")
+                    .font(AppFonts.headlineSmall)
+                    .foregroundColor(AppColors.deepInk)
+            }
+
+            Text("Recorded on \(trail.createdAt.formatted(date: .abbreviated, time: .shortened)) by \(trail.authorName.isEmpty ? "You" : trail.authorName). This is a verified walk recorded on its own merit with \(trail.distanceMeters)m of physical tracking and \(trail.moments.count) checkpoints.")
+                .font(AppFonts.bodySmall)
+                .foregroundColor(AppColors.onSurfaceVariant)
+
+            if let refId = trail.inspiredByTrailId,
+               let originalTrail = dataStore.savedTrails.first(where: { $0.id == refId }) ?? dataStore.sampleTrails.first(where: { $0.id == refId }) {
+                Button {
+                    Haptics.selection()
+                    selectedLinkedTrail = originalTrail
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "arrow.left.arrow.right")
+                            .font(.system(size: 12, weight: .semibold))
+                        Text("View Original Reference Trail")
+                            .font(AppFonts.labelSpatial)
+                        Image(systemName: "arrow.up.right")
+                            .font(.system(size: 10, weight: .semibold))
+                    }
+                    .foregroundColor(Color(hex: "#00838F"))
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 7)
+                    .background(Color(hex: "#00838F").opacity(0.12))
+                    .clipShape(Capsule())
+                }
+                .buttonStyle(PlainButtonStyle())
+                .padding(.top, 2)
+            }
+        }
+        .padding(16)
+        .background(Color(hex: "#00838F").opacity(0.06))
+        .clipShape(RoundedRectangle(cornerRadius: 18))
+        .overlay(
+            RoundedRectangle(cornerRadius: 18)
+                .stroke(Color(hex: "#00838F").opacity(0.25), lineWidth: 1)
+        )
     }
 
     // MARK: - 3. Author Notes Callout
@@ -780,14 +890,14 @@ public struct TrailJournalDetailView: View {
 
     private func photoMomentView(_ moment: SpatialMoment) -> some View {
         Button {
-            if let url = moment.resolvedPhotoURL(trailId: trail.id) {
+            if let url = moment.resolvedPhotoURL(trailId: trail.id, fallbackTrailId: trail.inspiredByTrailId) {
                 Haptics.light()
                 selectedPhotoTitle = moment.title
                 selectedPhotoURL = url
             }
         } label: {
             ZStack(alignment: .bottomTrailing) {
-                if let photoURL = moment.resolvedPhotoURL(trailId: trail.id),
+                if let photoURL = moment.resolvedPhotoURL(trailId: trail.id, fallbackTrailId: trail.inspiredByTrailId),
                    let uiImage = UIImage(contentsOfFile: photoURL.path) {
                     Image(uiImage: uiImage)
                         .resizable()
@@ -829,13 +939,13 @@ public struct TrailJournalDetailView: View {
 
     private func videoMomentView(_ moment: SpatialMoment) -> some View {
         Button {
-            if let videoURL = moment.resolvedVideoURL(trailId: trail.id) {
+            if let videoURL = moment.resolvedVideoURL(trailId: trail.id, fallbackTrailId: trail.inspiredByTrailId) {
                 Haptics.light()
                 selectedVideoURL = videoURL
             }
         } label: {
             ZStack {
-                if let thumbURL = moment.resolvedVideoThumbnailURL(trailId: trail.id),
+                if let thumbURL = moment.resolvedVideoThumbnailURL(trailId: trail.id, fallbackTrailId: trail.inspiredByTrailId),
                    let thumbImage = UIImage(contentsOfFile: thumbURL.path) {
                     Image(uiImage: thumbImage)
                         .resizable()
@@ -954,7 +1064,116 @@ public struct TrailJournalDetailView: View {
         .clipShape(RoundedRectangle(cornerRadius: 14))
     }
 
-    // MARK: - 6. End of Entry Divider
+    // MARK: - 6.5 Retrace Walks & Replays
+
+    private var retraceHistorySection: some View {
+        let completedRetraces = dataStore.savedTrails.filter { $0.inspiredByTrailId == trail.id }
+        let retraceSessions = TrailPackageStore.shared.loadRetraceSessions(for: trail.id)
+
+        return VStack(alignment: .leading, spacing: 14) {
+            HStack {
+                HStack(spacing: 8) {
+                    Circle()
+                        .fill(Color(hex: "#00838F"))
+                        .frame(width: 8, height: 8)
+                    Text("Retrace Walks & Replays")
+                        .font(AppFonts.headlineSmall)
+                        .foregroundColor(AppColors.primary)
+                }
+
+                Spacer()
+
+                Text("\(max(completedRetraces.count, retraceSessions.count)) Recorded")
+                    .font(AppFonts.labelMetric)
+                    .foregroundColor(Color(hex: "#00838F"))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(Color(hex: "#00838F").opacity(0.12))
+                    .clipShape(Capsule())
+            }
+            .padding(.top, 8)
+
+            if completedRetraces.isEmpty && retraceSessions.isEmpty {
+                VStack(spacing: 8) {
+                    Image(systemName: "figure.walk.motion")
+                        .font(.system(size: 26))
+                        .foregroundColor(AppColors.outline)
+                    Text("No retraced walks recorded yet")
+                        .font(AppFonts.headlineSmall)
+                        .foregroundColor(AppColors.onSurfaceVariant)
+                    Text("Walk this trail using “Retrace this trail” above to document your own walk on its own merit.")
+                        .font(AppFonts.caption)
+                        .foregroundColor(AppColors.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 20)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 22)
+                .background(AppColors.surfaceContainerLow)
+                .clipShape(RoundedRectangle(cornerRadius: 18))
+            } else {
+                VStack(spacing: 10) {
+                    ForEach(completedRetraces) { retraceTrail in
+                        Button {
+                            Haptics.selection()
+                            selectedLinkedTrail = retraceTrail
+                        } label: {
+                            HStack(spacing: 12) {
+                                ZStack {
+                                    Circle()
+                                        .fill(Color(hex: "#00838F").opacity(0.15))
+                                        .frame(width: 40, height: 40)
+                                    Image(systemName: "figure.walk.motion")
+                                        .font(.system(size: 16, weight: .bold))
+                                        .foregroundColor(Color(hex: "#00838F"))
+                                }
+
+                                VStack(alignment: .leading, spacing: 2) {
+                                    HStack(spacing: 6) {
+                                        Text(retraceTrail.title)
+                                            .font(AppFonts.headlineSmall)
+                                            .foregroundColor(AppColors.deepInk)
+                                            .lineLimit(1)
+
+                                        if let sim = retraceTrail.retraceSimilarityIndex {
+                                            Text("\(Int(sim * 100))% MATCH")
+                                                .font(.system(size: 9, weight: .bold))
+                                                .foregroundColor(.white)
+                                                .padding(.horizontal, 6)
+                                                .padding(.vertical, 2)
+                                                .background(Color(hex: "#00838F"))
+                                                .clipShape(Capsule())
+                                        }
+                                    }
+
+                                    Text("\(retraceTrail.distanceMeters)m · By \(retraceTrail.authorName) · \(retraceTrail.createdAt.formatted(date: .abbreviated, time: .shortened))")
+                                        .font(AppFonts.caption)
+                                        .foregroundColor(AppColors.secondary)
+                                }
+
+                                Spacer()
+
+                                HStack(spacing: 4) {
+                                    Text("View")
+                                        .font(AppFonts.labelSpatial)
+                                        .foregroundColor(Color(hex: "#00838F"))
+                                    Image(systemName: "chevron.right")
+                                        .font(.system(size: 11, weight: .semibold))
+                                        .foregroundColor(Color(hex: "#00838F"))
+                                }
+                            }
+                            .padding(14)
+                            .background(AppColors.surfaceContainerLow)
+                            .clipShape(RoundedRectangle(cornerRadius: 16))
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - 7. End of Entry Divider
 
     private var journalConcludedMarker: some View {
         HStack(spacing: 12) {

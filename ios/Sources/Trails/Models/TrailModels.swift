@@ -180,8 +180,22 @@ public struct TrailDetail: Identifiable, Hashable, Codable {
     public var longitude: Double?
     public var inspiredByTrailId: String?
     public var inspiredByNote: String?
+    public var isRetrace: Bool
+    public var retraceSimilarityIndex: Double?
+    public var retraceReferenceTrailTitle: String?
+    public var retraceDate: Date?
     public var createdAt: Date
     public var updatedAt: Date
+
+    enum CodingKeys: String, CodingKey {
+        case id, title, subtitle, placeId, placeName, locality, wing
+        case authorName, authorRole, distanceMeters, floorCode, floorTitle
+        case meshDensity, samplingFrequency, nodeCount, personalNotes
+        case moments, visibility, isDraft, coverImageName, latitude, longitude
+        case inspiredByTrailId, inspiredByNote
+        case isRetrace, retraceSimilarityIndex, retraceReferenceTrailTitle, retraceDate
+        case createdAt, updatedAt
+    }
 
     public var photoCount: Int {
         moments.filter { $0.hasPhoto || $0.mediaType == "photo" }.count
@@ -236,6 +250,10 @@ public struct TrailDetail: Identifiable, Hashable, Codable {
         longitude: Double? = nil,
         inspiredByTrailId: String? = nil,
         inspiredByNote: String? = nil,
+        isRetrace: Bool = false,
+        retraceSimilarityIndex: Double? = nil,
+        retraceReferenceTrailTitle: String? = nil,
+        retraceDate: Date? = nil,
         createdAt: Date = Date(),
         updatedAt: Date = Date()
     ) {
@@ -263,8 +281,46 @@ public struct TrailDetail: Identifiable, Hashable, Codable {
         self.longitude = longitude
         self.inspiredByTrailId = inspiredByTrailId
         self.inspiredByNote = inspiredByNote
+        self.isRetrace = isRetrace
+        self.retraceSimilarityIndex = retraceSimilarityIndex
+        self.retraceReferenceTrailTitle = retraceReferenceTrailTitle
+        self.retraceDate = retraceDate
         self.createdAt = createdAt
         self.updatedAt = updatedAt
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try container.decode(String.self, forKey: .id)
+        self.title = try container.decode(String.self, forKey: .title)
+        self.subtitle = try container.decode(String.self, forKey: .subtitle)
+        self.placeId = try container.decode(String.self, forKey: .placeId)
+        self.placeName = try container.decode(String.self, forKey: .placeName)
+        self.locality = try container.decodeIfPresent(String.self, forKey: .locality) ?? "Dhun, Jaipur"
+        self.wing = try container.decodeIfPresent(String.self, forKey: .wing) ?? "Main"
+        self.authorName = try container.decodeIfPresent(String.self, forKey: .authorName) ?? "A trail by you"
+        self.authorRole = try container.decodeIfPresent(String.self, forKey: .authorRole) ?? "Explorer"
+        self.distanceMeters = try container.decodeIfPresent(Int.self, forKey: .distanceMeters) ?? 0
+        self.floorCode = try container.decodeIfPresent(String.self, forKey: .floorCode) ?? "LVL 00"
+        self.floorTitle = try container.decodeIfPresent(String.self, forKey: .floorTitle) ?? "Ground Floor"
+        self.meshDensity = try container.decodeIfPresent(String.self, forKey: .meshDensity) ?? "LiDAR Route"
+        self.samplingFrequency = try container.decodeIfPresent(String.self, forKey: .samplingFrequency) ?? "24.6 kHz"
+        self.nodeCount = try container.decodeIfPresent(Int.self, forKey: .nodeCount) ?? 0
+        self.personalNotes = try container.decodeIfPresent(String.self, forKey: .personalNotes) ?? ""
+        self.moments = try container.decodeIfPresent([SpatialMoment].self, forKey: .moments) ?? []
+        self.visibility = try container.decodeIfPresent(TrailVisibility.self, forKey: .visibility) ?? .privateDraft
+        self.isDraft = try container.decodeIfPresent(Bool.self, forKey: .isDraft) ?? false
+        self.coverImageName = try container.decodeIfPresent(String.self, forKey: .coverImageName)
+        self.latitude = try container.decodeIfPresent(Double.self, forKey: .latitude)
+        self.longitude = try container.decodeIfPresent(Double.self, forKey: .longitude)
+        self.inspiredByTrailId = try container.decodeIfPresent(String.self, forKey: .inspiredByTrailId)
+        self.inspiredByNote = try container.decodeIfPresent(String.self, forKey: .inspiredByNote)
+        self.isRetrace = try container.decodeIfPresent(Bool.self, forKey: .isRetrace) ?? false
+        self.retraceSimilarityIndex = try container.decodeIfPresent(Double.self, forKey: .retraceSimilarityIndex)
+        self.retraceReferenceTrailTitle = try container.decodeIfPresent(String.self, forKey: .retraceReferenceTrailTitle)
+        self.retraceDate = try container.decodeIfPresent(Date.self, forKey: .retraceDate)
+        self.createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
+        self.updatedAt = try container.decodeIfPresent(Date.self, forKey: .updatedAt) ?? Date()
     }
 }
 
@@ -349,41 +405,65 @@ public struct SpatialMoment: Identifiable, Hashable, Codable {
         self.createdAt = createdAt
     }
 
-    public func resolvedPhotoURL(trailId: String) -> URL? {
+    public func resolvedPhotoURL(trailId: String, fallbackTrailId: String? = nil) -> URL? {
         if let fileName = photoFileName {
             let fileURL = TrailPackageStore.shared.mediaDirectory(for: trailId).appendingPathComponent(fileName)
             if FileManager.default.fileExists(atPath: fileURL.path) {
                 return fileURL
             }
+            if let fallback = fallbackTrailId {
+                let fallbackURL = TrailPackageStore.shared.mediaDirectory(for: fallback).appendingPathComponent(fileName)
+                if FileManager.default.fileExists(atPath: fallbackURL.path) {
+                    return fallbackURL
+                }
+            }
         }
         return nil
     }
 
-    public func resolvedVideoURL(trailId: String) -> URL? {
+    public func resolvedVideoURL(trailId: String, fallbackTrailId: String? = nil) -> URL? {
         if let fileName = videoFileName {
             let fileURL = TrailPackageStore.shared.mediaDirectory(for: trailId).appendingPathComponent(fileName)
             if FileManager.default.fileExists(atPath: fileURL.path) {
                 return fileURL
             }
-        }
-        return nil
-    }
-
-    public func resolvedVideoThumbnailURL(trailId: String) -> URL? {
-        if let fileName = videoThumbnailAssetName {
-            let fileURL = TrailPackageStore.shared.mediaDirectory(for: trailId).appendingPathComponent(fileName)
-            if FileManager.default.fileExists(atPath: fileURL.path) {
-                return fileURL
+            if let fallback = fallbackTrailId {
+                let fallbackURL = TrailPackageStore.shared.mediaDirectory(for: fallback).appendingPathComponent(fileName)
+                if FileManager.default.fileExists(atPath: fallbackURL.path) {
+                    return fallbackURL
+                }
             }
         }
         return nil
     }
 
-    public func resolvedAudioURL(trailId: String) -> URL? {
+    public func resolvedVideoThumbnailURL(trailId: String, fallbackTrailId: String? = nil) -> URL? {
+        if let fileName = videoThumbnailAssetName ?? photoFileName {
+            let fileURL = TrailPackageStore.shared.mediaDirectory(for: trailId).appendingPathComponent(fileName)
+            if FileManager.default.fileExists(atPath: fileURL.path) {
+                return fileURL
+            }
+            if let fallback = fallbackTrailId {
+                let fallbackURL = TrailPackageStore.shared.mediaDirectory(for: fallback).appendingPathComponent(fileName)
+                if FileManager.default.fileExists(atPath: fallbackURL.path) {
+                    return fallbackURL
+                }
+            }
+        }
+        return nil
+    }
+
+    public func resolvedAudioURL(trailId: String, fallbackTrailId: String? = nil) -> URL? {
         if let fileName = audioFileName {
             let fileURL = TrailPackageStore.shared.mediaDirectory(for: trailId).appendingPathComponent(fileName)
             if FileManager.default.fileExists(atPath: fileURL.path) {
                 return fileURL
+            }
+            if let fallback = fallbackTrailId {
+                let fallbackURL = TrailPackageStore.shared.mediaDirectory(for: fallback).appendingPathComponent(fileName)
+                if FileManager.default.fileExists(atPath: fallbackURL.path) {
+                    return fallbackURL
+                }
             }
         }
         return nil
@@ -832,6 +912,32 @@ public final class TrailPackageStore {
         let dir = trailDirectory(for: trailId).appendingPathComponent("media", isDirectory: true)
         try? fileManager.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir
+    }
+
+    public func copyAssets(from sourceTrailId: String, to destinationTrailId: String) {
+        let srcMediaDir = mediaDirectory(for: sourceTrailId)
+        let dstMediaDir = mediaDirectory(for: destinationTrailId)
+        if let files = try? fileManager.contentsOfDirectory(atPath: srcMediaDir.path) {
+            for file in files {
+                let srcFile = srcMediaDir.appendingPathComponent(file)
+                let dstFile = dstMediaDir.appendingPathComponent(file)
+                if !fileManager.fileExists(atPath: dstFile.path) {
+                    try? fileManager.copyItem(at: srcFile, to: dstFile)
+                }
+            }
+        }
+
+        let srcSpatialDir = spatialDirectory(for: sourceTrailId)
+        let dstSpatialDir = spatialDirectory(for: destinationTrailId)
+        if let files = try? fileManager.contentsOfDirectory(atPath: srcSpatialDir.path) {
+            for file in files {
+                let srcFile = srcSpatialDir.appendingPathComponent(file)
+                let dstFile = dstSpatialDir.appendingPathComponent(file)
+                if !fileManager.fileExists(atPath: dstFile.path) {
+                    try? fileManager.copyItem(at: srcFile, to: dstFile)
+                }
+            }
+        }
     }
 
     // MARK: - Spatial & Reference Frame Storage (PRD v0.3.1 §6 & §7)

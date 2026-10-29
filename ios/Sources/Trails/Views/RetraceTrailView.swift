@@ -78,6 +78,7 @@ public struct RetraceTrailView: View {
     @State private var showingFinishAlert: Bool = false
     @State private var showingDiagnosticsSheet: Bool = false
     @State private var showingManualCalibrationSheet: Bool = false
+    @State private var showingFullScreenCaptureMode: CameraCaptureEngine.CameraMode? = nil
     @State private var toastMessage: String? = nil
 
     // Searching animation
@@ -572,10 +573,69 @@ public struct RetraceTrailView: View {
                 }
             )
         }
+        // Dedicated Full-Screen Camera Interface for Checkpoint Moments
+        .fullScreenCover(isPresented: Binding(
+            get: { showingFullScreenCaptureMode != nil },
+            set: { if !$0 { showingFullScreenCaptureMode = nil } }
+        )) {
+            if let mode = showingFullScreenCaptureMode {
+                FullScreenCameraCaptureView(
+                    cameraEngine: cameraEngine,
+                    mode: mode,
+                    waypointIndex: visitedCheckpointIds.count + newRetraceMoments.count + 1,
+                    trailId: sessionId,
+                    onSavedVideo: { fileURL, duration, thumbURL in
+                        let moment = SpatialMoment(
+                            id: UUID().uuidString,
+                            index: visitedCheckpointIds.count + newRetraceMoments.count + 1,
+                            title: "Retrace Checkpoint \(visitedCheckpointIds.count + newRetraceMoments.count + 1)",
+                            subtitle: "\(walkedMeters)m along retrace path",
+                            narrative: "Documented during retrace of “\(referenceTrail.title)”",
+                            architecturalNote: "Captured at \(walkedMeters)m during retrace",
+                            distanceAlongPathMeters: walkedMeters,
+                            videoDuration: "\(Int(duration))s",
+                            hasVideo: true,
+                            mediaType: "video",
+                            videoFileName: fileURL.lastPathComponent,
+                            videoThumbnailAssetName: thumbURL.lastPathComponent,
+                            positionX: Double(scannerEngine.lastRecordedPosition?.x ?? 0),
+                            positionY: Double(scannerEngine.lastRecordedPosition?.z ?? 0),
+                            positionZ: Double(scannerEngine.lastRecordedPosition?.y ?? 0),
+                            headingDegrees: scannerEngine.currentYawDegrees,
+                            placementStatus: "placed"
+                        )
+                        newRetraceMoments.append(moment)
+                        triggerToast("Video moment saved to Retrace Trail ✓")
+                    },
+                    onSavedPhoto: { image, fileURL, thumbURL in
+                        let moment = SpatialMoment(
+                            id: UUID().uuidString,
+                            index: visitedCheckpointIds.count + newRetraceMoments.count + 1,
+                            title: "Retrace Checkpoint \(visitedCheckpointIds.count + newRetraceMoments.count + 1)",
+                            subtitle: "\(walkedMeters)m along retrace path",
+                            narrative: "Photo documented during retrace of “\(referenceTrail.title)”",
+                            architecturalNote: "Captured at \(walkedMeters)m during retrace",
+                            distanceAlongPathMeters: walkedMeters,
+                            hasPhoto: true,
+                            mediaType: "photo",
+                            photoFileName: fileURL.lastPathComponent,
+                            positionX: Double(scannerEngine.lastRecordedPosition?.x ?? 0),
+                            positionY: Double(scannerEngine.lastRecordedPosition?.z ?? 0),
+                            positionZ: Double(scannerEngine.lastRecordedPosition?.y ?? 0),
+                            headingDegrees: scannerEngine.currentYawDegrees,
+                            placementStatus: "placed"
+                        )
+                        newRetraceMoments.append(moment)
+                        triggerToast("Photo moment saved to Retrace Trail ✓")
+                    },
+                    onCancel: {}
+                )
+            }
+        }
         // Finish Confirmation
         .alert("End Retrace Journey?", isPresented: $showingFinishAlert) {
             Button("Keep Retracing", role: .cancel) {}
-            Button("Save Retrace Record", role: .none) {
+            Button("Save Retraced Trail", role: .none) {
                 finalizeAndSaveRetrace()
                 dismiss()
             }
@@ -583,7 +643,7 @@ public struct RetraceTrailView: View {
                 dismiss()
             }
         } message: {
-            Text("Mode: \(positioningMode)\nAlignment: \(alignmentState)\nSimilarity: \(similarityIndexPercentage)%\nCheckpoints: \(visitedCheckpointIds.count) of \(referenceTrail.moments.count) visited\n\nYour original trail remains immutable.")
+            Text("Distance: \(walkedMeters)m\nSimilarity: \(similarityIndexPercentage)%\nCheckpoints: \(visitedCheckpointIds.count) of \(referenceTrail.moments.count) visited\n\nThis walk will be saved as a new recorded trail in your journal on its own merit.")
         }
     }
 
@@ -1150,23 +1210,43 @@ public struct RetraceTrailView: View {
 
                 Spacer()
 
-                Button {
-                    Haptics.light()
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                        isMapOnlyView.toggle()
+                HStack(spacing: 8) {
+                    Button {
+                        Haptics.selection()
+                        showingFullScreenCaptureMode = .photo
+                    } label: {
+                        HStack(spacing: 5) {
+                            Image(systemName: "camera.fill")
+                                .font(.system(size: 11, weight: .bold))
+                            Text("Capture")
+                                .font(AppFonts.labelSpatial)
+                        }
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(Color(hex: "#00E5FF").opacity(0.3))
+                        .clipShape(Capsule())
+                        .overlay(Capsule().stroke(Color(hex: "#00E5FF"), lineWidth: 1))
                     }
-                } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: isMapOnlyView ? "rectangle.split.2x1.fill" : "map.fill")
-                            .font(.system(size: 12))
-                        Text(isMapOnlyView ? "Show Camera" : "Full Blueprint")
-                            .font(AppFonts.labelSpatial)
+
+                    Button {
+                        Haptics.light()
+                        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                            isMapOnlyView.toggle()
+                        }
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: isMapOnlyView ? "rectangle.split.2x1.fill" : "map.fill")
+                                .font(.system(size: 12))
+                            Text(isMapOnlyView ? "Show Camera" : "Full Blueprint")
+                                .font(AppFonts.labelSpatial)
+                        }
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(Color.black.opacity(0.65))
+                        .clipShape(Capsule())
                     }
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(Color.black.opacity(0.65))
-                    .clipShape(Capsule())
                 }
             }
             .padding(.horizontal, 16)
@@ -1618,12 +1698,81 @@ public struct RetraceTrailView: View {
     }
 
     private func finalizeAndSaveRetrace() {
+        let newTrailId = "retrace-\(UUID().uuidString.prefix(8).lowercased())-\(Int(Date().timeIntervalSince1970))"
+        let effectiveDistance = max(walkedMeters, max(1, Int(Float(scannerEngine.footsteps.count) * 0.2)))
+        var effectiveSteps = !transformedFootsteps.isEmpty ? transformedFootsteps : scannerEngine.footsteps
+        if effectiveSteps.isEmpty {
+            effectiveSteps = TrailPackageStore.shared.loadFootsteps(for: referenceTrail.id)
+        }
+
+        // 1. Copy over media and spatial references from reference trail so the new trail is 100% self-contained
+        TrailPackageStore.shared.copyAssets(from: referenceTrail.id, to: newTrailId)
+
+        // 2. Also copy any media captured during this session (stored in sessionId media dir)
+        TrailPackageStore.shared.copyAssets(from: sessionId, to: newTrailId)
+
+        // 3. Prepare moments for the retrace trail
+        var retraceMoments: [SpatialMoment] = []
+        for (idx, moment) in referenceTrail.moments.enumerated() {
+            var m = moment
+            m.index = idx + 1
+            if visitedCheckpointIds.contains(moment.id) {
+                let note = m.architecturalNote.isEmpty ? "Verified during Retrace (\(similarityIndexPercentage)% Match)" : "\(m.architecturalNote) · Verified during Retrace (\(similarityIndexPercentage)% Match)"
+                m.architecturalNote = note
+            }
+            retraceMoments.append(m)
+        }
+        for newM in newRetraceMoments {
+            var m = newM
+            m.index = retraceMoments.count + 1
+            retraceMoments.append(m)
+        }
+
+        // 4. Construct the first-class TrailDetail on its own merit
+        let author = TrailsDataStore.shared.localProfile.displayName.isEmpty ? "Explorer" : TrailsDataStore.shared.localProfile.displayName
+        let retraceTrail = TrailDetail(
+            id: newTrailId,
+            title: "Retrace · \(referenceTrail.title)",
+            subtitle: "\(effectiveDistance)m retraced walk · \(similarityIndexPercentage)% Match",
+            placeId: referenceTrail.placeId,
+            placeName: referenceTrail.placeName,
+            locality: referenceTrail.locality,
+            wing: referenceTrail.wing,
+            authorName: author,
+            authorRole: "Retrace Explorer",
+            distanceMeters: effectiveDistance,
+            floorCode: referenceTrail.floorCode,
+            floorTitle: referenceTrail.floorTitle,
+            meshDensity: referenceTrail.meshDensity,
+            samplingFrequency: "24.6 kHz",
+            nodeCount: max(1, retraceMoments.count),
+            personalNotes: "Retraced from “\(referenceTrail.title)” with \(similarityIndexPercentage)% match score on \(Date().formatted(date: .abbreviated, time: .shortened)). Checkpoints visited: \(visitedCheckpointIds.count) of \(referenceTrail.moments.count).",
+            moments: retraceMoments,
+            visibility: .privateDraft,
+            isDraft: false,
+            coverImageName: referenceTrail.coverImageName,
+            latitude: referenceTrail.latitude,
+            longitude: referenceTrail.longitude,
+            inspiredByTrailId: referenceTrail.id,
+            inspiredByNote: "Retraced from “\(referenceTrail.title)”",
+            isRetrace: true,
+            retraceSimilarityIndex: Double(similarityIndexPercentage) / 100.0,
+            retraceReferenceTrailTitle: referenceTrail.title,
+            retraceDate: Date(),
+            createdAt: Date().addingTimeInterval(-Double(elapsedSeconds)),
+            updatedAt: Date()
+        )
+
+        // 5. Persist as first-class trail package on device
+        TrailPackageStore.shared.saveTrailPackage(trail: retraceTrail, footsteps: effectiveSteps)
+
+        // 6. Persist Retrace audit session under reference trail
         let session = RetraceSession(
             id: sessionId,
             sourceTrailId: referenceTrail.id,
             startedAt: Date().addingTimeInterval(-Double(elapsedSeconds)),
             endedAt: Date(),
-            distanceWalkedMeters: walkedMeters,
+            distanceWalkedMeters: effectiveDistance,
             visitedMomentIds: Array(visitedCheckpointIds),
             similarityIndex: Double(similarityIndexPercentage) / 100.0,
             pathCoveragePercentage: pathCoverageRatio,
@@ -1635,7 +1784,12 @@ public struct RetraceTrailView: View {
             segmentIds: [currentSegmentId],
             newMoments: newRetraceMoments
         )
-        TrailPackageStore.shared.saveRetraceSession(session: session, footsteps: transformedFootsteps)
+        TrailPackageStore.shared.saveRetraceSession(session: session, footsteps: effectiveSteps)
+
+        // 7. Update TrailsDataStore and reload
+        TrailsDataStore.shared.saveFinalTrail(trail: retraceTrail, footsteps: effectiveSteps)
+        TrailsDataStore.shared.reloadFromDisk()
+
         teardownRetraceSession()
     }
 
