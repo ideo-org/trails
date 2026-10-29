@@ -95,7 +95,16 @@ class RoomScannerEngine: NSObject, ObservableObject, RoomCaptureSessionDelegate,
         isScanning = false
     }
 
-    func addMoment(label: String, note: String = "") {
+    func addMoment(
+        label: String,
+        note: String = "",
+        mediaType: String = "note",
+        hasPhoto: Bool = false,
+        photoAssetName: String? = nil,
+        hasAudio: Bool = false,
+        audioDuration: String? = nil,
+        audioFileName: String? = nil
+    ) {
         let index = recordedMoments.count + 1
         let pos = lastRecordedPosition ?? SIMD3<Float>(0, 0, 0)
         let walkedMeters = max(1, Int(Float(footsteps.count) * distanceThreshold))
@@ -107,7 +116,12 @@ class RoomScannerEngine: NSObject, ObservableObject, RoomCaptureSessionDelegate,
             narrative: note.isEmpty ? "Recorded checkpoint at (\(String(format: "%.1f", pos.x))m, \(String(format: "%.1f", pos.z))m)." : note,
             architecturalNote: "Local survey coordinate: X=\(String(format: "%.2f", pos.x)), Z=\(String(format: "%.2f", pos.z))",
             distanceAlongPathMeters: walkedMeters,
-            hasAudio: false,
+            audioDuration: audioDuration,
+            hasAudio: hasAudio,
+            hasPhoto: hasPhoto,
+            mediaType: mediaType,
+            photoAssetName: photoAssetName,
+            audioFileName: audioFileName,
             positionX: Double(pos.x),
             positionY: Double(pos.z)
         )

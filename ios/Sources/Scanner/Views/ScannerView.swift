@@ -2,9 +2,9 @@
 //  ScannerView.swift
 //  Trails
 //
-//  Screen 4: Active Capture & Tracking (PRD v0.1.0 §7.2, §8.2, §9.2 & §10.2).
+//  Screen 4: Active Capture & Tracking (PRD v0.2.0 §7.3, §8.1-8.3 & docs/stitch/v0.2.0/leave_a_moment_active_capture).
 //  Combines camera feed with live 2D minimap, real-time footstep vectors,
-//  spatial moment tagging, and graceful simulation fallback for non-LiDAR testing.
+//  spatial moment tagging (Photo, Voice, Note), and curatorial provocation prompts.
 //
 
 import SwiftUI
@@ -14,13 +14,31 @@ struct ScannerView: View {
     @StateObject private var scannerEngine = RoomScannerEngine()
     @Environment(\.dismiss) private var dismiss
 
-    @State private var showingAddMomentSheet = false
-    @State private var momentLabel = ""
-    @State private var momentNote = ""
+    // Capture sheet & modal states
+    @State private var activeMomentMode: MomentMode? = nil
     @State private var showingReviewSheet = false
     @State private var showingCancelConfirm = false
+    @State private var showCuratorialPrompt = true
+    @State private var toastMessage: String? = nil
+    @State private var toastCoordinates: String? = nil
+
+    // Field inputs
+    @State private var momentLabel = ""
+    @State private var momentNote = ""
+    @State private var selectedPhotoAsset: String = "SandstoneArchway"
+    @State private var voiceDurationLabel = "0:12"
+
+    // Timers
     @State private var elapsedSeconds: Int = 0
     @State private var timer: Timer?
+
+    enum MomentMode: Identifiable {
+        case photo
+        case voice
+        case note
+
+        var id: Int { hashValue }
+    }
 
     private var walkedMeters: Int {
         max(1, Int(Float(scannerEngine.footsteps.count) * 0.2))
@@ -34,28 +52,24 @@ struct ScannerView: View {
 
     var body: some View {
         ZStack {
-            // Main Viewport
+            // Main Viewport Stack
             VStack(spacing: 0) {
-                // Top: Camera Feed (or simulated perspective viewport)
+                // Top: Camera Feed / Simulated Perspective Viewport
                 ZStack {
                     if scannerEngine.isSupported {
                         RoomCameraView(engine: scannerEngine)
                     } else {
-                        // Simulated Spatial Viewport for Simulator & Non-LiDAR devices
                         SimulatedViewportView(footstepsCount: scannerEngine.footsteps.count)
                     }
 
                     // Top Navigation Chrome Overlay
                     topNavigationOverlay
                 }
-                .frame(height: UIScreen.main.bounds.height * 0.48)
+                .frame(height: UIScreen.main.bounds.height * 0.38)
                 .ignoresSafeArea(edges: .top)
 
-                // Sub-viewport Status Ribbon
-                statusRibbon
-
-                // Bottom: Architectural Minimap (Top-down 2D layout)
-                ZStack(alignment: .bottom) {
+                // Middle: Architectural Minimap (Top-down 2D layout)
+                ZStack(alignment: .topLeading) {
                     RoomLayoutView(
                         capturedRoom: scannerEngine.capturedRoom,
                         footsteps: scannerEngine.footsteps,
@@ -63,13 +77,54 @@ struct ScannerView: View {
                     )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-                    // In-capture Actions Dock: Add Moment & Finish
-                    inCaptureDock
-                        .padding(.horizontal, 20)
-                        .padding(.bottom, 16)
+                    // Spatial status flag
+                    HStack(spacing: 6) {
+                        Circle()
+                            .fill(scannerEngine.isSimulated ? AppColors.mutedBrass : AppColors.terracotta)
+                            .frame(width: 6, height: 6)
+                        Text(scannerEngine.isSimulated ? "SIMULATED VECTOR" : "LIDAR ROOMPLAN")
+                            .font(AppFonts.labelSpatial)
+                            .foregroundColor(AppColors.primary)
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 4)
+                    .background(AppColors.surfaceContainerLowest.opacity(0.9))
+                    .clipShape(Capsule())
+                    .padding(12)
                 }
+
+                // Bottom: Tactile "Leave a Moment" Capture Sheet
+                tactileCaptureSheet
             }
-            .background(Color(hex: "#0A0E14").ignoresSafeArea())
+            .background(AppColors.canvas.ignoresSafeArea())
+
+            // Transient Toast Overlay
+            if let toast = toastMessage {
+                VStack {
+                    Spacer()
+                    HStack(spacing: 8) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundColor(AppColors.mutedBrass)
+                        Text(toast)
+                            .font(AppFonts.labelUI)
+                            .foregroundColor(AppColors.pureWhite)
+                        Spacer()
+                        if let coords = toastCoordinates {
+                            Text(coords)
+                                .font(AppFonts.labelSpatial)
+                                .foregroundColor(AppColors.pureWhite.opacity(0.7))
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                    .background(AppColors.primary)
+                    .clipShape(RoundedRectangle(cornerRadius: 14))
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 240)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+                .animation(.easeInOut(duration: 0.25), value: toastMessage)
+            }
         }
         .navigationBarHidden(true)
         .onAppear {
@@ -78,23 +133,51 @@ struct ScannerView: View {
         .onDisappear {
             stopCaptureSession()
         }
-        .sheet(isPresented: $showingAddMomentSheet) {
-            AddMomentSheet(
-                label: $momentLabel,
-                note: $momentNote,
-                onSave: {
-                    Haptics.success()
-                    scannerEngine.addMoment(label: momentLabel, note: momentNote)
-                    showingAddMomentSheet = false
-                },
-                onCancel: {
-                    showingAddMomentSheet = false
-                }
-            )
-            .presentationDetents([.height(300)])
+        // Sub-sheets for Photo, Voice, and Note
+        .sheet(item: $activeMomentMode) { mode in
+            switch mode {
+            case .photo:
+                PhotoMomentSheet(
+                    selectedAsset: $selectedPhotoAsset,
+                    caption: $momentNote,
+                    onSave: { assetName, caption in
+                        savePhotoMoment(assetName: assetName, note: caption)
+                        activeMomentMode = nil
+                    },
+                    onCancel: {
+                        activeMomentMode = nil
+                    }
+                )
+                .presentationDetents([.fraction(0.55), .large])
+
+            case .voice:
+                VoiceMomentSheet(
+                    onSave: { durationLabel, note in
+                        saveVoiceMoment(duration: durationLabel, note: note)
+                        activeMomentMode = nil
+                    },
+                    onCancel: {
+                        activeMomentMode = nil
+                    }
+                )
+                .presentationDetents([.fraction(0.48)])
+
+            case .note:
+                NoteMomentSheet(
+                    label: $momentLabel,
+                    note: $momentNote,
+                    onSave: { lbl, nt in
+                        saveNoteMoment(label: lbl, note: nt)
+                        activeMomentMode = nil
+                    },
+                    onCancel: {
+                        activeMomentMode = nil
+                    }
+                )
+                .presentationDetents([.fraction(0.45)])
+            }
         }
         .sheet(isPresented: $showingReviewSheet, onDismiss: {
-            // If the user finished and saved their trail, exit scanner back to My Trails
             dismiss()
         }) {
             ReviewPublishTrailView()
@@ -119,7 +202,7 @@ struct ScannerView: View {
     private var topNavigationOverlay: some View {
         VStack {
             HStack {
-                // Close / Cancel Button (PRD CAP-07)
+                // Close / Cancel Button
                 Button {
                     handleClose()
                 } label: {
@@ -136,126 +219,306 @@ struct ScannerView: View {
 
                 Spacer()
 
-                // Live Recording Status Badge
+                // Active Trail Recording Pill (Matching Stitch HUD)
                 HStack(spacing: 8) {
                     Circle()
                         .fill(AppColors.terracotta)
                         .frame(width: 8, height: 8)
 
-                    Text(formattedTime)
+                    Text("RECORDING TRAIL")
                         .font(AppFonts.labelSpatial)
                         .foregroundColor(.white)
 
-                    Text("·")
-                        .foregroundColor(Color.white.opacity(0.5))
-
-                    Text("\(walkedMeters)m")
+                    Text("· \(walkedMeters) m")
                         .font(AppFonts.labelSpatial)
-                        .foregroundColor(.white)
+                        .foregroundColor(Color.white.opacity(0.75))
                 }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(Color.black.opacity(0.5))
+                .padding(.horizontal, 14)
+                .padding(.vertical, 7)
+                .background(Color.black.opacity(0.55))
                 .clipShape(Capsule())
-                .overlay(Capsule().stroke(Color.white.opacity(0.15), lineWidth: 1))
+                .overlay(Capsule().stroke(Color.white.opacity(0.18), lineWidth: 1))
 
                 Spacer()
 
-                // Restart / Reset Button
+                // Safe Finish Trail CTA
                 Button {
-                    showingCancelConfirm = true
+                    Haptics.success()
+                    finishScan()
                 } label: {
-                    Image(systemName: "arrow.clockwise")
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundColor(.white)
-                        .frame(width: 38, height: 38)
-                        .background(Color.black.opacity(0.45))
-                        .clipShape(Circle())
-                        .overlay(Circle().stroke(Color.white.opacity(0.2), lineWidth: 1))
+                    HStack(spacing: 6) {
+                        Text("Finish trail")
+                            .font(AppFonts.labelUI)
+                            .fontWeight(.semibold)
+                        Image(systemName: "arrow.right")
+                            .font(.system(size: 13, weight: .bold))
+                    }
+                    .foregroundColor(AppColors.onPrimary)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 7)
+                    .background(AppColors.primary)
+                    .clipShape(Capsule())
+                    .shadow(color: AppColors.primary.opacity(0.35), radius: 6, x: 0, y: 3)
                 }
-                .accessibilityLabel("Restart recording")
+                .accessibilityIdentifier("scanner.finish")
             }
-            .padding(.horizontal, 20)
+            .padding(.horizontal, 16)
             .padding(.top, 48)
 
             Spacer()
         }
     }
 
-    // MARK: - Status Ribbon
+    // MARK: - Tactile Bottom Capture Sheet (docs/stitch/v0.2.0/leave_a_moment_active_capture)
 
-    private var statusRibbon: some View {
-        HStack(spacing: 8) {
-            Image(systemName: scannerEngine.isSimulated ? "play.circle.fill" : "figure.walk")
-                .font(.system(size: 13, weight: .bold))
-                .foregroundColor(scannerEngine.isSimulated ? AppColors.mutedBrass : AppColors.terracotta)
+    private var tactileCaptureSheet: some View {
+        VStack(spacing: 12) {
+            // Drag Handle Bar
+            Capsule()
+                .fill(AppColors.onSurfaceVariant.opacity(0.25))
+                .frame(width: 36, height: 4)
+                .padding(.top, 8)
 
-            Text(scannerEngine.isSimulated ? "Simulated Indoor Path · Walk active" : "Walk slowly and map each surface once")
-                .font(AppFonts.labelUI)
-                .foregroundColor(.white)
+            // Sheet Header Narrative
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 8) {
+                        Text("Leave a moment")
+                            .font(AppFonts.headlineLarge)
+                            .foregroundColor(AppColors.primary)
 
-            Spacer()
+                        Text("Anchor 0\(scannerEngine.recordedMoments.count + 1)")
+                            .font(AppFonts.labelSpatial)
+                            .foregroundColor(AppColors.terracotta)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 2)
+                            .background(AppColors.surfaceContainerHigh)
+                            .clipShape(Capsule())
+                    }
 
-            if !scannerEngine.recordedMoments.isEmpty {
-                Label("\(scannerEngine.recordedMoments.count) moments", systemImage: "flag.fill")
-                    .font(AppFonts.labelSpatial)
-                    .foregroundColor(AppColors.terracotta)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 3)
-                    .background(Color.black.opacity(0.4))
-                    .clipShape(Capsule())
+                    Text("Something you noticed. Something worth keeping.")
+                        .font(AppFonts.bodyMedium)
+                        .foregroundColor(AppColors.onSurfaceVariant)
+                }
+
+                Spacer()
             }
+            .padding(.horizontal, 20)
+
+            // Curatorial Provocation Prompt Card (Dismissible)
+            if showCuratorialPrompt {
+                HStack(alignment: .top, spacing: 10) {
+                    Image(systemName: "lightbulb.fill")
+                        .font(.system(size: 18))
+                        .foregroundColor(AppColors.mutedBrass)
+                        .padding(.top, 2)
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("CURATORIAL PROMPT")
+                            .font(AppFonts.labelSpatial)
+                            .foregroundColor(AppColors.mutedBrass)
+
+                        Text("“What would you show someone who wasn’t here?”")
+                            .font(.custom("Newsreader", size: 15))
+                            .italic()
+                            .foregroundColor(AppColors.primary)
+                    }
+
+                    Spacer()
+
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            showCuratorialPrompt = false
+                        }
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundColor(AppColors.onSurfaceVariant)
+                            .padding(4)
+                    }
+                }
+                .padding(12)
+                .background(AppColors.surfaceContainerLow)
+                .clipShape(RoundedRectangle(cornerRadius: 14))
+                .padding(.horizontal, 20)
+                .transition(.opacity.combined(with: .scale(scale: 0.98)))
+            }
+
+            // Tactile Capture Action Triptych (Photo, Voice, Note)
+            HStack(spacing: 12) {
+                // 1. Photo Capture Button
+                Button {
+                    Haptics.selection()
+                    momentNote = ""
+                    activeMomentMode = .photo
+                } label: {
+                    VStack(spacing: 6) {
+                        Circle()
+                            .fill(AppColors.primary)
+                            .frame(width: 48, height: 48)
+                            .overlay(
+                                Image(systemName: "camera.fill")
+                                    .font(.system(size: 20))
+                                    .foregroundColor(AppColors.onPrimary)
+                            )
+
+                        Text("Photo")
+                            .font(AppFonts.headlineSmall)
+                            .foregroundColor(AppColors.primary)
+
+                        Text("VISUAL FRAME")
+                            .font(AppFonts.labelSpatial)
+                            .foregroundColor(AppColors.onSurfaceVariant)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                    .background(AppColors.surfaceContainer)
+                    .clipShape(RoundedRectangle(cornerRadius: 16))
+                }
+                .buttonStyle(ScaleButtonStyle())
+
+                // 2. Voice Capture Button
+                Button {
+                    Haptics.selection()
+                    momentNote = ""
+                    activeMomentMode = .voice
+                } label: {
+                    VStack(spacing: 6) {
+                        Circle()
+                            .fill(AppColors.mutedBrass)
+                            .frame(width: 48, height: 48)
+                            .overlay(
+                                Image(systemName: "mic.fill")
+                                    .font(.system(size: 20))
+                                    .foregroundColor(AppColors.primary)
+                            )
+
+                        Text("Voice")
+                            .font(AppFonts.headlineSmall)
+                            .foregroundColor(AppColors.primary)
+
+                        Text("AUDIO CLIP")
+                            .font(AppFonts.labelSpatial)
+                            .foregroundColor(AppColors.onSurfaceVariant)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                    .background(AppColors.surfaceContainer)
+                    .clipShape(RoundedRectangle(cornerRadius: 16))
+                }
+                .buttonStyle(ScaleButtonStyle())
+
+                // 3. Note Capture Button
+                Button {
+                    Haptics.selection()
+                    momentLabel = ""
+                    momentNote = ""
+                    activeMomentMode = .note
+                } label: {
+                    VStack(spacing: 6) {
+                        Circle()
+                            .fill(AppColors.surfaceContainerHighest)
+                            .frame(width: 48, height: 48)
+                            .overlay(
+                                Image(systemName: "note.text")
+                                    .font(.system(size: 20))
+                                    .foregroundColor(AppColors.primary)
+                            )
+
+                        Text("Note")
+                            .font(AppFonts.headlineSmall)
+                            .foregroundColor(AppColors.primary)
+
+                        Text("IMPRESSION")
+                            .font(AppFonts.labelSpatial)
+                            .foregroundColor(AppColors.onSurfaceVariant)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                    .background(AppColors.surfaceContainer)
+                    .clipShape(RoundedRectangle(cornerRadius: 16))
+                }
+                .buttonStyle(ScaleButtonStyle())
+            }
+            .padding(.horizontal, 20)
+
+            // Dynamic Status Drawer
+            HStack {
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(AppColors.forestGreen)
+                        .frame(width: 6, height: 6)
+                    Text("Saved locally to current path")
+                        .font(AppFonts.caption)
+                        .foregroundColor(AppColors.onSurfaceVariant)
+                }
+
+                Spacer()
+
+                HStack(spacing: 4) {
+                    Image(systemName: "sensor.fill")
+                        .font(.system(size: 11))
+                    Text(scannerEngine.isSimulated ? "Simulation Sync" : "LiDAR Synced")
+                        .font(AppFonts.labelSpatial)
+                }
+                .foregroundColor(AppColors.onSurfaceVariant)
+            }
+            .padding(.horizontal, 20)
+            .padding(.bottom, 12)
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-        .background(Color(hex: "#121820"))
+        .background(
+            AppColors.surfaceContainerLowest
+                .clipShape(RoundedRectangle(cornerRadius: 32, style: .continuous))
+                .shadow(color: AppColors.primary.opacity(0.08), radius: 24, x: 0, y: -8)
+        )
     }
 
-    // MARK: - In-Capture Actions Dock
+    // MARK: - Save Moment Helpers
 
-    private var inCaptureDock: some View {
-        HStack(spacing: 12) {
-            // Add Moment Button (PRD §8.3 & §9.3)
-            Button {
-                Haptics.selection()
-                momentLabel = ""
-                momentNote = ""
-                showingAddMomentSheet = true
-            } label: {
-                HStack(spacing: 8) {
-                    Image(systemName: "flag.badge.ellipsis")
-                        .font(.system(size: 14, weight: .semibold))
-                    Text("Add Moment")
-                        .font(AppFonts.headlineSmall)
-                }
-                .foregroundColor(.white)
-                .padding(.horizontal, 18)
-                .frame(height: 50)
-                .background(Color(white: 0.18))
-                .clipShape(Capsule())
-                .overlay(Capsule().stroke(Color.white.opacity(0.25), lineWidth: 1))
-                .shadow(color: Color.black.opacity(0.2), radius: 6, x: 0, y: 3)
-            }
+    private func savePhotoMoment(assetName: String, note: String) {
+        let label = note.isEmpty ? "Visual Frame \(scannerEngine.recordedMoments.count + 1)" : note
+        scannerEngine.addMoment(
+            label: label,
+            note: note,
+            mediaType: "photo",
+            hasPhoto: true,
+            photoAssetName: assetName
+        )
+        triggerToast(message: "Photo frame anchored in place")
+    }
 
-            Spacer()
+    private func saveVoiceMoment(duration: String, note: String) {
+        let label = note.isEmpty ? "Spoken Observation \(scannerEngine.recordedMoments.count + 1)" : note
+        scannerEngine.addMoment(
+            label: label,
+            note: note.isEmpty ? "Spoken audio observation recorded in-situ." : note,
+            mediaType: "voice",
+            hasAudio: true,
+            audioDuration: duration
+        )
+        triggerToast(message: "Voice note anchored to vector")
+    }
 
-            // Finish Trail Button (PRD §8.4 CAP-07)
-            Button {
-                Haptics.success()
-                finishScan()
-            } label: {
-                HStack(spacing: 8) {
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 14, weight: .bold))
-                    Text("Finish Trail")
-                        .font(AppFonts.headlineSmall)
-                }
-                .foregroundColor(AppColors.onPrimary)
-                .padding(.horizontal, 22)
-                .frame(height: 50)
-                .background(AppColors.primary)
-                .clipShape(Capsule())
-                .shadow(color: AppColors.primary.opacity(0.35), radius: 8, x: 0, y: 4)
+    private func saveNoteMoment(label: String, note: String) {
+        let safeLabel = label.isEmpty ? "Observation \(scannerEngine.recordedMoments.count + 1)" : label
+        scannerEngine.addMoment(
+            label: safeLabel,
+            note: note,
+            mediaType: "note"
+        )
+        triggerToast(message: "Draft impression anchored in place")
+    }
+
+    private func triggerToast(message: String) {
+        Haptics.success()
+        let pos = scannerEngine.lastRecordedPosition ?? SIMD3<Float>(0, 0, 0)
+        toastCoordinates = String(format: "x: %.1f · z: %.1f", pos.x, pos.z)
+        toastMessage = message
+        Task {
+            try? await Task.sleep(nanoseconds: 2_500_000_000)
+            withAnimation {
+                toastMessage = nil
+                toastCoordinates = nil
             }
         }
     }
@@ -290,29 +553,289 @@ struct ScannerView: View {
         stopCaptureSession()
 
         let author = TrailsDataStore.shared.localProfile.displayName
+        let activePlace = TrailsDataStore.shared.places.first(where: { $0.id == "dhun-haveli" })
         let trail = TrailDetail(
             id: UUID().uuidString,
-            title: "Untitled Trail",
+            title: "Haveli Walk \(Date().formatted(.dateTime.hour().minute()))",
             subtitle: "\(walkedMeters)m recorded path",
-            placeId: "local-place",
-            placeName: "My Indoor Space",
+            placeId: activePlace?.id ?? "dhun-haveli",
+            placeName: activePlace?.name ?? "Dhun Haveli",
+            locality: activePlace?.locality ?? "Jaipur, Rajasthan",
             wing: "Ground Floor",
-            authorName: author.isEmpty ? "A trail by you" : author,
-            authorRole: "Explorer",
+            authorName: author.isEmpty ? "Hiro" : author,
+            authorRole: "Spatial Explorer",
             distanceMeters: walkedMeters,
             floorCode: "LVL 00",
             floorTitle: "Ground Floor",
             meshDensity: "\(scannerEngine.capturedRoom?.walls.count ?? 4) walls detected",
             samplingFrequency: "24.6 kHz",
             nodeCount: max(1, scannerEngine.footsteps.count),
-            personalNotes: "Saved privately on this device. Trails does not upload this capture.",
+            personalNotes: "Saved privately on this iPhone. Trails does not upload this capture.",
             moments: scannerEngine.recordedMoments,
             visibility: .privateDraft,
-            isDraft: true
+            isDraft: true,
+            coverImageName: "DhunHaveliEvening"
         )
 
         TrailsDataStore.shared.saveDraft(trail: trail, footsteps: scannerEngine.footsteps)
         showingReviewSheet = true
+    }
+}
+
+// MARK: - Photo Moment Sheet
+
+private struct PhotoMomentSheet: View {
+    @Binding var selectedAsset: String
+    @Binding var caption: String
+    let onSave: (String, String) -> Void
+    let onCancel: () -> Void
+
+    var body: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 16) {
+                HStack {
+                    Text("Capture Visual Frame")
+                        .font(AppFonts.headlineMedium)
+                        .foregroundColor(AppColors.primary)
+                    Spacer()
+                    Button("Cancel", action: onCancel)
+                        .font(AppFonts.bodyMedium)
+                        .foregroundColor(AppColors.onSurfaceVariant)
+                }
+
+                // Photo Preview Carousel
+                HStack(spacing: 12) {
+                    photoOption(title: "Archway Lintel", assetName: "SandstoneArchway")
+                    photoOption(title: "Haveli Courtyard", assetName: "DhunHaveliEvening")
+                }
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("OBSERVATION / CAPTION")
+                        .font(AppFonts.labelSpatial)
+                        .foregroundColor(AppColors.outline)
+
+                    TextField("e.g. Hand-chiseled sandstone archway in evening light", text: $caption)
+                        .font(AppFonts.bodyMedium)
+                        .padding(14)
+                        .background(AppColors.surfaceContainerLow)
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(AppColors.border, lineWidth: 1)
+                        )
+                }
+
+                Spacer()
+
+                Button {
+                    onSave(selectedAsset, caption)
+                } label: {
+                    Text("Save Photo Moment")
+                        .font(AppFonts.labelUI)
+                        .fontWeight(.semibold)
+                        .foregroundColor(AppColors.onPrimary)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 50)
+                        .background(AppColors.primary)
+                        .clipShape(Capsule())
+                }
+            }
+            .padding(20)
+            .background(AppColors.canvas.ignoresSafeArea())
+        }
+    }
+
+    private func photoOption(title: String, assetName: String) -> some View {
+        Button {
+            selectedAsset = assetName
+        } label: {
+            VStack(spacing: 6) {
+                Image(assetName)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(height: 100)
+                    .frame(maxWidth: .infinity)
+                    .clipped()
+                    .cornerRadius(12)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(selectedAsset == assetName ? AppColors.terracotta : Color.clear, lineWidth: 3)
+                    )
+
+                Text(title)
+                    .font(AppFonts.caption)
+                    .foregroundColor(selectedAsset == assetName ? AppColors.primary : AppColors.onSurfaceVariant)
+                    .fontWeight(selectedAsset == assetName ? .semibold : .regular)
+            }
+        }
+    }
+}
+
+// MARK: - Voice Moment Sheet
+
+private struct VoiceMomentSheet: View {
+    @State private var isRecording = false
+    @State private var recordedSeconds = 0
+    @State private var timer: Timer?
+    @State private var note: String = ""
+
+    let onSave: (String, String) -> Void
+    let onCancel: () -> Void
+
+    private var durationString: String {
+        let m = recordedSeconds / 60
+        let s = recordedSeconds % 60
+        return String(format: "%d:%02d", m, s)
+    }
+
+    var body: some View {
+        VStack(spacing: 18) {
+            HStack {
+                Text("Record Spoken Observation")
+                    .font(AppFonts.headlineMedium)
+                    .foregroundColor(AppColors.primary)
+                Spacer()
+                Button("Cancel", action: onCancel)
+                    .font(AppFonts.bodyMedium)
+                    .foregroundColor(AppColors.onSurfaceVariant)
+            }
+
+            // Mic Record Pulse
+            VStack(spacing: 12) {
+                Button {
+                    toggleRecording()
+                } label: {
+                    ZStack {
+                        Circle()
+                            .fill(isRecording ? AppColors.terracotta.opacity(0.2) : AppColors.surfaceContainerHigh)
+                            .frame(width: 80, height: 80)
+                            .scaleEffect(isRecording ? 1.15 : 1.0)
+                            .animation(isRecording ? .easeInOut(duration: 0.8).repeatForever(autoreverses: true) : .default, value: isRecording)
+
+                        Circle()
+                            .fill(isRecording ? AppColors.terracotta : AppColors.primary)
+                            .frame(width: 60, height: 60)
+
+                        Image(systemName: isRecording ? "stop.fill" : "mic.fill")
+                            .font(.system(size: 24))
+                            .foregroundColor(.white)
+                    }
+                }
+
+                Text(durationString)
+                    .font(AppFonts.labelMetric)
+                    .foregroundColor(isRecording ? AppColors.terracotta : AppColors.primary)
+
+                Text(isRecording ? "Recording in 48kHz Spatial Audio..." : "Tap mic to begin speaking")
+                    .font(AppFonts.caption)
+                    .foregroundColor(AppColors.onSurfaceVariant)
+            }
+            .padding(.vertical, 8)
+
+            TextField("Observation topic (optional)", text: $note)
+                .font(AppFonts.bodyMedium)
+                .padding(14)
+                .background(AppColors.surfaceContainerLow)
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+
+            Spacer()
+
+            Button {
+                let duration = recordedSeconds > 0 ? durationString : "0:14"
+                onSave(duration, note)
+            } label: {
+                Text("Save Voice Moment")
+                    .font(AppFonts.labelUI)
+                    .fontWeight(.semibold)
+                    .foregroundColor(AppColors.onPrimary)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 50)
+                    .background(AppColors.primary)
+                    .clipShape(Capsule())
+            }
+        }
+        .padding(20)
+        .background(AppColors.canvas.ignoresSafeArea())
+    }
+
+    private func toggleRecording() {
+        Haptics.selection()
+        if isRecording {
+            isRecording = false
+            timer?.invalidate()
+            timer = nil
+        } else {
+            isRecording = true
+            recordedSeconds = 0
+            timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
+                recordedSeconds += 1
+            }
+        }
+    }
+}
+
+// MARK: - Note Moment Sheet
+
+private struct NoteMomentSheet: View {
+    @Binding var label: String
+    @Binding var note: String
+    let onSave: (String, String) -> Void
+    let onCancel: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack {
+                Text("Tag Moment Along Trail")
+                    .font(AppFonts.headlineMedium)
+                    .foregroundColor(AppColors.primary)
+                Spacer()
+                Button("Cancel", action: onCancel)
+                    .font(AppFonts.bodyMedium)
+                    .foregroundColor(AppColors.onSurfaceVariant)
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text("MOMENT LABEL")
+                    .font(AppFonts.labelSpatial)
+                    .foregroundColor(AppColors.outline)
+
+                TextField("e.g. Carved Stone Lintel", text: $label)
+                    .font(AppFonts.bodyMedium)
+                    .padding(14)
+                    .background(AppColors.surfaceContainerLow)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text("OBSERVATION / NOTE")
+                    .font(AppFonts.labelSpatial)
+                    .foregroundColor(AppColors.outline)
+
+                TextField("e.g. Morning breeze draws upward through archway", text: $note)
+                    .font(AppFonts.bodyMedium)
+                    .padding(14)
+                    .background(AppColors.surfaceContainerLow)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+            }
+
+            Spacer()
+
+            Button {
+                onSave(label, note)
+            } label: {
+                Text("Save Moment")
+                    .font(AppFonts.labelUI)
+                    .fontWeight(.semibold)
+                    .foregroundColor(AppColors.onPrimary)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 50)
+                    .background(label.trimmingCharacters(in: .whitespaces).isEmpty ? Color.gray.opacity(0.5) : AppColors.primary)
+                    .clipShape(Capsule())
+            }
+            .disabled(label.trimmingCharacters(in: .whitespaces).isEmpty)
+        }
+        .padding(20)
+        .background(AppColors.canvas.ignoresSafeArea())
     }
 }
 
@@ -325,13 +848,12 @@ private struct SimulatedViewportView: View {
         ZStack {
             Color(hex: "#05070A")
 
-            // Ambient room wireframe projection
-            VStack(spacing: 16) {
+            VStack(spacing: 12) {
                 Image(systemName: "camera.viewfinder")
-                    .font(.system(size: 64, weight: .ultraLight))
-                    .foregroundColor(AppColors.mutedBrass.opacity(0.7))
+                    .font(.system(size: 48, weight: .ultraLight))
+                    .foregroundColor(AppColors.mutedBrass.opacity(0.8))
 
-                VStack(spacing: 6) {
+                VStack(spacing: 4) {
                     Text("SPATIAL CAPTURE INSTRUMENT")
                         .font(AppFonts.labelSpatial)
                         .tracking(1.8)
@@ -352,77 +874,12 @@ private struct SimulatedViewportView: View {
     }
 }
 
-// MARK: - Add Moment Quick Sheet (PRD §8.3 & §9.3)
+// MARK: - Button Style Helper
 
-private struct AddMomentSheet: View {
-    @Binding var label: String
-    @Binding var note: String
-    let onSave: () -> Void
-    let onCancel: () -> Void
-
-    var body: some View {
-        NavigationStack {
-            VStack(alignment: .leading, spacing: 16) {
-                Text("Tag Moment Along Trail")
-                    .font(AppFonts.headlineMedium)
-                    .foregroundColor(AppColors.deepInk)
-
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("MOMENT LABEL")
-                        .font(AppFonts.labelSpatial)
-                        .foregroundColor(AppColors.outline)
-
-                    TextField("e.g., Carved Stone Lintel", text: $label)
-                        .font(AppFonts.bodyMedium)
-                        .padding(14)
-                        .background(AppColors.surfaceContainerLow)
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 12)
-                                .stroke(AppColors.border, lineWidth: 1)
-                        )
-                }
-
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("OBSERVATION / NOTE (OPTIONAL)")
-                        .font(AppFonts.labelSpatial)
-                        .foregroundColor(AppColors.outline)
-
-                    TextField("e.g., Morning breeze draws upward through archway", text: $note)
-                        .font(AppFonts.bodyMedium)
-                        .padding(14)
-                        .background(AppColors.surfaceContainerLow)
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 12)
-                                .stroke(AppColors.border, lineWidth: 1)
-                        )
-                }
-
-                Spacer()
-
-                HStack(spacing: 12) {
-                    Button("Cancel", action: onCancel)
-                        .font(AppFonts.labelUI)
-                        .foregroundColor(AppColors.onSurfaceVariant)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 50)
-                        .background(AppColors.surfaceContainerHigh)
-                        .clipShape(Capsule())
-
-                    Button("Save Moment", action: onSave)
-                        .font(AppFonts.labelUI)
-                        .foregroundColor(AppColors.onPrimary)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 50)
-                        .background(label.trimmingCharacters(in: .whitespaces).isEmpty ? Color.gray.opacity(0.5) : AppColors.primary)
-                        .clipShape(Capsule())
-                        .disabled(label.trimmingCharacters(in: .whitespaces).isEmpty)
-                }
-            }
-            .padding(24)
-            .background(AppColors.canvas.ignoresSafeArea())
-            .navigationBarHidden(true)
-        }
+private struct ScaleButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.96 : 1.0)
+            .animation(.easeInOut(duration: 0.15), value: configuration.isPressed)
     }
 }

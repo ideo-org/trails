@@ -11,13 +11,15 @@ import CoreLocation
 
 // MARK: - Place Models
 
-public struct Place: Identifiable, Hashable {
+public struct Place: Identifiable, Hashable, Codable {
     public let id: String
     public var name: String
     public var tagline: String
     public var surveyYear: String
     public var district: String
+    public var locality: String
     public var description: String
+    public var coverImageName: String?
     public var trailsCount: Int
     public var contributorsCount: Int
     public var latitude: Double
@@ -38,7 +40,9 @@ public struct Place: Identifiable, Hashable {
         tagline: String,
         surveyYear: String,
         district: String,
+        locality: String = "Dhun, Jaipur",
         description: String,
+        coverImageName: String? = "DhunHaveliEvening",
         trailsCount: Int,
         contributorsCount: Int,
         latitude: Double,
@@ -54,7 +58,9 @@ public struct Place: Identifiable, Hashable {
         self.tagline = tagline
         self.surveyYear = surveyYear
         self.district = district
+        self.locality = locality
         self.description = description
+        self.coverImageName = coverImageName
         self.trailsCount = trailsCount
         self.contributorsCount = contributorsCount
         self.latitude = latitude
@@ -67,7 +73,7 @@ public struct Place: Identifiable, Hashable {
     }
 }
 
-public enum PlaceCategory: String, CaseIterable, Identifiable {
+public enum PlaceCategory: String, CaseIterable, Identifiable, Codable {
     case all = "All Places"
     case dhunSurrounds = "Dhun & Surrounds"
     case courtyards = "Indoor Courtyards"
@@ -77,7 +83,7 @@ public enum PlaceCategory: String, CaseIterable, Identifiable {
     public var id: String { rawValue }
 }
 
-public struct FloorLevel: Identifiable, Hashable {
+public struct FloorLevel: Identifiable, Hashable, Codable {
     public let id: String
     public let shortCode: String
     public let name: String
@@ -91,7 +97,7 @@ public struct FloorLevel: Identifiable, Hashable {
     }
 }
 
-public struct PlaceAuthor: Identifiable, Hashable {
+public struct PlaceAuthor: Identifiable, Hashable, Codable {
     public let id: String
     public let name: String
     public let focusArea: String
@@ -119,6 +125,7 @@ public struct TrailSummary: Identifiable, Hashable, Codable {
     public var floorCode: String
     public var floorTitle: String
     public var meshDensity: String
+    public var coverImageName: String?
 
     public init(
         id: String,
@@ -131,7 +138,8 @@ public struct TrailSummary: Identifiable, Hashable, Codable {
         momentsCount: Int,
         floorCode: String = "LVL 00",
         floorTitle: String = "Ground Floor",
-        meshDensity: String = "98% density"
+        meshDensity: String = "98% density",
+        coverImageName: String? = nil
     ) {
         self.id = id
         self.title = title
@@ -144,6 +152,7 @@ public struct TrailSummary: Identifiable, Hashable, Codable {
         self.floorCode = floorCode
         self.floorTitle = floorTitle
         self.meshDensity = meshDensity
+        self.coverImageName = coverImageName
     }
 }
 
@@ -153,6 +162,7 @@ public struct TrailDetail: Identifiable, Hashable, Codable {
     public var subtitle: String
     public var placeId: String
     public var placeName: String
+    public var locality: String
     public var wing: String
     public var authorName: String
     public var authorRole: String
@@ -166,8 +176,30 @@ public struct TrailDetail: Identifiable, Hashable, Codable {
     public var moments: [SpatialMoment]
     public var visibility: TrailVisibility
     public var isDraft: Bool
+    public var coverImageName: String?
+    public var latitude: Double?
+    public var longitude: Double?
+    public var inspiredByTrailId: String?
+    public var inspiredByNote: String?
     public var createdAt: Date
     public var updatedAt: Date
+
+    public var photoCount: Int {
+        moments.filter { $0.hasPhoto || $0.mediaType == "photo" }.count
+    }
+
+    public var audioCount: Int {
+        moments.filter { $0.hasAudio || $0.mediaType == "voice" }.count
+    }
+
+    public var mediaSummary: String {
+        let p = photoCount
+        let a = audioCount
+        if p > 0 && a > 0 { return "\(p)P · \(a)A" }
+        if p > 0 { return "\(p)P" }
+        if a > 0 { return "\(a)A" }
+        return "\(moments.count)M"
+    }
 
     public init(
         id: String,
@@ -175,6 +207,7 @@ public struct TrailDetail: Identifiable, Hashable, Codable {
         subtitle: String,
         placeId: String,
         placeName: String,
+        locality: String = "Dhun, Jaipur",
         wing: String,
         authorName: String,
         authorRole: String,
@@ -188,6 +221,11 @@ public struct TrailDetail: Identifiable, Hashable, Codable {
         moments: [SpatialMoment] = [],
         visibility: TrailVisibility = .privateDraft,
         isDraft: Bool = false,
+        coverImageName: String? = "DhunHaveliEvening",
+        latitude: Double? = 26.9124,
+        longitude: Double? = 75.7873,
+        inspiredByTrailId: String? = nil,
+        inspiredByNote: String? = nil,
         createdAt: Date = Date(),
         updatedAt: Date = Date()
     ) {
@@ -196,6 +234,7 @@ public struct TrailDetail: Identifiable, Hashable, Codable {
         self.subtitle = subtitle
         self.placeId = placeId
         self.placeName = placeName
+        self.locality = locality
         self.wing = wing
         self.authorName = authorName
         self.authorRole = authorRole
@@ -209,6 +248,11 @@ public struct TrailDetail: Identifiable, Hashable, Codable {
         self.moments = moments
         self.visibility = visibility
         self.isDraft = isDraft
+        self.coverImageName = coverImageName
+        self.latitude = latitude
+        self.longitude = longitude
+        self.inspiredByTrailId = inspiredByTrailId
+        self.inspiredByNote = inspiredByNote
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }
@@ -225,6 +269,10 @@ public struct SpatialMoment: Identifiable, Hashable, Codable {
     public var relativeElevation: String
     public var audioDuration: String?
     public var hasAudio: Bool
+    public var hasPhoto: Bool
+    public var mediaType: String // "note" | "photo" | "voice" | "video"
+    public var photoAssetName: String?
+    public var audioFileName: String?
     public var positionX: Double // Local survey coordinate X
     public var positionY: Double // Local survey coordinate Y (or Z in 3D frame)
     public var positionZ: Double?
@@ -242,6 +290,10 @@ public struct SpatialMoment: Identifiable, Hashable, Codable {
         relativeElevation: String = "+0.00m",
         audioDuration: String? = nil,
         hasAudio: Bool = false,
+        hasPhoto: Bool = false,
+        mediaType: String = "note",
+        photoAssetName: String? = nil,
+        audioFileName: String? = nil,
         positionX: Double = 0.5,
         positionY: Double = 0.5,
         positionZ: Double? = 0.0,
@@ -258,6 +310,10 @@ public struct SpatialMoment: Identifiable, Hashable, Codable {
         self.relativeElevation = relativeElevation
         self.audioDuration = audioDuration
         self.hasAudio = hasAudio
+        self.hasPhoto = hasPhoto
+        self.mediaType = mediaType
+        self.photoAssetName = photoAssetName
+        self.audioFileName = audioFileName
         self.positionX = positionX
         self.positionY = positionY
         self.positionZ = positionZ
@@ -357,6 +413,10 @@ public final class TrailPackageStore {
         baseDirectory.appendingPathComponent("trails", isDirectory: true)
     }
 
+    public var placesDirectory: URL {
+        baseDirectory.appendingPathComponent("places", isDirectory: true)
+    }
+
     public var profilesDirectory: URL {
         baseDirectory.appendingPathComponent("profiles", isDirectory: true)
     }
@@ -371,6 +431,7 @@ public final class TrailPackageStore {
 
     private func ensureBaseDirectoriesExist() {
         try? fileManager.createDirectory(at: trailsDirectory, withIntermediateDirectories: true)
+        try? fileManager.createDirectory(at: placesDirectory, withIntermediateDirectories: true)
         try? fileManager.createDirectory(at: profilesDirectory, withIntermediateDirectories: true)
     }
 
@@ -498,6 +559,40 @@ public final class TrailPackageStore {
         }
 
         return records.map { SIMD3<Float>($0.positionX, $0.positionY, $0.positionZ) }
+    }
+
+    public func mediaDirectory(for trailId: String) -> URL {
+        let dir = trailDirectory(for: trailId).appendingPathComponent("media", isDirectory: true)
+        try? fileManager.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir
+    }
+
+    // MARK: - Places Persistence (PRD §12 & §14)
+
+    public func savePlace(_ place: Place) {
+        ensureBaseDirectoriesExist()
+        let dir = placesDirectory.appendingPathComponent(place.id, isDirectory: true)
+        try? fileManager.createDirectory(at: dir, withIntermediateDirectories: true)
+        let placeURL = dir.appendingPathComponent("place.json")
+        if let data = try? encoder.encode(place) {
+            try? data.write(to: placeURL, options: .atomic)
+        }
+    }
+
+    public func loadAllPlaces() -> [Place] {
+        ensureBaseDirectoriesExist()
+        guard let placeDirs = try? fileManager.contentsOfDirectory(at: placesDirectory, includingPropertiesForKeys: [.isDirectoryKey]) else {
+            return []
+        }
+        var places: [Place] = []
+        for dir in placeDirs {
+            let placeURL = dir.appendingPathComponent("place.json")
+            if let data = try? Data(contentsOf: placeURL),
+               let place = try? decoder.decode(Place.self, from: data) {
+                places.append(place)
+            }
+        }
+        return places
     }
 
     public func deleteTrailPackage(id: String) {

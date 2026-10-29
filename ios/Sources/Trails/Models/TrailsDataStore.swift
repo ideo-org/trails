@@ -2,12 +2,20 @@
 //  TrailsDataStore.swift
 //  Trails
 //
-//  Data store providing mock and user-generated data for places and spatial trails,
-//  aligned with the Dhun Architectural Quarter design monograph.
+//  Data store providing local persistence and rich spatial monograph data
+//  aligned with PRD v0.2.0 (A Living Spatial Journal) and docs/stitch/v0.2.0.
 //
 
 import Foundation
 import Combine
+import simd
+
+public enum CollectionMode: String, CaseIterable, Identifiable {
+    case journal = "Journal"
+    case map = "Map"
+
+    public var id: String { rawValue }
+}
 
 @MainActor
 public final class TrailsDataStore: ObservableObject {
@@ -20,6 +28,13 @@ public final class TrailsDataStore: ObservableObject {
     @Published public var savedTrails: [TrailDetail] = []
     @Published public var sampleTrails: [TrailDetail] = []
     @Published public var localProfile: LocalProfile = LocalProfile()
+
+    // v0.2.0 Collection & Filter State (PRD §11 & §12)
+    @Published public var collectionMode: CollectionMode = .journal
+    @Published public var searchText: String = ""
+    @Published public var selectedYearFilter: String? = nil
+    @Published public var selectedPlaceFilter: String? = nil
+    @Published public var targetPlaceForRecording: Place? = nil
 
     private let packageStore = TrailPackageStore.shared
 
@@ -36,14 +51,69 @@ public final class TrailsDataStore: ObservableObject {
         if !diskDrafts.isEmpty {
             self.userDrafts = diskDrafts
         }
+
+        let diskPlaces = packageStore.loadAllPlaces()
+        if !diskPlaces.isEmpty {
+            self.places = diskPlaces
+        }
     }
+
+    // MARK: - Filtered Queries (PRD §11.3)
+
+    public var allDisplayTrails: [TrailDetail] {
+        return savedTrails + sampleTrails
+    }
+
+    public var filteredTrails: [TrailDetail] {
+        var results = allDisplayTrails
+
+        if !searchText.trimmingCharacters(in: .whitespaces).isEmpty {
+            let query = searchText.lowercased()
+            results = results.filter {
+                $0.title.lowercased().contains(query) ||
+                $0.placeName.lowercased().contains(query) ||
+                $0.locality.lowercased().contains(query)
+            }
+        }
+
+        if let place = selectedPlaceFilter {
+            results = results.filter { $0.placeName == place || $0.placeId == place }
+        }
+
+        if let year = selectedYearFilter {
+            let calendar = Calendar.current
+            results = results.filter {
+                String(calendar.component(.year, from: $0.createdAt)) == year
+            }
+        }
+
+        return results
+    }
+
+    public var availableYears: [String] {
+        let calendar = Calendar.current
+        let years = allDisplayTrails.map { String(calendar.component(.year, from: $0.createdAt)) }
+        return Array(Set(years)).sorted(by: >)
+    }
+
+    public func clearFilters() {
+        searchText = ""
+        selectedYearFilter = nil
+        selectedPlaceFilter = nil
+    }
+
+    public func startTrailAtPlace(_ place: Place) {
+        self.targetPlaceForRecording = place
+    }
+
+    // MARK: - Persistence Actions
 
     public func saveDraft(trail: TrailDetail, footsteps: [SIMD3<Float>] = []) {
         var mutableTrail = trail
         mutableTrail.isDraft = true
         mutableTrail.updatedAt = Date()
         packageStore.saveTrailPackage(trail: mutableTrail, footsteps: footsteps)
-        
+
         if let idx = userDrafts.firstIndex(where: { $0.id == trail.id }) {
             userDrafts[idx] = mutableTrail
         } else {
@@ -58,9 +128,8 @@ public final class TrailsDataStore: ObservableObject {
         mutableTrail.updatedAt = Date()
         packageStore.saveTrailPackage(trail: mutableTrail, footsteps: footsteps)
 
-        // Remove from drafts if present
         userDrafts.removeAll { $0.id == trail.id }
-        
+
         if let idx = savedTrails.firstIndex(where: { $0.id == trail.id }) {
             savedTrails[idx] = mutableTrail
         } else {
@@ -103,6 +172,8 @@ public final class TrailsDataStore: ObservableObject {
         packageStore.saveLocalProfile(localProfile)
     }
 
+    // MARK: - Initial Monograph Dataset (PRD §1 & docs/stitch/v0.2.0)
+
     private func loadInitialData() {
         let moment1 = SpatialMoment(
             id: "m1",
@@ -114,6 +185,9 @@ public final class TrailsDataStore: ObservableObject {
             distanceAlongPathMeters: 4,
             relativeElevation: "+0.00m",
             hasAudio: false,
+            hasPhoto: true,
+            mediaType: "photo",
+            photoAssetName: "SandstoneArchway",
             positionX: 0.18,
             positionY: 0.65
         )
@@ -123,12 +197,14 @@ public final class TrailsDataStore: ObservableObject {
             index: 2,
             title: "The Light Well Lintels",
             subtitle: "Echo of footsteps here is softer",
-            narrative: "Stand directly under the east archway. Look up before you walk through—notice how the hand-chiseled lintels taper upward to draw smoke and hot air toward the open court.",
+            narrative: "Stand directly under the east archway. Notice how the hand-chiseled lintels taper upward to draw smoke and hot air toward the open court.",
             architecturalNote: "Late 18th-century craft detail, undamaged corner joinery.",
             distanceAlongPathMeters: 18,
             relativeElevation: "+0.00m",
             audioDuration: "0:42",
             hasAudio: true,
+            hasPhoto: false,
+            mediaType: "voice",
             positionX: 0.42,
             positionY: 0.48
         )
@@ -143,6 +219,8 @@ public final class TrailsDataStore: ObservableObject {
             distanceAlongPathMeters: 55,
             relativeElevation: "+1.20m",
             hasAudio: false,
+            hasPhoto: false,
+            mediaType: "note",
             positionX: 0.62,
             positionY: 0.35
         )
@@ -150,7 +228,7 @@ public final class TrailsDataStore: ObservableObject {
         let moment4 = SpatialMoment(
             id: "m4",
             index: 4,
-            title: "Rear Alcove Breeze",
+            title: "Courtyard Cistern Breeze",
             subtitle: "Cold draft from the sub-floor ducts",
             narrative: "A subtle cooling cross-current washes across this recessed alcove, drawn up from the subterranean rainwater cistern below.",
             architecturalNote: "Sub-floor thermal convection flue connected to north light shaft.",
@@ -158,55 +236,117 @@ public final class TrailsDataStore: ObservableObject {
             relativeElevation: "+1.80m",
             audioDuration: "1:15",
             hasAudio: true,
+            hasPhoto: true,
+            mediaType: "photo",
+            photoAssetName: "DhunHaveliEvening",
             positionX: 0.78,
             positionY: 0.22
         )
 
-        let throughTheCourtyard = TrailDetail(
-            id: "through-the-courtyard",
-            title: "Through the Courtyard",
-            subtitle: "Morning light & ventilation paths",
+        let heroTrail = TrailDetail(
+            id: "evening-through-haveli",
+            title: "An evening through the Haveli",
+            subtitle: "Worn sandstone lintels & passive evening drafts",
             placeId: "dhun-haveli",
             placeName: "Dhun Haveli",
+            locality: "Dhun, Jaipur",
             wing: "Ground Floor, Courtyard wing",
             authorName: "Hiro",
             authorRole: "Architect & Spatial Explorer",
             distanceMeters: 140,
             floorCode: "LVL 00",
             floorTitle: "Ground Floor",
-            meshDensity: "98% density",
+            meshDensity: "LiDAR Mesh v2",
             samplingFrequency: "24.6 kHz",
             nodeCount: 4,
-            personalNotes: "Recorded early morning while the stone was still cool. Follow the path along the water drainage channels towards the eastern light shaft.",
-            moments: [moment1, moment2, moment3, moment4],
-            visibility: .publicPlace,
-            isDraft: false
-        )
-
-        let draftTrail = TrailDetail(
-            id: "draft-courtyard",
-            title: "Through the Courtyard",
-            subtitle: "Morning light & ventilation paths",
-            placeId: "dhun-haveli",
-            placeName: "Dhun Haveli",
-            wing: "Ground Floor, Courtyard wing",
-            authorName: "Hiro",
-            authorRole: "Architect & Spatial Explorer",
-            distanceMeters: 140,
-            floorCode: "LVL 00",
-            floorTitle: "Ground Floor",
-            meshDensity: "98% density",
-            samplingFrequency: "24.6 kHz",
-            nodeCount: 4,
-            personalNotes: "Recorded early morning while the stone was still cool. Follow the path along the water drainage toward the central cistern.",
+            personalNotes: "Recorded at twilight while stone floors retained warmth. Follow the path along the water drainage channels towards the eastern light shaft.",
             moments: [moment1, moment2, moment3, moment4],
             visibility: .privateDraft,
-            isDraft: true
+            isDraft: false,
+            coverImageName: "DhunHaveliEvening",
+            latitude: 26.9124,
+            longitude: 75.7873
         )
 
-        self.sampleTrails = [throughTheCourtyard]
-        self.userDrafts = [draftTrail]
-        self.activeTrail = throughTheCourtyard
+        let stepwellTrail = TrailDetail(
+            id: "stepwell-descent",
+            title: "The Stepwell Descent",
+            subtitle: "Water basin cisterns & subterranean acoustic dampening",
+            placeId: "dhun-haveli",
+            placeName: "Dhun South",
+            locality: "Dhun, Jaipur",
+            wing: "Basement Incline",
+            authorName: "Hiro",
+            authorRole: "Architect",
+            distanceMeters: 85,
+            floorCode: "LVL -01",
+            floorTitle: "Basement Cistern",
+            meshDensity: "LiDAR Mesh v2",
+            samplingFrequency: "24.6 kHz",
+            nodeCount: 3,
+            personalNotes: "Descending past the cold intake ducts. Notice the abrupt 4-degree temperature shift.",
+            moments: [moment1, moment3, moment4],
+            visibility: .privateDraft,
+            isDraft: false,
+            coverImageName: "SandstoneArchway",
+            latitude: 26.9118,
+            longitude: 75.7865
+        )
+
+        let terraceTrail = TrailDetail(
+            id: "upper-terrace-dawn",
+            title: "Upper Terrace at Dawn",
+            subtitle: "Solar geometer alignments across roof overlook",
+            placeId: "dhun-haveli",
+            placeName: "Haveli Level 2",
+            locality: "Dhun, Jaipur",
+            wing: "Roof Terrace",
+            authorName: "Hiro",
+            authorRole: "Solar Geometer",
+            distanceMeters: 110,
+            floorCode: "LVL 02",
+            floorTitle: "Roof Overlook",
+            meshDensity: "LiDAR Mesh v1",
+            samplingFrequency: "24.6 kHz",
+            nodeCount: 5,
+            personalNotes: "First morning sunlight hitting the eastern sandstone battlements.",
+            moments: [moment2, moment3, moment4],
+            visibility: .privateDraft,
+            isDraft: false,
+            coverImageName: "DhunHaveliEvening",
+            latitude: 26.9126,
+            longitude: 75.7876,
+            inspiredByTrailId: "evening-through-haveli",
+            inspiredByNote: "Vertical solar counterpart to Hiro's evening haveli walk."
+        )
+
+        let workshopTrail = TrailDetail(
+            id: "carpenters-lane",
+            title: "Carpenters' Lane Workshop",
+            subtitle: "Teak joinery & cedar scent cross-ventilation",
+            placeId: "craft-quarter",
+            placeName: "Dhun Craft Quarter",
+            locality: "Artisan Lane, Dhun",
+            wing: "Workshop 02",
+            authorName: "Hiro",
+            authorRole: "Craft Researcher",
+            distanceMeters: 62,
+            floorCode: "LVL 00",
+            floorTitle: "Timber Yard",
+            meshDensity: "LiDAR Mesh v1",
+            samplingFrequency: "24.6 kHz",
+            nodeCount: 2,
+            personalNotes: "Hand-tool racks and mortise-tenon samples arranged along north light.",
+            moments: [moment1, moment2],
+            visibility: .privateDraft,
+            isDraft: false,
+            coverImageName: "SandstoneArchway",
+            latitude: 26.9142,
+            longitude: 75.7891
+        )
+
+        self.sampleTrails = [heroTrail, stepwellTrail, terraceTrail, workshopTrail]
+        self.activeTrail = heroTrail
 
         let dhunHaveli = Place(
             id: "dhun-haveli",
@@ -214,9 +354,11 @@ public final class TrailsDataStore: ObservableObject {
             tagline: "“A place, through its people.”",
             surveyYear: "Surv. 1884",
             district: "Jaipur / Dhun district",
+            locality: "Dhun, Jaipur",
             description: "A 19th-century courtyard dwelling oriented around passive ventilation and shared light wells. Authors have traced movements from morning light to evening gathering.",
-            trailsCount: 8,
-            contributorsCount: 6,
+            coverImageName: "DhunHaveliEvening",
+            trailsCount: 4,
+            contributorsCount: 3,
             latitude: 26.9124,
             longitude: 75.7873,
             category: .courtyards,
@@ -227,76 +369,67 @@ public final class TrailsDataStore: ObservableObject {
                 FloorLevel(id: "lvl-02", shortCode: "LVL 02", name: "Upper terrace", elevationOffset: "+6.80m")
             ],
             authors: [
-                PlaceAuthor(id: "a1", name: "Hiro", focusArea: "Courtyard", role: "Architect & Spatial Explorer"),
-                PlaceAuthor(id: "a2", name: "Maya", focusArea: "Acoustics", role: "Sound Artist"),
-                PlaceAuthor(id: "a3", name: "Kael", focusArea: "Shadows", role: "Solar Geometer"),
-                PlaceAuthor(id: "a4", name: "Sarah", focusArea: "Terrace", role: "Historian")
+                PlaceAuthor(id: "a1", name: "Hiro", focusArea: "Courtyard & Light", role: "Architect & Spatial Explorer")
             ],
             trails: [
                 TrailSummary(
-                    id: "through-the-courtyard",
-                    title: "Through the Courtyard",
-                    subtitle: "Morning light & ventilation paths",
+                    id: "evening-through-haveli",
+                    title: "An evening through the Haveli",
+                    subtitle: "Worn sandstone lintels & passive evening drafts",
                     placeName: "Dhun Haveli",
                     authorName: "Hiro",
                     distanceMeters: 140,
                     momentsCount: 4,
                     floorCode: "LVL 00",
-                    floorTitle: "Ground Floor"
+                    floorTitle: "Ground Floor",
+                    coverImageName: "DhunHaveliEvening"
                 ),
                 TrailSummary(
-                    id: "upper-jharokha",
-                    title: "Upper Jharokha Breezeway",
-                    subtitle: "Wind-catcher balconies & roof overlook",
+                    id: "upper-terrace-dawn",
+                    title: "Upper Terrace at Dawn",
+                    subtitle: "Solar geometer alignments across roof overlook",
                     placeName: "Dhun Haveli",
-                    authorName: "Maya",
-                    distanceMeters: 95,
-                    momentsCount: 3,
-                    floorCode: "LVL 01",
-                    floorTitle: "Mezzanine"
-                ),
-                TrailSummary(
-                    id: "water-channels",
-                    title: "Water Channels & Basements",
-                    subtitle: "Subterranean cistern acoustics",
-                    placeName: "Dhun Haveli",
-                    authorName: "Kael",
-                    distanceMeters: 210,
-                    momentsCount: 6,
-                    floorCode: "LVL 00",
-                    floorTitle: "Ground Floor"
+                    authorName: "Hiro",
+                    distanceMeters: 110,
+                    momentsCount: 5,
+                    floorCode: "LVL 02",
+                    floorTitle: "Roof Overlook",
+                    coverImageName: "DhunHaveliEvening"
                 )
             ]
         )
 
-        let printWorkshop = Place(
-            id: "print-workshop",
-            name: "Print Workshop",
-            tagline: "Historic press room & bindery",
+        let craftQuarter = Place(
+            id: "craft-quarter",
+            name: "Dhun Craft Quarter",
+            tagline: "Historic artisan lanes & joinery sheds",
             surveyYear: "Surv. 1912",
             district: "Dhun Artisan Lane",
-            description: "Woodblock print archives and drying racks situated around north-facing clerestory glazing.",
-            trailsCount: 5,
-            contributorsCount: 4,
+            locality: "Artisan Lane, Dhun",
+            description: "Woodblock print archives, timber dry-racks, and hand-chiseled masonry shops situated along cool shaded alleys.",
+            coverImageName: "SandstoneArchway",
+            trailsCount: 2,
+            contributorsCount: 2,
             latitude: 26.9142,
             longitude: 75.7891,
             category: .studios,
             meshVersion: "LiDAR Mesh v1",
             floorLevels: [
-                FloorLevel(id: "pw-00", shortCode: "LVL 00", name: "Press Floor")
+                FloorLevel(id: "cq-00", shortCode: "LVL 00", name: "Alley Level")
             ],
             authors: [
-                PlaceAuthor(id: "pw-a1", name: "Arjun", focusArea: "Press Room", role: "Master Printer")
+                PlaceAuthor(id: "a2", name: "Hiro", focusArea: "Timber Yard", role: "Craft Researcher")
             ],
             trails: [
                 TrailSummary(
-                    id: "pw-trail-1",
-                    title: "The Drying Loft Walk",
-                    subtitle: "Clerestory cross breeze & paper scent",
-                    placeName: "Print Workshop",
-                    authorName: "Arjun",
-                    distanceMeters: 80,
-                    momentsCount: 3
+                    id: "carpenters-lane",
+                    title: "Carpenters' Lane Workshop",
+                    subtitle: "Teak joinery & cedar scent cross-ventilation",
+                    placeName: "Dhun Craft Quarter",
+                    authorName: "Hiro",
+                    distanceMeters: 62,
+                    momentsCount: 2,
+                    coverImageName: "SandstoneArchway"
                 )
             ]
         )
@@ -307,9 +440,11 @@ public final class TrailsDataStore: ObservableObject {
             tagline: "Water-facing public pavilion",
             surveyYear: "Surv. 1820",
             district: "East Cistern Bank",
+            locality: "Reservoir Bank, Jaipur",
             description: "Tiered sandstone steps descending to the seasonal reservoir with carved stone brackets.",
-            trailsCount: 3,
-            contributorsCount: 3,
+            coverImageName: "DhunHaveliEvening",
+            trailsCount: 1,
+            contributorsCount: 1,
             latitude: 26.9160,
             longitude: 75.7845,
             category: .pavilions,
@@ -321,27 +456,7 @@ public final class TrailsDataStore: ObservableObject {
             trails: []
         )
 
-        let neemCourtyard = Place(
-            id: "neem-courtyard",
-            name: "Neem Courtyard",
-            tagline: "Canopied community shade ring",
-            surveyYear: "Surv. 1940",
-            district: "South Quarter",
-            description: "Centuries-old Neem tree ring surrounded by perimeter clay brick benches.",
-            trailsCount: 2,
-            contributorsCount: 2,
-            latitude: 26.9100,
-            longitude: 75.7860,
-            category: .courtyards,
-            meshVersion: "LiDAR Mesh v1",
-            floorLevels: [
-                FloorLevel(id: "nc-00", shortCode: "LVL 00", name: "Canopy Level")
-            ],
-            authors: [],
-            trails: []
-        )
-
-        self.places = [dhunHaveli, printWorkshop, steppedPavilion, neemCourtyard]
+        self.places = [dhunHaveli, craftQuarter, steppedPavilion]
         self.selectedPlace = dhunHaveli
     }
 }

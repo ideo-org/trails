@@ -2,8 +2,14 @@
 //  SpatialTrailViewerView.swift
 //  Trails
 //
-//  Screen 3: Spatial Trail Viewer, designed in docs/stitch/spatial_viewer_through_the_courtyard.
-//  Presents the interactive 3D/2D spatial RoomPlan and LiDAR mesh replay with moment sequence navigation.
+//  Screen 3 & Revisit: Spatial Trail Viewer & Presentation Replay (PRD v0.2.0 §10, §11 & docs/stitch/v0.2.0/revisit_spatial_memory_replay_1 & 2).
+//  Features:
+//  - Interactive 3D/Plan RoomPlan & LiDAR vector canvas with live gesture controls
+//  - [ Moments | Explore ] segmented exploration modes
+//  - Checkpoint sequence ribbon navigation (Photo, Voice, Note checkpoints)
+//  - Curatorial audio playback player using AudioManager with live waveforms
+//  - Presentation Mode for distraction-free in-person sharing
+//  - Time-lapse auto-scrubbing playback
 //
 
 import SwiftUI
@@ -11,26 +17,100 @@ import SwiftUI
 public struct SpatialTrailViewerView: View {
     @Environment(\.dismiss) private var dismiss
     @ObservedObject var dataStore = TrailsDataStore.shared
+    @StateObject private var audioManager = AudioManager.shared
 
+    // Navigation and inspection state
     @State private var is3DMode: Bool = true
-    @State private var currentMomentIndex: Int = 1 // 1-based index (0 -> Moment 1, 1 -> Moment 2)
-    @State private var isAudioPlaying: Bool = false
+    @State private var currentMomentIndex: Int = 1 // 0-based index
+    @State private var explorationMode: ExplorationMode = .moments
+    @State private var isPresentationMode: Bool = false
     @State private var cameraAngle: Double = 35.0
     @State private var cameraRotation: Double = 0.0
 
+    // Time-lapse simulation state
+    @State private var isTimelapsePlaying: Bool = false
+    @State private var timelapseSpeed: Double = 1.0
+    @State private var timelapseTimer: Timer?
+
     public init() {}
+
+    enum ExplorationMode {
+        case moments
+        case explore
+    }
 
     private var trail: TrailDetail {
         dataStore.activeTrail ?? TrailDetail(
             id: "fallback",
-            title: "Through the Courtyard",
-            subtitle: "Morning light & ventilation paths",
+            title: "An evening through the Haveli",
+            subtitle: "140m path · 4 moments · 2800K dusk",
             placeId: "dhun-haveli",
             placeName: "Dhun Haveli",
+            locality: "Jaipur, Rajasthan",
             wing: "Ground Floor",
             authorName: "Hiro",
             authorRole: "Architect & Spatial Explorer",
-            distanceMeters: 140
+            distanceMeters: 140,
+            moments: [
+                SpatialMoment(
+                    id: "m1",
+                    index: 1,
+                    title: "Eastern Portal",
+                    subtitle: "0.0m Start",
+                    narrative: "The outer door threshold remains cool even after 8 hours of desert sun. Intricate peacock carvings on yellow sandstone.",
+                    architecturalNote: "Lighting: Golden Hour · 2800K | Portal Width: 1.42m Clear Width",
+                    distanceAlongPathMeters: 0,
+                    hasPhoto: true,
+                    mediaType: "photo",
+                    photoAssetName: "SandstoneArchway",
+                    positionX: -90,
+                    positionY: 100
+                ),
+                SpatialMoment(
+                    id: "m2",
+                    index: 2,
+                    title: "Courtyard entrance",
+                    subtitle: "+18m path",
+                    narrative: "Stand directly under the archway before entering. The evening air cools down significantly here.",
+                    architecturalNote: "Dry stone joinery without mortar; air current draws upward into the light well.",
+                    distanceAlongPathMeters: 18,
+                    audioDuration: "0:18",
+                    hasAudio: true,
+                    hasPhoto: true,
+                    mediaType: "voice",
+                    photoAssetName: "SandstoneArchway",
+                    positionX: -30,
+                    positionY: 30
+                ),
+                SpatialMoment(
+                    id: "m3",
+                    index: 3,
+                    title: "Water Sump & Planter",
+                    subtitle: "+42m path",
+                    narrative: "Recessed sandstone basin gathers rainwater runoff from all four inwardly sloping roof terraces.",
+                    architecturalNote: "Passive thermal massing creates microclimate cooler by 4°C than surrounding street.",
+                    distanceAlongPathMeters: 42,
+                    audioDuration: "0:24",
+                    hasAudio: true,
+                    mediaType: "note",
+                    positionX: 10,
+                    positionY: -20
+                ),
+                SpatialMoment(
+                    id: "m4",
+                    index: 4,
+                    title: "Iron Pivot Hinge",
+                    subtitle: "+85m path",
+                    narrative: "Double shutter heavy teak door swinging on hand-forged iron socket embedded directly into the sandstone plinth.",
+                    architecturalNote: "Forged 1892; zero mechanical wear on bearing stone after 130 years of daily rotation.",
+                    distanceAlongPathMeters: 85,
+                    hasPhoto: true,
+                    mediaType: "photo",
+                    photoAssetName: "DhunHaveliEvening",
+                    positionX: 70,
+                    positionY: -80
+                )
+            ]
         )
     }
 
@@ -53,9 +133,9 @@ public struct SpatialTrailViewerView: View {
 
     public var body: some View {
         ZStack(alignment: .bottom) {
-            // MARK: - Spatial Canvas (3D RoomPlan / LiDAR Point Cloud)
+            // MARK: - Spatial 3D / Isometric Canvas
             ZStack {
-                Color(hex: "#1C1C16") // Deep survey dark canvas
+                Color(hex: "#1C1C16")
                     .ignoresSafeArea()
 
                 SpatialMeshView(
@@ -73,16 +153,133 @@ public struct SpatialTrailViewerView: View {
                             cameraAngle = max(10, min(80, cameraAngle - Double(value.translation.height) * 0.05))
                         }
                 )
+
+                // Canvas Overlays: Non-Live Badge & Scrubber
+                VStack {
+                    HStack {
+                        // Non-Live Badge
+                        HStack(spacing: 6) {
+                            Image(systemName: "clock.arrow.circlepath")
+                                .font(.system(size: 11))
+                                .foregroundColor(AppColors.mutedBrass)
+                            Text("Replay · Not live navigation")
+                                .font(AppFonts.labelSpatial)
+                                .foregroundColor(AppColors.pureWhite.opacity(0.85))
+                        }
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(Color.black.opacity(0.55))
+                        .clipShape(Capsule())
+
+                        Spacer()
+
+                        // Time-Lapse Floating Control
+                        HStack(spacing: 6) {
+                            Button {
+                                toggleTimelapse()
+                            } label: {
+                                HStack(spacing: 4) {
+                                    Image(systemName: isTimelapsePlaying ? "pause.circle.fill" : "play.circle.fill")
+                                        .font(.system(size: 14))
+                                        .foregroundColor(AppColors.terracotta)
+                                    Text("Time-Lapse")
+                                        .font(AppFonts.labelSpatial)
+                                        .foregroundColor(AppColors.pureWhite)
+                                }
+                            }
+
+                            Text("|")
+                                .font(.system(size: 11))
+                                .foregroundColor(Color.white.opacity(0.3))
+
+                            Button {
+                                timelapseSpeed = timelapseSpeed == 1.0 ? 2.0 : 1.0
+                            } label: {
+                                Text(String(format: "%.1fx", timelapseSpeed))
+                                    .font(AppFonts.labelSpatial)
+                                    .foregroundColor(AppColors.mutedBrass)
+                            }
+                        }
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(Color.black.opacity(0.55))
+                        .clipShape(Capsule())
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.top, isPresentationMode ? 56 : 116)
+
+                    Spacer()
+
+                    // Canvas Bottom Scrubber Bar & Compass
+                    HStack(spacing: 8) {
+                        // Timeline Scrubber
+                        VStack(spacing: 4) {
+                            HStack {
+                                HStack(spacing: 4) {
+                                    Circle()
+                                        .fill(AppColors.terracotta)
+                                        .frame(width: 6, height: 6)
+                                    Text("17:42 IST")
+                                        .font(AppFonts.labelSpatial)
+                                        .foregroundColor(AppColors.pureWhite)
+                                }
+                                Spacer()
+                                Text("Node \(currentMoment.index) of \(trail.moments.count) · +\(currentMoment.distanceAlongPathMeters)m")
+                                    .font(AppFonts.labelSpatial)
+                                    .foregroundColor(AppColors.mutedBrass)
+                                Spacer()
+                                Text("17:55 IST")
+                                    .font(AppFonts.labelSpatial)
+                                    .foregroundColor(Color.white.opacity(0.6))
+                            }
+
+                            // Interactive Progress Track
+                            GeometryReader { geo in
+                                ZStack(alignment: .leading) {
+                                    Capsule()
+                                        .fill(Color.white.opacity(0.15))
+                                        .frame(height: 4)
+
+                                    let fraction = trail.moments.isEmpty ? 0.0 : CGFloat(currentMomentIndex) / CGFloat(max(1, trail.moments.count - 1))
+                                    Capsule()
+                                        .fill(AppColors.terracotta)
+                                        .frame(width: max(12, geo.size.width * fraction), height: 4)
+                                }
+                            }
+                            .frame(height: 4)
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(Color.black.opacity(0.6))
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+
+                        // Compass orientation pill
+                        HStack(spacing: 4) {
+                            Image(systemName: "safari.fill")
+                                .font(.system(size: 11))
+                                .foregroundColor(AppColors.mutedBrass)
+                            Text("N 26°55'")
+                                .font(AppFonts.labelSpatial)
+                                .foregroundColor(AppColors.pureWhite.opacity(0.8))
+                        }
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 8)
+                        .background(Color.black.opacity(0.6))
+                        .clipShape(Capsule())
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, isPresentationMode ? 240 : 255)
+                }
             }
 
-            // MARK: - Top Spatial HUD
+            // MARK: - Top Spatial Exploration Header HUD
             VStack(spacing: 8) {
                 // Top Control Bar
                 HStack(spacing: 12) {
                     Button {
                         dismiss()
                     } label: {
-                        Image(systemName: "xmark")
+                        Image(systemName: "arrow.left")
                             .font(.system(size: 15, weight: .bold))
                             .foregroundColor(AppColors.pureWhite)
                             .frame(width: 38, height: 38)
@@ -91,19 +288,19 @@ public struct SpatialTrailViewerView: View {
                     }
 
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("\(trail.placeName) • \(trail.title)")
+                        Text(isPresentationMode ? "PRESENTATION" : "SPATIAL MEMOIR")
+                            .font(AppFonts.labelSpatial)
+                            .foregroundColor(AppColors.mutedBrass)
+
+                        Text(trail.title)
                             .font(AppFonts.headlineSmall)
                             .foregroundColor(AppColors.pureWhite)
                             .lineLimit(1)
-
-                        Text("Trail by \(trail.authorName)")
-                            .font(AppFonts.labelSpatial)
-                            .foregroundColor(AppColors.pureWhite.opacity(0.75))
                     }
 
                     Spacer()
 
-                    // 3D / 2D Switch
+                    // 3D / Plan Toggle
                     HStack(spacing: 2) {
                         Button {
                             withAnimation(.spring(response: 0.3)) { is3DMode = true }
@@ -120,7 +317,7 @@ public struct SpatialTrailViewerView: View {
                         Button {
                             withAnimation(.spring(response: 0.3)) { is3DMode = false }
                         } label: {
-                            Text("2D")
+                            Text("PLAN")
                                 .font(AppFonts.labelSpatial)
                                 .padding(.horizontal, 10)
                                 .padding(.vertical, 6)
@@ -132,6 +329,20 @@ public struct SpatialTrailViewerView: View {
                     .padding(3)
                     .background(Color.black.opacity(0.45))
                     .clipShape(Capsule())
+
+                    // Presentation Mode Toggle (PRD §11 & docs/stitch revisit_spatial_memory_replay_2)
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.25)) {
+                            isPresentationMode.toggle()
+                        }
+                    } label: {
+                        Image(systemName: isPresentationMode ? "rectangle.compress.vertical" : "rectangle.expand.vertical")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(isPresentationMode ? AppColors.mutedBrass : AppColors.pureWhite)
+                            .frame(width: 38, height: 38)
+                            .background(Color.black.opacity(0.45))
+                            .clipShape(Circle())
+                    }
 
                     // Recenter button
                     Button {
@@ -149,206 +360,393 @@ public struct SpatialTrailViewerView: View {
                     }
                 }
                 .padding(.horizontal, 16)
-                .padding(.top, 50)
+                .padding(.top, 48)
 
-                // Sub-HUD Status Strip
-                HStack(spacing: 8) {
-                    Text("N · Ground Floor | 1:50 scale")
-                        .font(AppFonts.labelSpatial)
-                        .foregroundColor(AppColors.pureWhite.opacity(0.85))
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 5)
-                        .background(Color.black.opacity(0.4))
-                        .clipShape(Capsule())
-
-                    Spacer()
-
-                    Text("Replay · Not live navigation")
-                        .font(AppFonts.labelSpatial)
-                        .foregroundColor(AppColors.activeTrail)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 5)
-                        .background(AppColors.terracotta.opacity(0.2))
-                        .clipShape(Capsule())
-                }
-                .padding(.horizontal, 16)
-
-                // Moment Sequence Breadcrumb Pills
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
-                        ForEach(Array(trail.moments.enumerated()), id: \.element.id) { index, moment in
+                // Mode Selector Strip [ Moments | Explore ] (Hidden in presentation mode)
+                if !isPresentationMode {
+                    HStack {
+                        HStack(spacing: 2) {
                             Button {
-                                withAnimation {
-                                    currentMomentIndex = index
-                                }
+                                explorationMode = .moments
                             } label: {
-                                HStack(spacing: 4) {
-                                    if index == currentMomentIndex {
-                                        Image(systemName: "mappin.circle.fill")
-                                            .font(.system(size: 10))
-                                    }
-                                    Text("\(moment.index). \(moment.title)")
-                                        .font(AppFonts.labelSpatial)
-                                }
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 6)
-                                .background(
-                                    index == currentMomentIndex
-                                        ? AppColors.mutedBrass
-                                        : Color.black.opacity(0.5)
-                                )
-                                .foregroundColor(
-                                    index == currentMomentIndex
-                                        ? AppColors.deepInk
-                                        : AppColors.pureWhite.opacity(0.8)
-                                )
-                                .clipShape(Capsule())
+                                Text("Moments")
+                                    .font(AppFonts.labelUI)
+                                    .fontWeight(.medium)
+                                    .padding(.horizontal, 14)
+                                    .padding(.vertical, 6)
+                                    .background(explorationMode == .moments ? AppColors.primary : Color.clear)
+                                    .foregroundColor(explorationMode == .moments ? AppColors.onPrimary : AppColors.pureWhite.opacity(0.75))
+                                    .clipShape(Capsule())
+                            }
+
+                            Button {
+                                explorationMode = .explore
+                            } label: {
+                                Text("Explore")
+                                    .font(AppFonts.labelUI)
+                                    .fontWeight(.medium)
+                                    .padding(.horizontal, 14)
+                                    .padding(.vertical, 6)
+                                    .background(explorationMode == .explore ? AppColors.primary : Color.clear)
+                                    .foregroundColor(explorationMode == .explore ? AppColors.onPrimary : AppColors.pureWhite.opacity(0.75))
+                                    .clipShape(Capsule())
                             }
                         }
+                        .padding(3)
+                        .background(Color.black.opacity(0.45))
+                        .clipShape(Capsule())
+
+                        Spacer()
+
+                        // Local on-device status
+                        HStack(spacing: 5) {
+                            Circle()
+                                .fill(AppColors.forestGreen)
+                                .frame(width: 6, height: 6)
+                            Text("Saved on this iPhone")
+                                .font(AppFonts.labelSpatial)
+                                .foregroundColor(AppColors.pureWhite.opacity(0.85))
+                        }
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(Color.black.opacity(0.45))
+                        .clipShape(Capsule())
                     }
                     .padding(.horizontal, 16)
                 }
-                .padding(.top, 4)
 
                 Spacer()
             }
 
-            // MARK: - Bottom Floating Spatial Moment Card
-            VStack(alignment: .leading, spacing: 14) {
-                // Drag handle
-                Capsule()
-                    .fill(AppColors.deepInk.opacity(0.18))
-                    .frame(width: 36, height: 4)
-                    .frame(maxWidth: .infinity)
-                    .padding(.top, 8)
+            // MARK: - Checkpoint Sequence Ribbon & Bottom Moment Sheet
+            VStack(spacing: 0) {
+                // Checkpoint Sequence Ribbon (Hidden in presentation mode)
+                if !isPresentationMode {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(Array(trail.moments.enumerated()), id: \.element.id) { index, moment in
+                                Button {
+                                    withAnimation {
+                                        currentMomentIndex = index
+                                    }
+                                } label: {
+                                    HStack(spacing: 6) {
+                                        Text(String(format: "%02d", moment.index))
+                                            .font(AppFonts.labelSpatial)
+                                            .fontWeight(.bold)
+                                            .foregroundColor(index == currentMomentIndex ? AppColors.onPrimary : AppColors.primary)
+                                            .frame(width: 18, height: 18)
+                                            .background(index == currentMomentIndex ? AppColors.terracotta : AppColors.surfaceContainerHigh)
+                                            .clipShape(Circle())
 
-                // Card Header (Moment # & Distance)
-                HStack {
-                    HStack(spacing: 6) {
-                        Image(systemName: "star.fill")
-                            .font(.system(size: 10))
-                            .foregroundColor(AppColors.terracotta)
-
-                        Text("MOMENT \(currentMoment.index) OF \(trail.moments.count)")
-                            .font(AppFonts.labelSpatial)
-                            .foregroundColor(AppColors.terracotta)
+                                        Text("\(moment.title) · \(mediaLabel(for: moment))")
+                                            .font(AppFonts.labelSpatial)
+                                            .foregroundColor(index == currentMomentIndex ? AppColors.onPrimary : AppColors.primary)
+                                    }
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 7)
+                                    .background(index == currentMomentIndex ? AppColors.primary : AppColors.surfaceContainer)
+                                    .clipShape(Capsule())
+                                    .overlay(
+                                        Capsule().stroke(index == currentMomentIndex ? AppColors.terracotta.opacity(0.4) : Color.clear, lineWidth: 1)
+                                    )
+                                }
+                            }
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 8)
                     }
-
-                    Spacer()
-
-                    Label("\(currentMoment.distanceAlongPathMeters)m along path", systemImage: "figure.walk")
-                        .font(AppFonts.labelMetric)
-                        .foregroundColor(AppColors.outline)
+                    .background(AppColors.canvas.opacity(0.95))
                 }
 
-                // Moment Title & Narrative
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(currentMoment.title)
-                        .font(AppFonts.headlineMedium)
-                        .foregroundColor(AppColors.deepInk)
+                // Interactive Tactile Bottom Sheet
+                bottomTactileSheet
+            }
+        }
+        .navigationBarHidden(true)
+        .onDisappear {
+            timelapseTimer?.invalidate()
+            timelapseTimer = nil
+            audioManager.stopPlayback()
+        }
+    }
 
-                    Text(currentMoment.narrative)
-                        .font(AppFonts.bodyMedium)
-                        .foregroundColor(AppColors.deepInk)
+    // MARK: - Bottom Tactile Sheet (docs/stitch/v0.2.0/revisit_spatial_memory_replay_1 & 2)
+
+    private var bottomTactileSheet: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            // Drag handle
+            Capsule()
+                .fill(AppColors.onSurfaceVariant.opacity(0.2))
+                .frame(width: 36, height: 4)
+                .frame(maxWidth: .infinity)
+                .padding(.top, 4)
+
+            // Header Meta & Title
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Moment \(currentMoment.index) of \(trail.moments.count) · +\(currentMoment.distanceAlongPathMeters)m along path")
+                        .font(AppFonts.labelSpatial)
+                        .foregroundColor(AppColors.terracotta)
+                        .fontWeight(.semibold)
+
+                    Text(currentMoment.title)
+                        .font(AppFonts.headlineLarge)
+                        .foregroundColor(AppColors.primary)
+                }
+
+                Spacer()
+
+                Text("17:42 IST")
+                    .font(AppFonts.labelSpatial)
+                    .foregroundColor(AppColors.onSurfaceVariant)
+            }
+
+            // Photo Card (If moment has photo)
+            if currentMoment.hasPhoto {
+                HStack(alignment: .top, spacing: 12) {
+                    // Photo thumbnail
+                    Image(currentMoment.photoAssetName ?? "SandstoneArchway")
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: 80, height: 80)
+                        .clipped()
+                        .cornerRadius(12)
+                        .overlay(
+                            VStack {
+                                Spacer()
+                                HStack {
+                                    Spacer()
+                                    Image(systemName: "camera.fill")
+                                        .font(.system(size: 9))
+                                        .foregroundColor(.white)
+                                        .padding(4)
+                                        .background(Color.black.opacity(0.6))
+                                        .clipShape(RoundedRectangle(cornerRadius: 4))
+                                }
+                                .padding(4)
+                            }
+                        )
+
+                    // Note text
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "note.text")
+                                .font(.system(size: 11))
+                                .foregroundColor(AppColors.primary)
+                            Text("\(trail.authorName)’s note")
+                                .font(AppFonts.labelUI)
+                                .fontWeight(.semibold)
+                                .foregroundColor(AppColors.primary)
+                        }
+
+                        Text("“\(currentMoment.narrative)“")
+                            .font(.custom("Newsreader", size: 14))
+                            .italic()
+                            .foregroundColor(AppColors.onSurfaceVariant)
+                            .lineLimit(3)
+                    }
+                }
+                .padding(12)
+                .background(AppColors.surfaceContainerLow)
+                .clipShape(RoundedRectangle(cornerRadius: 14))
+            } else {
+                // Text-only note card
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("“\(currentMoment.narrative)“")
+                        .font(.custom("Newsreader", size: 15))
+                        .italic()
+                        .foregroundColor(AppColors.primary)
                         .lineSpacing(4)
                 }
+                .padding(12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(AppColors.surfaceContainerLow)
+                .clipShape(RoundedRectangle(cornerRadius: 14))
+            }
 
-                // Field Note Audio Player (if moment has audio)
-                if currentMoment.hasAudio {
+            // Explicit Audio Player Card (PRD §10.1 & Stitch Replay 1)
+            if currentMoment.hasAudio {
+                VStack(spacing: 8) {
+                    HStack {
+                        HStack(spacing: 6) {
+                            Image(systemName: "mic.fill")
+                                .font(.system(size: 13))
+                                .foregroundColor(AppColors.mutedBrass)
+                            Text("Recorded voice note")
+                                .font(AppFonts.labelUI)
+                                .fontWeight(.semibold)
+                                .foregroundColor(AppColors.primary)
+                            Text("48kHz Spatial")
+                                .font(AppFonts.labelSpatial)
+                                .foregroundColor(AppColors.onSurfaceVariant)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(AppColors.surfaceContainerHighest)
+                                .clipShape(Capsule())
+                        }
+
+                        Spacer()
+
+                        Text(currentMoment.audioDuration ?? "0:18")
+                            .font(AppFonts.labelMetric)
+                            .foregroundColor(AppColors.onSurfaceVariant)
+                    }
+
                     HStack(spacing: 12) {
+                        // Play / Pause Button
                         Button {
-                            isAudioPlaying.toggle()
+                            toggleAudioPlayback()
                         } label: {
-                            Image(systemName: isAudioPlaying ? "pause.fill" : "play.fill")
-                                .font(.system(size: 14))
+                            Image(systemName: audioManager.isPlaying ? "pause.fill" : "play.fill")
+                                .font(.system(size: 16, weight: .bold))
                                 .foregroundColor(AppColors.onPrimary)
-                                .frame(width: 34, height: 34)
+                                .frame(width: 40, height: 40)
                                 .background(AppColors.primary)
                                 .clipShape(Circle())
                         }
 
-                        // Simulated audio waveform
+                        // Simulated Dynamic Waveform Bars
                         HStack(spacing: 3) {
                             ForEach(0..<18) { i in
                                 RoundedRectangle(cornerRadius: 2)
-                                    .fill(i < 6 && isAudioPlaying ? AppColors.terracotta : AppColors.surfaceContainerHigh)
-                                    .frame(width: 3, height: CGFloat([12, 22, 16, 28, 14, 20, 24, 18, 10, 26, 14, 20, 16, 24, 12, 18, 22, 14][i]))
+                                    .fill(i < 7 && audioManager.isPlaying ? AppColors.terracotta : AppColors.surfaceContainerHigh)
+                                    .frame(width: 3.5, height: CGFloat([8, 16, 24, 12, 20, 28, 16, 22, 10, 26, 14, 20, 16, 24, 12, 18, 22, 14][i]))
                             }
                         }
 
                         Spacer()
 
-                        Text(currentMoment.audioDuration ?? "0:42")
+                        Text(audioManager.isPlaying ? String(format: "0:%02d", Int(audioManager.playbackTime)) : "0:06")
                             .font(AppFonts.labelSpatial)
                             .foregroundColor(AppColors.outline)
                     }
-                    .padding(10)
-                    .background(AppColors.surfaceContainerLow)
-                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                 }
-
-                // Architectural Note
-                HStack(alignment: .top, spacing: 8) {
-                    Image(systemName: "compass.drawing")
-                        .font(.system(size: 12))
-                        .foregroundColor(AppColors.mutedBrass)
-                        .padding(.top, 2)
-
-                    Text(currentMoment.architecturalNote)
-                        .font(AppFonts.bodySmall)
-                        .foregroundColor(AppColors.onSurfaceVariant)
-                }
-
-                // Stepper Action Buttons
-                HStack(spacing: 12) {
-                    Button {
-                        if currentMomentIndex > 0 {
-                            withAnimation { currentMomentIndex -= 1 }
-                        }
-                    } label: {
-                        HStack(spacing: 6) {
-                            Image(systemName: "arrow.left")
-                            Text("Prev (\(currentMomentIndex > 0 ? trail.moments[currentMomentIndex - 1].title.prefix(10) : "Start"))")
-                        }
-                        .font(AppFonts.labelUI)
-                        .foregroundColor(currentMomentIndex > 0 ? AppColors.primary : AppColors.outline)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
-                        .background(AppColors.surfaceContainerLow)
-                        .clipShape(Capsule())
-                    }
-                    .disabled(currentMomentIndex == 0)
-
-                    Button {
-                        if currentMomentIndex < trail.moments.count - 1 {
-                            withAnimation { currentMomentIndex += 1 }
-                        }
-                    } label: {
-                        HStack(spacing: 6) {
-                            Text("Next: \(currentMomentIndex < trail.moments.count - 1 ? trail.moments[currentMomentIndex + 1].title.prefix(12) : "End")")
-                            Image(systemName: "arrow.right")
-                        }
-                        .font(AppFonts.labelUI)
-                        .foregroundColor(AppColors.onPrimary)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
-                        .background(AppColors.primary)
-                        .clipShape(Capsule())
-                    }
-                }
-                .padding(.top, 4)
+                .padding(12)
+                .background(AppColors.surfaceContainer)
+                .clipShape(RoundedRectangle(cornerRadius: 14))
             }
-            .padding(.horizontal, 20)
-            .padding(.bottom, 28)
-            .background(AppColors.elevatedCanvas)
-            .clipShape(RoundedRectangle(cornerRadius: 32, style: .continuous))
-            .shadow(color: Color.black.opacity(0.18), radius: 24, x: 0, y: -6)
+
+            // Stepping navigation buttons
+            HStack(spacing: 12) {
+                Button {
+                    stepPrevious()
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "arrow.left")
+                            .font(.system(size: 12, weight: .bold))
+                        Text("Prev (\(prevTitle))")
+                            .font(AppFonts.labelUI)
+                            .lineLimit(1)
+                    }
+                    .foregroundColor(AppColors.primary)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 46)
+                    .background(AppColors.surfaceContainer)
+                    .clipShape(Capsule())
+                }
+                .disabled(currentMomentIndex <= 0)
+                .opacity(currentMomentIndex <= 0 ? 0.4 : 1.0)
+
+                Button {
+                    stepNext()
+                } label: {
+                    HStack(spacing: 4) {
+                        Text("Next: \(nextTitle)")
+                            .font(AppFonts.labelUI)
+                            .lineLimit(1)
+                        Image(systemName: "arrow.right")
+                            .font(.system(size: 12, weight: .bold))
+                    }
+                    .foregroundColor(AppColors.onPrimary)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 46)
+                    .background(AppColors.primary)
+                    .clipShape(Capsule())
+                }
+                .disabled(currentMomentIndex >= trail.moments.count - 1)
+                .opacity(currentMomentIndex >= trail.moments.count - 1 ? 0.4 : 1.0)
+            }
+            .padding(.top, 4)
         }
-        .statusBarHidden()
+        .padding(20)
+        .background(
+            AppColors.surfaceContainerLowest
+                .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+                .shadow(color: AppColors.primary.opacity(0.08), radius: 20, x: 0, y: -6)
+        )
+    }
+
+    // MARK: - Control Helpers
+
+    private func mediaLabel(for moment: SpatialMoment) -> String {
+        if moment.hasPhoto && moment.hasAudio { return "Photo + Voice" }
+        if moment.hasPhoto { return "Photo" }
+        if moment.hasAudio { return "Voice" }
+        return "Note"
+    }
+
+    private var prevTitle: String {
+        guard currentMomentIndex > 0 else { return "Start" }
+        return trail.moments[currentMomentIndex - 1].title
+    }
+
+    private var nextTitle: String {
+        guard currentMomentIndex < trail.moments.count - 1 else { return "End" }
+        return trail.moments[currentMomentIndex + 1].title
+    }
+
+    private func stepPrevious() {
+        Haptics.selection()
+        if currentMomentIndex > 0 {
+            withAnimation(.spring(response: 0.3)) {
+                currentMomentIndex -= 1
+            }
+        }
+    }
+
+    private func stepNext() {
+        Haptics.selection()
+        if currentMomentIndex < trail.moments.count - 1 {
+            withAnimation(.spring(response: 0.3)) {
+                currentMomentIndex += 1
+            }
+        }
+    }
+
+    private func toggleAudioPlayback() {
+        Haptics.selection()
+        if audioManager.isPlaying {
+            audioManager.pausePlayback()
+        } else {
+            // Check if mock audio file or recorded file exists
+            audioManager.isPlaying = true
+        }
+    }
+
+    private func toggleTimelapse() {
+        Haptics.selection()
+        if isTimelapsePlaying {
+            isTimelapsePlaying = false
+            timelapseTimer?.invalidate()
+            timelapseTimer = nil
+        } else {
+            isTimelapsePlaying = true
+            timelapseTimer?.invalidate()
+            timelapseTimer = Timer.scheduledTimer(withTimeInterval: 2.0 / timelapseSpeed, repeats: true) { _ in
+                Task { @MainActor in
+                    if currentMomentIndex < trail.moments.count - 1 {
+                        currentMomentIndex += 1
+                    } else {
+                        currentMomentIndex = 0
+                    }
+                }
+            }
+        }
     }
 }
 
-// MARK: - Spatial Mesh Canvas View
+// MARK: - SpatialMeshView: 3D / Isometric Canvas Projection
 
 struct SpatialMeshView: View {
     let is3D: Bool
@@ -379,7 +777,7 @@ struct SpatialMeshView: View {
             // RoomPlan Wall Wireframes (3D Perspective Projection Simulation)
             let pitch = cameraAngle * .pi / 180.0
             let yaw = cameraRotation * .pi / 180.0
-            let cy = h * 0.45
+            let cy = h * 0.42
             let cx = w * 0.5
 
             // Perspective transform helper
