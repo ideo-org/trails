@@ -10,6 +10,7 @@ import RoomPlan
 import ARKit
 import Combine
 import SwiftUI
+import CoreImage
 
 @MainActor
 class RoomScannerEngine: NSObject, ObservableObject, RoomCaptureSessionDelegate, ARSessionDelegate {
@@ -31,6 +32,15 @@ class RoomScannerEngine: NSObject, ObservableObject, RoomCaptureSessionDelegate,
     @Published var currentYawDegrees: Double = 0 // Spatial orientation / compass yaw in world frame (0..360)
     @Published var currentForwardVector: SIMD2<Float> = SIMD2<Float>(0, -1)
     private let distanceThreshold: Float = 0.2 // meters
+    private var lastCapturedPixelBuffer: CVPixelBuffer?
+
+    public func captureCurrentARFrameImage() -> UIImage? {
+        guard let pixelBuffer = lastCapturedPixelBuffer else { return nil }
+        let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
+        let context = CIContext(options: nil)
+        guard let cgImage = context.createCGImage(ciImage, from: ciImage.extent) else { return nil }
+        return UIImage(cgImage: cgImage, scale: 1.0, orientation: .right)
+    }
 
     // PRD v0.3.1 Relocalisation & Alignment State Tracking
     @Published var trackingState: ARCamera.TrackingState = .notAvailable
@@ -271,9 +281,12 @@ class RoomScannerEngine: NSObject, ObservableObject, RoomCaptureSessionDelegate,
         if yawDeg < 0 { yawDeg += 360.0 }
         let forward2D = SIMD2<Float>(-forward.x, -forward.z)
 
+        let buffer = frame.capturedImage
+
         Task { @MainActor in
             guard self.isScanning, !self.isSimulated else { return }
 
+            self.lastCapturedPixelBuffer = buffer
             self.currentYawDegrees = yawDeg
             self.currentForwardVector = forward2D
 

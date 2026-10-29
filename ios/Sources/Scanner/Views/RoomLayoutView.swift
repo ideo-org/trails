@@ -80,6 +80,24 @@ struct RoomLayoutView: View {
                 // Footstep nodes
                 drawFootstepNodes(footsteps, scale: scale, offset: offset)
 
+                // Start of Reference Trail Marker
+                if isReferenceDashed, let startPt = footsteps.first {
+                    let pt = projectTo2D(startPt, scale: scale, offset: offset)
+                    HStack(spacing: 3) {
+                        Image(systemName: "flag.fill")
+                            .font(.system(size: 8))
+                        Text("START")
+                            .font(.system(size: 8, weight: .black))
+                    }
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 3)
+                    .background(Color(hex: "#9D7BD8"))
+                    .clipShape(Capsule())
+                    .shadow(color: Color.black.opacity(0.4), radius: 3, x: 0, y: 1)
+                    .position(CGPoint(x: pt.x, y: pt.y - 14))
+                }
+
                 // Live Follower Walking Path (Electric Cyan)
                 if !liveFollowerFootsteps.isEmpty {
                     drawPathVector(liveFollowerFootsteps, scale: scale, offset: offset, color: Color(hex: "#00D4FF"))

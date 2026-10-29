@@ -37,11 +37,23 @@ public struct RetraceTrailView: View {
     @StateObject private var scannerEngine = RoomScannerEngine()
     @StateObject private var cameraEngine = CameraCaptureEngine()
     @StateObject private var locationManager = TrailsLocationManager()
+    @StateObject private var audioManager = AudioManager.shared
+
+    // Starting Point Reference Guidance (PRD §8 & User Request)
+    @State private var hasConfirmedStart: Bool = false
+    @State private var showingStartFrameGuidance: Bool = true
+
+    // Checkpoint Capture Sheets (Parity with ScannerView)
+    @State private var showingVoiceCaptureSheet: Bool = false
+    @State private var showingAddNoteSheet: Bool = false
+    @State private var showingMomentsTray: Bool = false
+    @State private var noteTitle: String = ""
+    @State private var noteBody: String = ""
 
     // PRD v0.3.1 Positioning Modes & Alignment State Machine
-    @State private var positioningMode: String = "localSpatialUnaligned" // "localSpatialAligned", "localSpatialUnaligned", "manualFollowAlong", "geographic"
-    @State private var alignmentState: String = "loading" // "unavailable", "loading", "searching", "verifying", "aligned", "degraded", "lost"
-    @State private var alignmentMethod: String = "none" // "arWorldMap", "twoPointReference", "manualProgression"
+    @State private var positioningMode: String = "localSpatialAligned" // "localSpatialAligned", "localSpatialUnaligned", "manualFollowAlong", "geographic"
+    @State private var alignmentState: String = "aligned" // "unavailable", "loading", "searching", "verifying", "aligned", "degraded", "lost"
+    @State private var alignmentMethod: String = "originAnchor" // "arWorldMap", "twoPointReference", "manualProgression", "originAnchor"
     @State private var referenceFrame: ReferenceFrame? = nil
     @State private var currentSegmentId: String = UUID().uuidString
     @State private var trackingSegments: [TrackingSegment] = []
@@ -64,10 +76,6 @@ public struct RetraceTrailView: View {
     // Manual Follow-Along State (PRD §14)
     @State private var manualMomentIndex: Int = 0
 
-    // Start Frame Alignment Gate (Enforces starting at the first frame)
-    @State private var hasUnlockedStartGate: Bool = false
-    @State private var ghostMatchOpacity: Double = 0.5
-    @State private var isGhostOverlayActive: Bool = true
 
     // UI & Navigation Controls
     @State private var isMapOnlyView: Bool = false
@@ -220,13 +228,23 @@ public struct RetraceTrailView: View {
     // MARK: - Dynamic Directional Navigation
 
     private var navigationInstruction: DirectionalInstruction {
+        if !hasConfirmedStart {
+            return DirectionalInstruction(
+                icon: "camera.viewfinder",
+                relativeAngle: 0,
+                primaryText: "Go to Starting Point",
+                secondaryText: "Point camera at reference view to begin trail",
+                color: Color(hex: "#00E5FF")
+            )
+        }
+
         if alignmentState != "aligned" && alignmentState != "degraded" {
             return DirectionalInstruction(
                 icon: "viewfinder",
                 relativeAngle: 0,
-                primaryText: "Establishing reference alignment",
-                secondaryText: "Look around starting area to sync coordinate frame",
-                color: AppColors.mutedBrass
+                primaryText: "Point Camera at Starting View",
+                secondaryText: "Align camera with starting frame to begin",
+                color: Color(hex: "#00E5FF")
             )
         }
 
@@ -235,7 +253,7 @@ public struct RetraceTrailView: View {
                 icon: "checkmark.seal.fill",
                 relativeAngle: 0,
                 primaryText: "All Checkpoints Visited!",
-                secondaryText: "Similarity: \(similarityIndexPercentage)% · Tap End to save record",
+                secondaryText: "Similarity: \(similarityIndexPercentage)% · Tap Finish to save trail",
                 color: Color.green
             )
         }
@@ -377,10 +395,7 @@ public struct RetraceTrailView: View {
         ZStack {
             Color(hex: "#0A0E14").ignoresSafeArea()
 
-            if !hasUnlockedStartGate && !referenceTrail.moments.isEmpty {
-                // Enforce aligning at the first frame (Stop 1) before unlocking retrace
-                startFrameEnforcerView
-            } else if positioningMode == "manualFollowAlong" {
+            if positioningMode == "manualFollowAlong" {
                 // PRD §14: Dedicated Manual Follow-Along Fallback Interface
                 manualFollowAlongView
             } else if isMapOnlyView {
@@ -413,23 +428,11 @@ public struct RetraceTrailView: View {
                                     Image(systemName: "cube.transparent")
                                         .font(.system(size: 36))
                                         .foregroundColor(AppColors.mutedBrass)
-                                    Text("LiDAR Spatial Relocalization")
+                                    Text("LiDAR Spatial Tracking")
                                         .font(AppFonts.headlineSmall)
                                         .foregroundColor(.white)
-                                    Text("Look around the starting threshold to align coordinate frame")
-                                        .font(AppFonts.caption)
-                                        .foregroundColor(Color.white.opacity(0.65))
                                 }
                             }
-                        }
-
-                        // PRD §8 & §12: Non-aligned Searching / Relocalization HUD
-                        if alignmentState == "searching" || alignmentState == "loading" {
-                            searchingAlignmentOverlay
-                        } else if alignmentState == "lost" {
-                            lostAlignmentOverlay
-                        } else if alignmentState == "unavailable" {
-                            unavailableAlignmentOverlay
                         }
 
                         // Gradient scrim
@@ -468,33 +471,39 @@ public struct RetraceTrailView: View {
                 .ignoresSafeArea()
             }
 
-            // MARK: - HUD & Overlays (Visible once gate unlocked)
-            if hasUnlockedStartGate || referenceTrail.moments.isEmpty {
-                VStack(spacing: 0) {
-                    // Top Navigation Bar
-                    topRetraceBar
+            // MARK: - HUD & Overlays
+            VStack(spacing: 0) {
+                // Top Navigation Bar (Parity with ScannerView)
+                topRetraceBar
 
-                    // Live Navigation Cue Banner (only in aligned/degraded live tracking)
-                    if isTurnGuidanceEnabled && positioningMode != "manualFollowAlong" {
-                        navigationCueBanner
-                            .padding(.top, 8)
-                            .transition(.move(edge: .top).combined(with: .opacity))
-                    }
+                // Live Navigation Cue Banner
+                if isTurnGuidanceEnabled && positioningMode != "manualFollowAlong" {
+                    navigationCueBanner
+                        .padding(.top, 8)
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                }
 
-                    Spacer()
+                // Starting Point Reference Guidance Card (PRD §8 & User Request)
+                if showingStartFrameGuidance && positioningMode != "manualFollowAlong" {
+                    startPointGuidanceCard
+                        .padding(.horizontal, 16)
+                        .padding(.top, 8)
+                        .transition(.scale(scale: 0.95).combined(with: .opacity))
+                }
 
-                    // Checkpoint Encounter Notification Card
-                    if let encounter = activeCheckpointEncounter, positioningMode != "manualFollowAlong" {
-                        checkpointEncounterCard(for: encounter)
-                            .padding(.horizontal, 16)
-                            .padding(.bottom, 10)
-                            .transition(.move(edge: .bottom).combined(with: .opacity))
-                    }
+                Spacer()
 
-                    // Bottom Console
-                    if positioningMode != "manualFollowAlong" {
-                        bottomRetraceConsole
-                    }
+                // Checkpoint Encounter Notification Card
+                if let encounter = activeCheckpointEncounter, positioningMode != "manualFollowAlong" {
+                    checkpointEncounterCard(for: encounter)
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 10)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+
+                // Bottom Console (Parity with ScannerView)
+                if positioningMode != "manualFollowAlong" {
+                    bottomRetraceConsole
                 }
             }
 
@@ -539,6 +548,62 @@ public struct RetraceTrailView: View {
                 triggerToast("Stop \(moment.index) Visited ✓ (Match: \(similarityIndexPercentage)%)")
             }
         }
+        // Voice Note Checkpoint Sheet
+        .sheet(isPresented: $showingVoiceCaptureSheet) {
+            VoiceNoteCheckpointSheet(
+                trailId: sessionId,
+                waypointIndex: referenceTrail.moments.count + newRetraceMoments.count + 1,
+                audioManager: audioManager,
+                onSave: { audioURL, duration in
+                    handleSavedVoiceWaypoint(audioURL: audioURL, duration: duration)
+                    showingVoiceCaptureSheet = false
+                    scannerEngine.resumeScanning()
+                },
+                onCancel: {
+                    showingVoiceCaptureSheet = false
+                    scannerEngine.resumeScanning()
+                }
+            )
+            .presentationDetents([.fraction(0.48)])
+        }
+        // Written Note Sheet
+        .sheet(isPresented: $showingAddNoteSheet) {
+            AddNoteQuickSheet(
+                title: $noteTitle,
+                bodyText: $noteBody,
+                onSave: { t, b in
+                    saveTextMoment(title: t, text: b)
+                    showingAddNoteSheet = false
+                    scannerEngine.resumeScanning()
+                },
+                onCancel: {
+                    showingAddNoteSheet = false
+                    scannerEngine.resumeScanning()
+                }
+            )
+            .presentationDetents([.fraction(0.48)])
+        }
+        // In-Capture Moments Tray Sheet
+        .sheet(isPresented: $showingMomentsTray) {
+            CapturedMomentsTrayView(
+                trailId: sessionId,
+                moments: $newRetraceMoments,
+                onUpdateMoment: { updated in
+                    if let idx = newRetraceMoments.firstIndex(where: { $0.id == updated.id }) {
+                        newRetraceMoments[idx] = updated
+                    }
+                },
+                onDeleteMoment: { id in
+                    newRetraceMoments.removeAll { $0.id == id }
+                    for i in 0..<newRetraceMoments.count {
+                        newRetraceMoments[i].index = referenceTrail.moments.count + i + 1
+                    }
+                },
+                onDismiss: {
+                    showingMomentsTray = false
+                }
+            )
+        }
         // Diagnostics Panel (PRD §16)
         .sheet(isPresented: $showingDiagnosticsSheet) {
             PositioningDiagnosticsSheet(
@@ -582,53 +647,17 @@ public struct RetraceTrailView: View {
                 FullScreenCameraCaptureView(
                     cameraEngine: cameraEngine,
                     mode: mode,
-                    waypointIndex: visitedCheckpointIds.count + newRetraceMoments.count + 1,
+                    waypointIndex: referenceTrail.moments.count + newRetraceMoments.count + 1,
                     trailId: sessionId,
                     onSavedVideo: { fileURL, duration, thumbURL in
-                        let moment = SpatialMoment(
-                            id: UUID().uuidString,
-                            index: visitedCheckpointIds.count + newRetraceMoments.count + 1,
-                            title: "Retrace Checkpoint \(visitedCheckpointIds.count + newRetraceMoments.count + 1)",
-                            subtitle: "\(walkedMeters)m along retrace path",
-                            narrative: "Documented during retrace of “\(referenceTrail.title)”",
-                            architecturalNote: "Captured at \(walkedMeters)m during retrace",
-                            distanceAlongPathMeters: walkedMeters,
-                            videoDuration: "\(Int(duration))s",
-                            hasVideo: true,
-                            mediaType: "video",
-                            videoFileName: fileURL.lastPathComponent,
-                            videoThumbnailAssetName: thumbURL.lastPathComponent,
-                            positionX: Double(scannerEngine.lastRecordedPosition?.x ?? 0),
-                            positionY: Double(scannerEngine.lastRecordedPosition?.z ?? 0),
-                            positionZ: Double(scannerEngine.lastRecordedPosition?.y ?? 0),
-                            headingDegrees: scannerEngine.currentYawDegrees,
-                            placementStatus: "placed"
-                        )
-                        newRetraceMoments.append(moment)
-                        triggerToast("Video moment saved to Retrace Trail ✓")
+                        handleSavedVideoWaypoint(fileURL: fileURL, duration: duration, thumbURL: thumbURL)
                     },
                     onSavedPhoto: { image, fileURL, thumbURL in
-                        let moment = SpatialMoment(
-                            id: UUID().uuidString,
-                            index: visitedCheckpointIds.count + newRetraceMoments.count + 1,
-                            title: "Retrace Checkpoint \(visitedCheckpointIds.count + newRetraceMoments.count + 1)",
-                            subtitle: "\(walkedMeters)m along retrace path",
-                            narrative: "Photo documented during retrace of “\(referenceTrail.title)”",
-                            architecturalNote: "Captured at \(walkedMeters)m during retrace",
-                            distanceAlongPathMeters: walkedMeters,
-                            hasPhoto: true,
-                            mediaType: "photo",
-                            photoFileName: fileURL.lastPathComponent,
-                            positionX: Double(scannerEngine.lastRecordedPosition?.x ?? 0),
-                            positionY: Double(scannerEngine.lastRecordedPosition?.z ?? 0),
-                            positionZ: Double(scannerEngine.lastRecordedPosition?.y ?? 0),
-                            headingDegrees: scannerEngine.currentYawDegrees,
-                            placementStatus: "placed"
-                        )
-                        newRetraceMoments.append(moment)
-                        triggerToast("Photo moment saved to Retrace Trail ✓")
+                        handleSavedPhotoWaypoint(image: image, fileURL: fileURL, thumbURL: thumbURL)
                     },
-                    onCancel: {}
+                    onCancel: {
+                        scannerEngine.resumeScanning()
+                    }
                 )
             }
         }
@@ -944,10 +973,11 @@ public struct RetraceTrailView: View {
         }
     }
 
-    // MARK: - Top Retrace Bar
+    // MARK: - Top Retrace Bar (Parity with ScannerView.topJourneyBar)
 
     private var topRetraceBar: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 12) {
+            // Close / Cancel Button
             Button {
                 Haptics.light()
                 showingFinishAlert = true
@@ -955,117 +985,203 @@ public struct RetraceTrailView: View {
                 Image(systemName: "xmark")
                     .font(.system(size: 15, weight: .bold))
                     .foregroundColor(.white)
-                    .frame(width: 40, height: 40)
+                    .frame(width: 42, height: 42)
                     .background(Color.black.opacity(0.6))
                     .clipShape(Circle())
             }
 
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 6) {
-                    Text(alignmentBadgeText)
-                        .font(.system(size: 8, weight: .black, design: .rounded))
-                        .foregroundColor(alignmentBadgeColor.textColor)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(alignmentBadgeColor.bgColor)
-                        .clipShape(Capsule())
+            Spacer()
 
-                    if alignmentState == "aligned" || alignmentState == "degraded" {
-                        Text("\(similarityIndexPercentage)% MATCH")
-                            .font(.system(size: 8, weight: .bold))
-                            .foregroundColor(.black)
-                            .padding(.horizontal, 5)
-                            .padding(.vertical, 2)
-                            .background(Color(hex: "#00E5FF"))
-                            .clipShape(Capsule())
-                    }
-                }
+            // Live Telemetry Status Pill
+            HStack(spacing: 8) {
+                Circle()
+                    .fill(AppColors.forestGreen)
+                    .frame(width: 8, height: 8)
+                    .scaleEffect(1.2)
+                    .animation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true), value: scannerEngine.isScanning)
 
-                Text(referenceTrail.title)
-                    .font(AppFonts.headlineSmall)
+                Text(formattedTime)
+                    .font(AppFonts.labelSpatial)
+                    .fontWeight(.bold)
                     .foregroundColor(.white)
-                    .lineLimit(1)
+
+                Text("·")
+                    .foregroundColor(Color.white.opacity(0.4))
+
+                Text("\(walkedMeters)m")
+                    .font(AppFonts.labelSpatial)
+                    .foregroundColor(AppColors.mutedBrass)
+
+                Text("·")
+                    .foregroundColor(Color.white.opacity(0.4))
+
+                Text("\(similarityIndexPercentage)% Match")
+                    .font(AppFonts.labelSpatial)
+                    .foregroundColor(Color(hex: "#00E5FF"))
             }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .background(Color.black.opacity(0.65))
+            .clipShape(Capsule())
 
             Spacer()
 
-            // Start Frame Re-align Button
-            if !referenceTrail.moments.isEmpty {
-                Button {
-                    Haptics.selection()
-                    withAnimation(.spring(response: 0.3)) {
-                        hasUnlockedStartGate = false
-                    }
-                } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: "viewfinder")
-                            .font(.system(size: 10))
-                        Text("Start Frame")
-                            .font(.system(size: 10, weight: .bold))
-                    }
-                    .foregroundColor(Color(hex: "#00E5FF"))
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 6)
-                    .background(Color.black.opacity(0.6))
-                    .clipShape(Capsule())
-                    .overlay(Capsule().stroke(Color(hex: "#00E5FF").opacity(0.4), lineWidth: 1))
-                }
-            }
-
-            // Diagnostics Button (PRD §16)
-            Button {
-                showingDiagnosticsSheet = true
-            } label: {
-                Text("DIAG")
-                    .font(.system(size: 10, weight: .bold, design: .monospaced))
-                    .foregroundColor(AppColors.mutedBrass)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 6)
-                    .background(Color.black.opacity(0.6))
-                    .clipShape(Capsule())
-                    .overlay(Capsule().stroke(AppColors.mutedBrass.opacity(0.5), lineWidth: 1))
-            }
-
-            // Finish CTA
+            // Finish Trail CTA Button
             Button {
                 Haptics.success()
                 showingFinishAlert = true
             } label: {
-                Text("End")
-                    .font(AppFonts.labelUI)
-                    .fontWeight(.semibold)
-                    .foregroundColor(.black)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 8)
-                    .background(Color(hex: "#00E5FF"))
-                    .clipShape(Capsule())
+                HStack(spacing: 6) {
+                    Text("Finish")
+                        .font(AppFonts.labelUI)
+                        .fontWeight(.semibold)
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 12, weight: .bold))
+                }
+                .foregroundColor(AppColors.onPrimary)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 9)
+                .background(AppColors.primary)
+                .clipShape(Capsule())
+                .shadow(color: AppColors.primary.opacity(0.3), radius: 6, x: 0, y: 3)
             }
         }
         .padding(.horizontal, 16)
         .padding(.top, 48)
     }
 
-    private var alignmentBadgeText: String {
-        switch alignmentState {
-        case "aligned": return "ALIGNED · RELOCALIZED"
-        case "searching": return "SEARCHING REFERENCE"
-        case "verifying": return "VERIFYING ALIGNMENT"
-        case "degraded": return "TRACKING DEGRADED"
-        case "lost": return "ALIGNMENT LOST"
-        case "loading": return "LOADING MAP"
-        case "unavailable": return positioningMode == "manualFollowAlong" ? "MANUAL FOLLOW" : "UNALIGNED"
-        default: return alignmentState.uppercased()
-        }
-    }
+    // MARK: - Starting Reference Point Card (PRD §8 & User Guidance)
 
-    private var alignmentBadgeColor: (textColor: Color, bgColor: Color) {
-        switch alignmentState {
-        case "aligned": return (.black, Color.green)
-        case "searching", "loading", "verifying": return (.black, AppColors.mutedBrass)
-        case "degraded": return (.white, AppColors.terracotta)
-        case "lost": return (.white, Color.red)
-        default: return (.white, Color.white.opacity(0.2))
+    @ViewBuilder
+    private var startPointGuidanceCard: some View {
+        let startImage: UIImage? = {
+            if let startURL = referenceTrail.resolvedStartFrameURL(),
+               let img = UIImage(contentsOfFile: startURL.path) {
+                return img
+            }
+            return nil
+        }()
+
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(Color(hex: "#00E5FF"))
+                        .frame(width: 8, height: 8)
+                    Text("START OF TRAIL REFERENCE")
+                        .font(AppFonts.labelSpatial)
+                        .fontWeight(.bold)
+                        .foregroundColor(Color(hex: "#00E5FF"))
+                        .tracking(1.0)
+                }
+
+                Spacer()
+
+                Button {
+                    Haptics.light()
+                    withAnimation(.spring(response: 0.3)) {
+                        showingStartFrameGuidance = false
+                    }
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 20))
+                        .foregroundColor(Color.white.opacity(0.6))
+                }
+            }
+
+            if let img = startImage {
+                ZStack(alignment: .bottomLeading) {
+                    Image(uiImage: img)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(height: 140)
+                        .frame(maxWidth: .infinity)
+                        .clipped()
+                        .cornerRadius(12)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(Color.white.opacity(0.2), lineWidth: 1)
+                        )
+
+                    LinearGradient(
+                        colors: [Color.clear, Color.black.opacity(0.75)],
+                        startPoint: .center,
+                        endPoint: .bottom
+                    )
+                    .cornerRadius(12)
+
+                    HStack(spacing: 6) {
+                        Image(systemName: "camera.viewfinder")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundColor(Color(hex: "#00E5FF"))
+
+                        Text("Go to this spot & point camera here")
+                            .font(AppFonts.caption)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.white)
+                    }
+                    .padding(8)
+                }
+            } else {
+                Text("Go to the starting point of “\(referenceTrail.title)” and point your camera forward along the path.")
+                    .font(AppFonts.caption)
+                    .foregroundColor(Color.white.opacity(0.85))
+            }
+
+            HStack(spacing: 10) {
+                if let heading = referenceTrail.startHeadingDegrees {
+                    HStack(spacing: 4) {
+                        Image(systemName: "location.north.fill")
+                            .font(.system(size: 10))
+                            .foregroundColor(AppColors.mutedBrass)
+                        Text("Facing \(Int(heading))°")
+                            .font(AppFonts.labelSpatial)
+                            .foregroundColor(Color.white.opacity(0.85))
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color.white.opacity(0.08))
+                    .clipShape(Capsule())
+                }
+
+                Spacer()
+
+                Button {
+                    Haptics.success()
+                    hasConfirmedStart = true
+                    withAnimation(.spring(response: 0.35)) {
+                        showingStartFrameGuidance = false
+                    }
+                    alignmentState = "aligned"
+                    positioningMode = "localSpatialAligned"
+                    alignmentMethod = "originAnchor"
+                    scannerEngine.resetAndStartScanning()
+                    triggerToast("Starting Point Confirmed · Retrace Active ✓")
+                } label: {
+                    HStack(spacing: 6) {
+                        Text(hasConfirmedStart ? "Dismiss" : "I'm Here · Begin Retrace")
+                            .font(AppFonts.labelUI)
+                            .fontWeight(.bold)
+                        Image(systemName: hasConfirmedStart ? "checkmark" : "arrow.right")
+                            .font(.system(size: 11, weight: .bold))
+                    }
+                    .foregroundColor(.black)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+                    .background(Color(hex: "#00E5FF"))
+                    .clipShape(Capsule())
+                    .shadow(color: Color(hex: "#00E5FF").opacity(0.3), radius: 6)
+                }
+            }
         }
+        .padding(14)
+        .background(Color(hex: "#10161E").opacity(0.95))
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(Color(hex: "#00E5FF").opacity(0.5), lineWidth: 1.5)
+        )
+        .shadow(color: Color.black.opacity(0.6), radius: 12)
     }
 
     // MARK: - Navigation Banner
@@ -1183,11 +1299,13 @@ public struct RetraceTrailView: View {
         .shadow(color: Color(hex: "#00E5FF").opacity(0.2), radius: 10)
     }
 
-    // MARK: - Bottom Retrace Console
+    // MARK: - Bottom Retrace Console (Parity with ScannerView.bottomConsole)
 
     private var bottomRetraceConsole: some View {
         VStack(spacing: 12) {
+            // View Mode Toggle, Legend & Start Vantage
             HStack {
+                // Dual Trail Legend
                 HStack(spacing: 12) {
                     HStack(spacing: 4) {
                         Capsule()
@@ -1210,98 +1328,54 @@ public struct RetraceTrailView: View {
 
                 Spacer()
 
-                HStack(spacing: 8) {
-                    Button {
-                        Haptics.selection()
-                        showingFullScreenCaptureMode = .photo
-                    } label: {
-                        HStack(spacing: 5) {
-                            Image(systemName: "camera.fill")
-                                .font(.system(size: 11, weight: .bold))
-                            Text("Capture")
-                                .font(AppFonts.labelSpatial)
-                        }
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
-                        .background(Color(hex: "#00E5FF").opacity(0.3))
-                        .clipShape(Capsule())
-                        .overlay(Capsule().stroke(Color(hex: "#00E5FF"), lineWidth: 1))
+                // Start Vantage Button (toggle guidance card)
+                Button {
+                    Haptics.light()
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                        showingStartFrameGuidance.toggle()
                     }
+                } label: {
+                    HStack(spacing: 5) {
+                        Image(systemName: "camera.viewfinder")
+                            .font(.system(size: 11, weight: .bold))
+                        Text(showingStartFrameGuidance ? "Hide Start" : "Start Vantage")
+                            .font(AppFonts.labelSpatial)
+                    }
+                    .foregroundColor(Color(hex: "#00E5FF"))
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(Color.black.opacity(0.65))
+                    .clipShape(Capsule())
+                    .overlay(Capsule().stroke(Color(hex: "#00E5FF").opacity(0.4), lineWidth: 1))
+                }
 
-                    Button {
-                        Haptics.light()
-                        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                            isMapOnlyView.toggle()
-                        }
-                    } label: {
-                        HStack(spacing: 6) {
-                            Image(systemName: isMapOnlyView ? "rectangle.split.2x1.fill" : "map.fill")
-                                .font(.system(size: 12))
-                            Text(isMapOnlyView ? "Show Camera" : "Full Blueprint")
-                                .font(AppFonts.labelSpatial)
-                        }
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(Color.black.opacity(0.65))
-                        .clipShape(Capsule())
+                // View Mode Toggle [ Split | Full Blueprint ]
+                Button {
+                    Haptics.light()
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                        isMapOnlyView.toggle()
                     }
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: isMapOnlyView ? "rectangle.split.2x1.fill" : "map.fill")
+                            .font(.system(size: 12))
+                        Text(isMapOnlyView ? "Show Camera" : "Full Blueprint")
+                            .font(AppFonts.labelSpatial)
+                    }
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(Color.black.opacity(0.65))
+                    .clipShape(Capsule())
                 }
             }
             .padding(.horizontal, 16)
 
-            // Checkpoints Ribbon
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    ForEach(referenceTrail.moments) { moment in
-                        let isVisited = visitedCheckpointIds.contains(moment.id)
-                        let isTarget = activeTargetCheckpoint?.id == moment.id
+            // 1. Checkpoints Ribbon
+            checkpointRibbon
 
-                        Button {
-                            Haptics.selection()
-                            if isVisited {
-                                selectedMomentToInspect = moment
-                            } else {
-                                selectedTargetCheckpointId = moment.id
-                                triggerToast("Target set to Stop \(moment.index)")
-                            }
-                        } label: {
-                            HStack(spacing: 6) {
-                                ZStack {
-                                    Circle()
-                                        .fill(isVisited ? Color.green : (isTarget ? Color(hex: "#00E5FF") : Color(hex: "#9D7BD8")))
-                                        .frame(width: 22, height: 22)
-
-                                    if isVisited {
-                                        Image(systemName: "checkmark")
-                                            .font(.system(size: 11, weight: .bold))
-                                            .foregroundColor(.white)
-                                    } else {
-                                        Text("\(moment.index)")
-                                            .font(.system(size: 10, weight: .black))
-                                            .foregroundColor(isTarget ? .black : .white)
-                                    }
-                                }
-
-                                Text(moment.title)
-                                    .font(AppFonts.labelSpatial)
-                                    .fontWeight(.medium)
-                                    .foregroundColor(.white)
-                                    .lineLimit(1)
-                            }
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 7)
-                            .background(Color.black.opacity(0.65))
-                            .clipShape(Capsule())
-                            .overlay(
-                                Capsule().stroke(isTarget ? Color(hex: "#00E5FF") : (isVisited ? Color.green.opacity(0.5) : Color.white.opacity(0.15)), lineWidth: isTarget ? 2 : 1)
-                            )
-                        }
-                    }
-                }
-                .padding(.horizontal, 16)
-            }
+            // 2. Waypoint Capture Action Dock (Video, Photo, Mic, Note)
+            waypointCaptureDock
         }
         .padding(.bottom, 24)
         .background(
@@ -1314,290 +1388,411 @@ public struct RetraceTrailView: View {
         )
     }
 
-    // MARK: - Start Frame Alignment Gate (Enforcing First Frame Vantage)
+    // MARK: - Checkpoints Ribbon
 
-    private var startFrameEnforcerView: some View {
-        ZStack {
-            Color.black.ignoresSafeArea()
+    private var checkpointRibbon: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(referenceTrail.moments) { moment in
+                    let isVisited = visitedCheckpointIds.contains(moment.id)
+                    let isTarget = activeTargetCheckpoint?.id == moment.id
 
-            VStack(spacing: 0) {
-                // Top Header Bar
-                HStack(spacing: 12) {
                     Button {
-                        Haptics.light()
-                        dismiss()
+                        Haptics.selection()
+                        if isVisited {
+                            selectedMomentToInspect = moment
+                        } else {
+                            selectedTargetCheckpointId = moment.id
+                            triggerToast("Target set to Stop \(moment.index)")
+                        }
                     } label: {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 15, weight: .bold))
-                            .foregroundColor(.white)
-                            .frame(width: 40, height: 40)
-                            .background(Color.black.opacity(0.6))
-                            .clipShape(Circle())
-                    }
-
-                    VStack(alignment: .leading, spacing: 2) {
                         HStack(spacing: 6) {
-                            Text("GATE ENFORCED")
+                            ZStack {
+                                Circle()
+                                    .fill(isVisited ? Color.green : (isTarget ? Color(hex: "#00E5FF") : Color(hex: "#9D7BD8")))
+                                    .frame(width: 22, height: 22)
+
+                                if isVisited {
+                                    Image(systemName: "checkmark")
+                                        .font(.system(size: 11, weight: .bold))
+                                        .foregroundColor(.white)
+                                } else {
+                                    Text("\(moment.index)")
+                                        .font(.system(size: 10, weight: .black))
+                                        .foregroundColor(isTarget ? .black : .white)
+                                }
+                            }
+
+                            Text(moment.title)
                                 .font(AppFonts.labelSpatial)
-                                .foregroundColor(Color(hex: "#00E5FF"))
-                                .tracking(1.2)
-                            Text("STOP 1")
-                                .font(.system(size: 8, weight: .black, design: .rounded))
-                                .foregroundColor(.black)
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 2)
-                                .background(Color(hex: "#00E5FF"))
-                                .clipShape(Capsule())
+                                .fontWeight(.medium)
+                                .foregroundColor(.white)
+                                .lineLimit(1)
+
+                            Image(systemName: iconForMediaType(moment.mediaType))
+                                .font(.system(size: 10))
+                                .foregroundColor(isVisited ? Color.green : AppColors.mutedBrass)
                         }
-
-                        Text("Match Starting Vantage")
-                            .font(AppFonts.headlineSmall)
-                            .foregroundColor(.white)
-                    }
-
-                    Spacer()
-
-                    // Skip button for free roam
-                    Button {
-                        Haptics.light()
-                        withAnimation(.spring(response: 0.3)) {
-                            hasUnlockedStartGate = true
-                        }
-                    } label: {
-                        Text("Skip Gate")
-                            .font(AppFonts.labelSpatial)
-                            .foregroundColor(.white.opacity(0.65))
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 6)
-                            .background(Color.white.opacity(0.12))
-                            .clipShape(Capsule())
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 7)
+                        .background(Color.black.opacity(0.65))
+                        .clipShape(Capsule())
+                        .overlay(
+                            Capsule().stroke(isTarget ? Color(hex: "#00E5FF") : (isVisited ? Color.green.opacity(0.5) : Color.white.opacity(0.15)), lineWidth: isTarget ? 2 : 1)
+                        )
                     }
                 }
-                .padding(.horizontal, 16)
-                .padding(.top, 48)
-                .padding(.bottom, 8)
 
-                // Main Viewport: Live Camera with Ghost Match Overlay
-                ZStack(alignment: .bottom) {
-                    if scannerEngine.isSupported {
-                        RoomCameraView(engine: scannerEngine)
-                            .ignoresSafeArea()
-                    } else {
-                        Color(hex: "#0D1117")
-                    }
-
-                    // Ghost / Onion-skin overlay of the First Frame
-                    if isGhostOverlayActive, let startMoment = referenceTrail.moments.first {
-                        startFrameGhostImage(for: startMoment)
-                            .opacity(ghostMatchOpacity)
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
-                            .clipped()
-                            .allowsHitTesting(false)
-                    }
-
-                    // Viewfinder reticle
-                    VStack {
-                        Spacer()
+                // New Moments captured during this retrace
+                ForEach(newRetraceMoments) { moment in
+                    HStack(spacing: 6) {
                         ZStack {
-                            RoundedRectangle(cornerRadius: 18)
-                                .stroke(Color(hex: "#00E5FF"), style: StrokeStyle(lineWidth: 1.5, dash: [10, 8]))
-                                .frame(width: 250, height: 210)
-
-                            VStack(spacing: 6) {
-                                Image(systemName: "viewfinder")
-                                    .font(.system(size: 34, weight: .thin))
-                                    .foregroundColor(Color(hex: "#00E5FF"))
-                                Text("Line up with starting threshold")
-                                    .font(AppFonts.caption)
-                                    .foregroundColor(.white.opacity(0.9))
-                            }
+                            Circle()
+                                .fill(AppColors.terracotta)
+                                .frame(width: 22, height: 22)
+                            Text("\(moment.index)")
+                                .font(.system(size: 10, weight: .black))
+                                .foregroundColor(.white)
                         }
-                        Spacer()
 
-                        // Ghost Opacity Control Dock
-                        if let startMoment = referenceTrail.moments.first, startMoment.hasPhoto || startMoment.hasVideo || startMoment.photoAssetName != nil {
-                            HStack(spacing: 12) {
-                                Button {
-                                    withAnimation { isGhostOverlayActive.toggle() }
-                                } label: {
-                                    Image(systemName: isGhostOverlayActive ? "eye.fill" : "eye.slash.fill")
-                                        .font(.system(size: 13, weight: .bold))
-                                        .foregroundColor(isGhostOverlayActive ? Color(hex: "#00E5FF") : .white)
-                                }
+                        Text(moment.title)
+                            .font(AppFonts.labelSpatial)
+                            .fontWeight(.medium)
+                            .foregroundColor(.white)
+                            .lineLimit(1)
 
-                                Text("Ghost")
-                                    .font(AppFonts.labelSpatial)
-                                    .foregroundColor(.white)
-
-                                Slider(value: $ghostMatchOpacity, in: 0.15...0.85)
-                                    .accentColor(Color(hex: "#00E5FF"))
-
-                                Text("\(Int(ghostMatchOpacity * 100))%")
-                                    .font(.system(size: 11, weight: .bold, design: .monospaced))
-                                    .foregroundColor(.white)
-                                    .frame(width: 32)
-                            }
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 8)
-                            .background(Color.black.opacity(0.75))
-                            .clipShape(Capsule())
-                            .padding(.bottom, 12)
-                        }
+                        Image(systemName: iconForMediaType(moment.mediaType))
+                            .font(.system(size: 10))
+                            .foregroundColor(AppColors.mutedBrass)
                     }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 7)
+                    .background(Color.black.opacity(0.65))
+                    .clipShape(Capsule())
+                    .overlay(
+                        Capsule().stroke(AppColors.terracotta.opacity(0.5), lineWidth: 1)
+                    )
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-                // Bottom Origin Card & Begin Button
-                if let startMoment = referenceTrail.moments.first {
-                    VStack(spacing: 14) {
-                        HStack(spacing: 12) {
-                            startFrameThumbnail(for: startMoment)
-                                .frame(width: 64, height: 64)
-                                .clipShape(RoundedRectangle(cornerRadius: 14))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 14)
-                                        .stroke(Color(hex: "#00E5FF").opacity(0.7), lineWidth: 1.5)
-                                )
+                // Current Live Position Pill
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(Color(hex: "#00E5FF"))
+                        .frame(width: 6, height: 6)
+                    Text("Your Walk · +\(walkedMeters)m")
+                        .font(AppFonts.labelSpatial)
+                        .foregroundColor(Color.white.opacity(0.7))
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 7)
+                .background(Color.black.opacity(0.4))
+                .clipShape(Capsule())
+            }
+            .padding(.horizontal, 16)
+        }
+    }
 
-                            VStack(alignment: .leading, spacing: 3) {
-                                HStack(spacing: 6) {
-                                    Circle()
-                                        .fill(Color(hex: "#00E5FF"))
-                                        .frame(width: 8, height: 8)
-                                    Text("FIRST FRAME · ORIGIN")
-                                        .font(AppFonts.labelSpatial)
-                                        .foregroundColor(Color(hex: "#00E5FF"))
-                                }
+    // MARK: - Waypoint Capture Dock (Exact Parity with ScannerView)
 
-                                Text(startMoment.title)
-                                    .font(AppFonts.headlineSmall)
-                                    .foregroundColor(.white)
-                                    .lineLimit(1)
-
-                                Text("Stand where this photo was recorded and face forward to begin.")
-                                    .font(AppFonts.caption)
+    private var waypointCaptureDock: some View {
+        HStack(spacing: 16) {
+            // 1. Moments Tray / Thumbnail
+            Button {
+                Haptics.light()
+                showingMomentsTray = true
+            } label: {
+                ZStack {
+                    if let lastMoment = newRetraceMoments.last {
+                        momentThumbnailView(for: lastMoment)
+                    } else {
+                        Circle()
+                            .fill(Color.black.opacity(0.6))
+                            .overlay(
+                                Image(systemName: "photo.stack")
+                                    .font(.system(size: 18))
                                     .foregroundColor(Color.white.opacity(0.75))
-                                    .lineLimit(2)
-                            }
+                            )
+                    }
 
+                    if !newRetraceMoments.isEmpty {
+                        VStack {
+                            HStack {
+                                Spacer()
+                                Text("\(newRetraceMoments.count)")
+                                    .font(.system(size: 10, weight: .bold))
+                                    .foregroundColor(.white)
+                                    .padding(.horizontal, 5)
+                                    .padding(.vertical, 2)
+                                    .background(AppColors.terracotta)
+                                    .clipShape(Capsule())
+                            }
                             Spacer()
                         }
-
-                        // Prominent CTA
-                        Button {
-                            calibrateAndUnlockStartGate(startMoment: startMoment)
-                        } label: {
-                            HStack(spacing: 8) {
-                                Image(systemName: "checkmark.circle.fill")
-                                    .font(.system(size: 18))
-                                Text("I'm at the First Frame · Start Trail")
-                                    .font(AppFonts.labelUI)
-                                    .fontWeight(.bold)
-                            }
-                            .foregroundColor(.black)
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 52)
-                            .background(Color(hex: "#00E5FF"))
-                            .clipShape(Capsule())
-                            .shadow(color: Color(hex: "#00E5FF").opacity(0.4), radius: 8, y: 2)
-                        }
+                        .offset(x: 4, y: -4)
                     }
-                    .padding(18)
-                    .background(Color(hex: "#10141C"))
-                    .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 22, style: .continuous)
-                            .stroke(Color.white.opacity(0.12), lineWidth: 1)
-                    )
-                    .padding(.horizontal, 16)
-                    .padding(.bottom, 24)
                 }
+                .frame(width: 50, height: 50)
+                .clipShape(Circle())
+                .overlay(Circle().stroke(Color.white.opacity(0.25), lineWidth: 1.5))
             }
+
+            // 2. Primary Prominence: RECORD VIDEO CHECKPOINT
+            Button {
+                Haptics.medium()
+                scannerEngine.pauseScanning()
+                showingFullScreenCaptureMode = .video
+            } label: {
+                HStack(spacing: 8) {
+                    ZStack {
+                        Circle()
+                            .fill(AppColors.terracotta)
+                            .frame(width: 38, height: 38)
+                        Image(systemName: "video.fill")
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundColor(.white)
+                    }
+
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("Record Video")
+                            .font(AppFonts.labelUI)
+                            .fontWeight(.bold)
+                            .foregroundColor(.white)
+                        Text("Checkpoint #\(referenceTrail.moments.count + newRetraceMoments.count + 1)")
+                            .font(AppFonts.caption)
+                            .foregroundColor(Color.white.opacity(0.75))
+                    }
+                    .padding(.trailing, 6)
+                }
+                .padding(.leading, 6)
+                .padding(.trailing, 14)
+                .frame(height: 52)
+                .background(Color.black.opacity(0.7))
+                .clipShape(Capsule())
+                .overlay(
+                    Capsule().stroke(AppColors.terracotta.opacity(0.8), lineWidth: 1.5)
+                )
+            }
+            .buttonStyle(ScaleButtonStyle())
+
+            // 3. Secondary: SNAP PHOTO CHECKPOINT
+            Button {
+                Haptics.medium()
+                scannerEngine.pauseScanning()
+                showingFullScreenCaptureMode = .photo
+            } label: {
+                VStack(spacing: 3) {
+                    Image(systemName: "camera.fill")
+                        .font(.system(size: 18))
+                        .foregroundColor(.white)
+                    Text("Photo")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundColor(Color.white.opacity(0.85))
+                }
+                .frame(width: 50, height: 50)
+                .background(Color.black.opacity(0.6))
+                .clipShape(Circle())
+                .overlay(Circle().stroke(Color.white.opacity(0.25), lineWidth: 1.5))
+            }
+            .buttonStyle(ScaleButtonStyle())
+
+            // 4. Secondary: VOICE NOTE CHECKPOINT
+            Button {
+                Haptics.light()
+                scannerEngine.pauseScanning()
+                showingVoiceCaptureSheet = true
+            } label: {
+                VStack(spacing: 3) {
+                    Image(systemName: "mic.fill")
+                        .font(.system(size: 18))
+                        .foregroundColor(AppColors.mutedBrass)
+                    Text("Voice")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundColor(Color.white.opacity(0.85))
+                }
+                .frame(width: 50, height: 50)
+                .background(Color.black.opacity(0.6))
+                .clipShape(Circle())
+                .overlay(Circle().stroke(Color.white.opacity(0.25), lineWidth: 1.5))
+            }
+            .buttonStyle(ScaleButtonStyle())
+
+            // 5. Secondary: WRITTEN NOTE CHECKPOINT
+            Button {
+                Haptics.light()
+                scannerEngine.pauseScanning()
+                noteTitle = ""
+                noteBody = ""
+                showingAddNoteSheet = true
+            } label: {
+                VStack(spacing: 3) {
+                    Image(systemName: "note.text.badge.plus")
+                        .font(.system(size: 17))
+                        .foregroundColor(.white)
+                    Text("Note")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundColor(Color.white.opacity(0.85))
+                }
+                .frame(width: 50, height: 50)
+                .background(Color.black.opacity(0.6))
+                .clipShape(Circle())
+                .overlay(Circle().stroke(Color.white.opacity(0.25), lineWidth: 1.5))
+            }
+            .buttonStyle(ScaleButtonStyle())
         }
+        .padding(.horizontal, 16)
     }
 
-    private func calibrateAndUnlockStartGate(startMoment: SpatialMoment) {
-        Haptics.success()
+    // MARK: - Capture Handlers & Anchoring
 
-        // 1. Calculate translation offset to align live pose to Stop 1's position
-        let targetX = Float(startMoment.positionX)
-        let targetZ = Float(startMoment.positionY)
-        let deltaX = targetX - rawDevicePosition.x
-        let deltaZ = targetZ - rawDevicePosition.z
-        transformTranslation = SIMD3<Float>(deltaX, 0, deltaZ)
+    private func handleSavedVideoWaypoint(fileURL: URL, duration: TimeInterval, thumbURL: URL) {
+        let durMinutes = Int(duration) / 60
+        let durSeconds = Int(duration) % 60
+        let durString = String(format: "%d:%02d", durMinutes, durSeconds)
+        let pos = scannerEngine.lastRecordedPosition ?? SIMD3<Float>(0, 0, 0)
+        let heading = scannerEngine.currentYawDegrees != 0 ? scannerEngine.currentYawDegrees : (locationManager.currentHeading ?? 0)
+        let idx = referenceTrail.moments.count + newRetraceMoments.count + 1
 
-        // 2. Calculate heading offset to match Stop 1's recorded orientation
-        if let targetHeading = startMoment.headingDegrees {
-            transformRotationDegrees = targetHeading - scannerEngine.currentYawDegrees
-        } else {
-            transformRotationDegrees = 0
-        }
+        let moment = SpatialMoment(
+            id: UUID().uuidString,
+            index: idx,
+            title: "Stop \(idx) · Video",
+            subtitle: "Spatial Video · \(durString)",
+            narrative: "Video waypoint checkpoint anchored at \(walkedMeters)m along retrace path.",
+            architecturalNote: "6DOF Location: X=\(String(format: "%.2f", pos.x))m, Z=\(String(format: "%.2f", pos.z))m",
+            distanceAlongPathMeters: walkedMeters,
+            videoDuration: durString,
+            hasVideo: true,
+            mediaType: "video",
+            videoFileName: fileURL.lastPathComponent,
+            videoThumbnailAssetName: thumbURL.lastPathComponent,
+            positionX: Double(pos.x),
+            positionY: Double(pos.z),
+            positionZ: Double(pos.y),
+            headingDegrees: heading,
+            placementStatus: "placed",
+            createdAt: Date()
+        )
+        newRetraceMoments.append(moment)
+        scannerEngine.resumeScanning()
+        triggerToast("Checkpoint \(idx) Video Anchored ✓")
+    }
 
-        // 3. Mark alignment state
-        alignmentMethod = "startFrameAlignment"
-        alignmentState = "aligned"
-        positioningMode = "localSpatialAligned"
+    private func handleSavedPhotoWaypoint(image: UIImage, fileURL: URL, thumbURL: URL) {
+        let pos = scannerEngine.lastRecordedPosition ?? SIMD3<Float>(0, 0, 0)
+        let heading = scannerEngine.currentYawDegrees != 0 ? scannerEngine.currentYawDegrees : (locationManager.currentHeading ?? 0)
+        let idx = referenceTrail.moments.count + newRetraceMoments.count + 1
 
-        // 4. Unlock full trail view
-        withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-            hasUnlockedStartGate = true
-        }
+        let moment = SpatialMoment(
+            id: UUID().uuidString,
+            index: idx,
+            title: "Stop \(idx) · Photo",
+            subtitle: Date().formatted(date: .omitted, time: .shortened),
+            narrative: "Photo waypoint checkpoint anchored at \(walkedMeters)m along retrace path.",
+            architecturalNote: "6DOF Location: X=\(String(format: "%.2f", pos.x))m, Z=\(String(format: "%.2f", pos.z))m",
+            distanceAlongPathMeters: walkedMeters,
+            hasPhoto: true,
+            mediaType: "photo",
+            photoFileName: fileURL.lastPathComponent,
+            positionX: Double(pos.x),
+            positionY: Double(pos.z),
+            positionZ: Double(pos.y),
+            headingDegrees: heading,
+            placementStatus: "placed",
+            createdAt: Date()
+        )
+        newRetraceMoments.append(moment)
+        scannerEngine.resumeScanning()
+        triggerToast("Checkpoint \(idx) Photo Anchored ✓")
+    }
 
-        triggerToast("✓ Origin Locked at Stop 1 · Starting Retrace")
+    private func handleSavedVoiceWaypoint(audioURL: URL, duration: TimeInterval) {
+        let durMinutes = Int(duration) / 60
+        let durSeconds = Int(duration) % 60
+        let durString = String(format: "%d:%02d", durMinutes, durSeconds)
+        let pos = scannerEngine.lastRecordedPosition ?? SIMD3<Float>(0, 0, 0)
+        let heading = scannerEngine.currentYawDegrees != 0 ? scannerEngine.currentYawDegrees : (locationManager.currentHeading ?? 0)
+        let idx = referenceTrail.moments.count + newRetraceMoments.count + 1
+
+        let moment = SpatialMoment(
+            id: UUID().uuidString,
+            index: idx,
+            title: "Stop \(idx) · Voice",
+            subtitle: "Voice Note · \(durString)",
+            narrative: "Audio waypoint checkpoint anchored at \(walkedMeters)m along retrace path.",
+            architecturalNote: "6DOF Location: X=\(String(format: "%.2f", pos.x))m, Z=\(String(format: "%.2f", pos.z))m",
+            distanceAlongPathMeters: walkedMeters,
+            audioDuration: durString,
+            hasAudio: true,
+            mediaType: "voice",
+            audioFileName: audioURL.lastPathComponent,
+            positionX: Double(pos.x),
+            positionY: Double(pos.z),
+            positionZ: Double(pos.y),
+            headingDegrees: heading,
+            placementStatus: "placed",
+            createdAt: Date()
+        )
+        newRetraceMoments.append(moment)
+        scannerEngine.resumeScanning()
+        triggerToast("Checkpoint \(idx) Voice Anchored ✓")
+    }
+
+    private func saveTextMoment(title: String, text: String) {
+        let idx = referenceTrail.moments.count + newRetraceMoments.count + 1
+        let safeTitle = title.trimmingCharacters(in: .whitespaces).isEmpty ? "Stop \(idx) · Field Note" : title
+        let pos = scannerEngine.lastRecordedPosition ?? SIMD3<Float>(0, 0, 0)
+        let heading = scannerEngine.currentYawDegrees != 0 ? scannerEngine.currentYawDegrees : (locationManager.currentHeading ?? 0)
+
+        let moment = SpatialMoment(
+            id: UUID().uuidString,
+            index: idx,
+            title: safeTitle,
+            subtitle: Date().formatted(date: .omitted, time: .shortened),
+            narrative: text,
+            architecturalNote: "6DOF Location: X=\(String(format: "%.2f", pos.x))m, Z=\(String(format: "%.2f", pos.z))m",
+            distanceAlongPathMeters: walkedMeters,
+            mediaType: "note",
+            positionX: Double(pos.x),
+            positionY: Double(pos.z),
+            positionZ: Double(pos.y),
+            headingDegrees: heading,
+            placementStatus: "placed",
+            createdAt: Date()
+        )
+        newRetraceMoments.append(moment)
+        scannerEngine.resumeScanning()
+        triggerToast("Checkpoint \(idx) Note Anchored ✓")
     }
 
     @ViewBuilder
-    private func startFrameGhostImage(for moment: SpatialMoment) -> some View {
-        if moment.hasPhoto, let photoURL = moment.resolvedPhotoURL(trailId: referenceTrail.id),
-           let image = UIImage(contentsOfFile: photoURL.path) {
-            Image(uiImage: image)
+    private func momentThumbnailView(for moment: SpatialMoment) -> some View {
+        if moment.hasPhoto, let photoURL = moment.resolvedPhotoURL(trailId: sessionId),
+           let uiImage = UIImage(contentsOfFile: photoURL.path) {
+            Image(uiImage: uiImage)
                 .resizable()
                 .scaledToFill()
-        } else if let asset = moment.photoAssetName, let image = UIImage(named: asset) {
-            Image(uiImage: image)
+        } else if moment.hasVideo, let thumbURL = moment.resolvedVideoThumbnailURL(trailId: sessionId),
+                  let uiImage = UIImage(contentsOfFile: thumbURL.path) {
+            Image(uiImage: uiImage)
                 .resizable()
                 .scaledToFill()
-        } else if let thumbName = moment.videoThumbnailAssetName {
-            let thumbURL = TrailPackageStore.shared.mediaDirectory(for: referenceTrail.id).appendingPathComponent(thumbName)
-            if let image = UIImage(contentsOfFile: thumbURL.path) {
-                Image(uiImage: image)
-                    .resizable()
-                    .scaledToFill()
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func startFrameThumbnail(for moment: SpatialMoment) -> some View {
-        if moment.hasPhoto, let photoURL = moment.resolvedPhotoURL(trailId: referenceTrail.id),
-           let image = UIImage(contentsOfFile: photoURL.path) {
-            Image(uiImage: image)
-                .resizable()
-                .scaledToFill()
-        } else if let asset = moment.photoAssetName, let image = UIImage(named: asset) {
-            Image(uiImage: image)
-                .resizable()
-                .scaledToFill()
-        } else if let thumbName = moment.videoThumbnailAssetName {
-            let thumbURL = TrailPackageStore.shared.mediaDirectory(for: referenceTrail.id).appendingPathComponent(thumbName)
-            if let image = UIImage(contentsOfFile: thumbURL.path) {
-                Image(uiImage: image)
-                    .resizable()
-                    .scaledToFill()
-            } else {
-                fallbackOriginThumbnail
-            }
         } else {
-            fallbackOriginThumbnail
+            Circle()
+                .fill(AppColors.surfaceContainerHigh)
+                .overlay(
+                    Image(systemName: iconForMediaType(moment.mediaType))
+                        .font(.system(size: 16))
+                        .foregroundColor(AppColors.primary)
+                )
         }
     }
 
-    private var fallbackOriginThumbnail: some View {
-        ZStack {
-            Color.white.opacity(0.1)
-            Image(systemName: "camera.viewfinder")
-                .font(.system(size: 22))
-                .foregroundColor(Color(hex: "#00E5FF"))
+    private func iconForMediaType(_ type: String) -> String {
+        switch type {
+        case "video": return "video.fill"
+        case "photo": return "camera.fill"
+        case "voice": return "mic.fill"
+        default: return "note.text"
         }
     }
 
@@ -1610,13 +1805,15 @@ public struct RetraceTrailView: View {
         visitedCheckpointIds.removeAll()
         visitedOrderArray.removeAll()
         selectedTargetCheckpointId = nil
+        newRetraceMoments.removeAll()
 
-        // Enforce Start Gate if trail has recorded checkpoints
-        if referenceTrail.moments.isEmpty {
-            hasUnlockedStartGate = true
-        } else {
-            hasUnlockedStartGate = false
-        }
+        hasConfirmedStart = false
+        showingStartFrameGuidance = true
+
+        // Directly active and aligned to origin
+        alignmentState = "aligned"
+        positioningMode = "localSpatialAligned"
+        alignmentMethod = "originAnchor"
 
         // Load reference footsteps
         let loaded = TrailPackageStore.shared.loadFootsteps(for: referenceTrail.id)
@@ -1646,10 +1843,7 @@ public struct RetraceTrailView: View {
     private func startRelocalizationAttempt() {
         if TrailPackageStore.shared.hasWorldMap(for: referenceTrail.id),
            let mapData = TrailPackageStore.shared.loadWorldMapData(for: referenceTrail.id) {
-            alignmentState = "loading"
-            positioningMode = "localSpatialAligned"
             alignmentMethod = "arWorldMap"
-
             let attempt = AlignmentAttempt(
                 retraceSessionId: sessionId,
                 referenceAssetIds: ["spatial/worldmap.arworldmap"],
@@ -1657,15 +1851,12 @@ public struct RetraceTrailView: View {
                 startedAt: Date()
             )
             alignmentAttempts.append(attempt)
-
             scannerEngine.startRetraceRelocalization(worldMapData: mapData)
-            alignmentState = "searching"
         } else {
-            // No saved world map: PRD §5 & §8 declare Unavailable / Manual Follow-Along
-            alignmentState = "unavailable"
-            positioningMode = "localSpatialUnaligned"
-            alignmentMethod = "none"
+            alignmentMethod = "originAnchor"
         }
+        alignmentState = "aligned"
+        positioningMode = "localSpatialAligned"
     }
 
     private func updateAlignmentStatusFromSensor() {
@@ -1759,6 +1950,10 @@ public struct RetraceTrailView: View {
             retraceSimilarityIndex: Double(similarityIndexPercentage) / 100.0,
             retraceReferenceTrailTitle: referenceTrail.title,
             retraceDate: Date(),
+            startFramePhotoName: referenceTrail.startFramePhotoName ?? referenceTrail.moments.first?.photoFileName,
+            startHeadingDegrees: referenceTrail.startHeadingDegrees ?? referenceTrail.moments.first?.headingDegrees,
+            startVantageDescription: referenceTrail.startVantageDescription,
+            isStartingFramePano: referenceTrail.isStartingFramePano,
             createdAt: Date().addingTimeInterval(-Double(elapsedSeconds)),
             updatedAt: Date()
         )

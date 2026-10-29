@@ -48,6 +48,15 @@ struct ScannerView: View {
     @State private var noteTitle: String = ""
     @State private var noteBody: String = ""
 
+    // Starting Point Reference Frame / Vantage State
+    @State private var startFramePhotoFileName: String? = nil
+    @State private var startFrameHeadingDegrees: Double? = nil
+    @State private var startFrameVantageDescription: String = ""
+    @State private var isStartingFramePano: Bool = false
+
+    // Automatic Start Moment Timer
+    @State private var startMomentTimer: Timer? = nil
+
     // Toast feedback
     @State private var toastMessage: String? = nil
 
@@ -778,20 +787,62 @@ struct ScannerView: View {
 
     // MARK: - Lifecycle & Persistence
 
+    // MARK: - Lifecycle & Background Reference Starting Frame Capture
+
+    private func captureStartingReferenceFrameIfNeeded() {
+        guard startFramePhotoFileName == nil else { return }
+        let capturedImage = scannerEngine.captureCurrentARFrameImage() ?? createFallbackStartingImage()
+
+        let heading = scannerEngine.currentYawDegrees != 0 ? scannerEngine.currentYawDegrees : (locationManager.currentHeading ?? 0)
+        let fileName = TrailPackageStore.shared.saveStartFrameImage(capturedImage, for: currentTrailId)
+        startFramePhotoFileName = fileName
+        startFrameHeadingDegrees = heading
+        isStartingFramePano = false
+
+        persistIncrementalDraft()
+    }
+
+    private func createFallbackStartingImage() -> UIImage {
+        let size = CGSize(width: 800, height: 600)
+        UIGraphicsBeginImageContextWithOptions(size, true, 1.0)
+        defer { UIGraphicsEndImageContext() }
+        let ctx = UIGraphicsGetCurrentContext()!
+        ctx.setFillColor(UIColor(red: 0.08, green: 0.12, blue: 0.18, alpha: 1.0).cgColor)
+        ctx.fill(CGRect(origin: .zero, size: size))
+        return UIGraphicsGetImageFromCurrentImageContext() ?? UIImage()
+    }
+
     private func initializeTrailSession() {
         currentTrailId = UUID().uuidString
         trailTitle = "Trail · \(Date().formatted(date: .abbreviated, time: .shortened))"
         recordedMoments.removeAll()
+        startFramePhotoFileName = nil
+        startFrameHeadingDegrees = nil
+        startFrameVantageDescription = ""
+        isStartingFramePano = false
         elapsedSeconds = 0
 
         // Start RoomPlan / 6DOF tracking
         scannerEngine.resetAndStartScanning()
         locationManager.requestAccessIfNeeded()
 
+        // Automatically capture start reference frame quietly in background
+        startMomentTimer?.invalidate()
+        startMomentTimer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { _ in
+            if scannerEngine.captureCurrentARFrameImage() != nil {
+                captureStartingReferenceFrameIfNeeded()
+                startMomentTimer?.invalidate()
+                startMomentTimer = nil
+            }
+        }
+
         // Timer
         trailTimer?.invalidate()
         trailTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
             elapsedSeconds += 1
+            if startFramePhotoFileName == nil && elapsedSeconds >= 2 {
+                captureStartingReferenceFrameIfNeeded()
+            }
         }
 
         persistIncrementalDraft()
@@ -824,6 +875,10 @@ struct ScannerView: View {
             coverImageName: recordedMoments.first(where: { $0.hasPhoto })?.photoFileName,
             latitude: loc?.coordinate.latitude,
             longitude: loc?.coordinate.longitude,
+            startFramePhotoName: startFramePhotoFileName,
+            startHeadingDegrees: startFrameHeadingDegrees,
+            startVantageDescription: startFrameVantageDescription,
+            isStartingFramePano: isStartingFramePano,
             createdAt: Date().addingTimeInterval(-Double(elapsedSeconds)),
             updatedAt: Date()
         )
@@ -843,15 +898,22 @@ struct ScannerView: View {
         let author = dataStore.localProfile.displayName.isEmpty ? "Explorer" : dataStore.localProfile.displayName
         let loc = locationManager.currentLocation
 
+        if startFramePhotoFileName == nil {
+            captureStartingReferenceFrameIfNeeded()
+        }
+
         let chosenCover: String? = {
             if let id = coverMomentId, let m = recordedMoments.first(where: { $0.id == id }) {
                 return m.photoFileName ?? m.videoThumbnailAssetName
             }
-            return recordedMoments.first(where: { $0.hasPhoto })?.photoFileName ?? recordedMoments.first(where: { $0.hasVideo })?.videoThumbnailAssetName
+            return startFramePhotoFileName ?? recordedMoments.first(where: { $0.hasPhoto })?.photoFileName ?? recordedMoments.first(where: { $0.hasVideo })?.videoThumbnailAssetName
         }()
 
         let finalTitle = (customTitle?.isEmpty == false) ? customTitle! : trailTitle
         let finalNotes = (personalNotes?.isEmpty == false) ? personalNotes! : "Saved privately on this iPhone."
+        let chosenStartPhoto = startFramePhotoFileName ?? recordedMoments.first(where: { $0.hasPhoto })?.photoFileName
+        let chosenHeading = startFrameHeadingDegrees ?? recordedMoments.first?.headingDegrees ?? scannerEngine.currentYawDegrees
+        let chosenDesc = !startFrameVantageDescription.isEmpty ? startFrameVantageDescription : "Starting origin vantage"
 
         let finalTrail = TrailDetail(
             id: currentTrailId,
@@ -876,6 +938,10 @@ struct ScannerView: View {
             coverImageName: chosenCover,
             latitude: loc?.coordinate.latitude,
             longitude: loc?.coordinate.longitude,
+            startFramePhotoName: chosenStartPhoto,
+            startHeadingDegrees: chosenHeading,
+            startVantageDescription: chosenDesc,
+            isStartingFramePano: isStartingFramePano,
             createdAt: Date().addingTimeInterval(-Double(elapsedSeconds)),
             updatedAt: Date()
         )
@@ -894,7 +960,10 @@ struct ScannerView: View {
                     worldAlignmentConfiguration: "gravityAndHeading",
                     createdAt: Date(),
                     positioningMethod: "arWorldMap",
-                    alignmentAssetReferences: ["spatial/worldmap.arworldmap"]
+                    alignmentAssetReferences: ["spatial/worldmap.arworldmap"],
+                    startFramePhotoName: chosenStartPhoto,
+                    originHeadingDegrees: chosenHeading,
+                    startVantageDescription: chosenDesc
                 )
                 TrailPackageStore.shared.saveReferenceFrame(refFrame, for: finalTrail.id)
             }
@@ -911,6 +980,8 @@ struct ScannerView: View {
     }
 
     private func teardownTrailSession() {
+        startMomentTimer?.invalidate()
+        startMomentTimer = nil
         trailTimer?.invalidate()
         trailTimer = nil
         scannerEngine.stopScanning()
@@ -967,7 +1038,7 @@ struct ScannerView: View {
 
 // MARK: - Voice Note Checkpoint Sheet
 
-private struct VoiceNoteCheckpointSheet: View {
+struct VoiceNoteCheckpointSheet: View {
     @Environment(\.dismiss) private var dismiss
     let trailId: String
     let waypointIndex: Int
@@ -1051,7 +1122,7 @@ private struct VoiceNoteCheckpointSheet: View {
 
 // MARK: - Add Note Quick Sheet
 
-private struct AddNoteQuickSheet: View {
+struct AddNoteQuickSheet: View {
     @Binding var title: String
     @Binding var bodyText: String
     let onSave: (String, String) -> Void
@@ -1113,7 +1184,7 @@ private struct AddNoteQuickSheet: View {
     }
 }
 
-private struct ScaleButtonStyle: ButtonStyle {
+struct ScaleButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .scaleEffect(configuration.isPressed ? 0.92 : 1.0)

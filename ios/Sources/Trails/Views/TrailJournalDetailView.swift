@@ -21,6 +21,7 @@ public struct TrailJournalDetailView: View {
     @State private var showingRevisitReplay: Bool = false
     @State private var showingRetraceView: Bool = false
     @State private var selectedLinkedTrail: TrailDetail? = nil
+    @State private var showingStartingPointPanoViewer: Bool = false
 
     // Media Viewer Sheets
     @State private var selectedPhotoURL: URL?
@@ -78,6 +79,9 @@ public struct TrailJournalDetailView: View {
 
                         // MARK: - 4. RoomPlan Spatial Route Map Card
                         roomPlanRoutePreviewCard
+
+                        // MARK: - 4.5 Starting Point & Reference Frame Card
+                        startingPointReferenceCard
 
                         // MARK: - 5. Primary Revisit Trail CTA Button
                         revisitTrailCTAButton
@@ -191,6 +195,10 @@ public struct TrailJournalDetailView: View {
             // Edit Details Sheet
             .sheet(isPresented: $showingEditSheet) {
                 editTrailDetailsSheet
+            }
+            // Starting Point & 360 Reference Frame Sheet
+            .sheet(isPresented: $showingStartingPointPanoViewer) {
+                StartingPointPanoViewerSheet(trail: trail)
             }
             // Action Menu Confirmation Dialog
             .confirmationDialog("Trail Options", isPresented: $showingActionSheet, titleVisibility: .visible) {
@@ -679,6 +687,122 @@ public struct TrailJournalDetailView: View {
             }
             .buttonStyle(.plain)
         }
+    }
+
+    // MARK: - 4.5 Starting Point & Reference Frame Card
+
+    private var startingPointReferenceCard: some View {
+        let startPhotoURL = trail.resolvedStartFrameURL(fallbackTrailId: trail.inspiredByTrailId)
+        let heading = trail.startHeadingDegrees ?? trail.moments.first?.headingDegrees ?? 0.0
+
+        return VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                HStack(spacing: 8) {
+                    ZStack {
+                        Circle()
+                            .fill(Color(hex: "#00838F").opacity(0.18))
+                            .frame(width: 28, height: 28)
+                        Image(systemName: "figure.walk.arrival")
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundColor(Color(hex: "#00838F"))
+                    }
+
+                    Text("STARTING POINT & REFERENCE FRAME")
+                        .font(AppFonts.labelSpatial)
+                        .foregroundColor(Color(hex: "#00838F"))
+                        .tracking(1.0)
+                }
+
+                Spacer()
+
+                HStack(spacing: 4) {
+                    Image(systemName: "safari.fill")
+                        .font(.system(size: 11))
+                    Text("Facing \(Int(heading))°")
+                        .font(AppFonts.labelSpatial)
+                }
+                .foregroundColor(Color(hex: "#00838F"))
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .background(Color(hex: "#00838F").opacity(0.12))
+                .clipShape(Capsule())
+            }
+
+            // Image Preview (Interactive tap opens 360 / Reference Frame Viewer)
+            Button {
+                Haptics.light()
+                showingStartingPointPanoViewer = true
+            } label: {
+                ZStack(alignment: .bottomLeading) {
+                    if let url = startPhotoURL, let uiImage = UIImage(contentsOfFile: url.path) {
+                        Image(uiImage: uiImage)
+                            .resizable()
+                            .scaledToFill()
+                            .frame(height: 180)
+                            .clipped()
+                    } else if let asset = trail.moments.first?.photoAssetName, let uiImage = UIImage(named: asset) {
+                        Image(uiImage: uiImage)
+                            .resizable()
+                            .scaledToFill()
+                            .frame(height: 180)
+                            .clipped()
+                    } else {
+                        ZStack {
+                            Color(hex: "#101622")
+                            VStack(spacing: 6) {
+                                Image(systemName: "camera.viewfinder")
+                                    .font(.system(size: 32))
+                                    .foregroundColor(AppColors.outline)
+                                Text("Starting Vantage Photo")
+                                    .font(AppFonts.caption)
+                                    .foregroundColor(AppColors.secondary)
+                            }
+                        }
+                        .frame(height: 180)
+                    }
+
+                    // Scrim
+                    LinearGradient(
+                        colors: [Color.clear, Color.black.opacity(0.75)],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Starting Origin Landmark")
+                                .font(AppFonts.headlineSmall)
+                                .foregroundColor(.white)
+                            Text("Stand here facing \(Int(heading))° to align before retracing")
+                                .font(AppFonts.caption)
+                                .foregroundColor(Color.white.opacity(0.85))
+                        }
+
+                        Spacer()
+
+                        HStack(spacing: 5) {
+                            Image(systemName: "eye.fill")
+                                .font(.system(size: 12))
+                            Text("Explore Vantage")
+                                .font(AppFonts.labelSpatial)
+                        }
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(Color.black.opacity(0.6))
+                        .clipShape(Capsule())
+                    }
+                    .padding(12)
+                }
+                .clipShape(RoundedRectangle(cornerRadius: 16))
+                .shadow(color: Color.black.opacity(0.06), radius: 6, y: 2)
+            }
+            .buttonStyle(PlainButtonStyle())
+        }
+        .padding(16)
+        .background(AppColors.pureWhite)
+        .clipShape(RoundedRectangle(cornerRadius: 20))
+        .shadow(color: Color.black.opacity(0.04), radius: 8, x: 0, y: 2)
     }
 
     // MARK: - 4. Retrace & Revisit CTAs (PRD v0.3.0)
@@ -1298,4 +1422,196 @@ public struct TrailJournalDetailView: View {
 private struct IdentifiableURL: Identifiable {
     let id = UUID()
     let url: URL
+}
+
+// MARK: - Starting Point & 360 Reference Frame Pano Viewer
+
+private struct StartingPointPanoViewerSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let trail: TrailDetail
+    @StateObject private var locationManager = TrailsLocationManager()
+
+    @State private var dragOffset: CGSize = .zero
+    @State private var accumulatedOffset: CGSize = .zero
+
+    private var targetHeading: Double {
+        trail.startHeadingDegrees ?? trail.moments.first?.headingDegrees ?? 0.0
+    }
+
+    private var currentHeading: Double {
+        locationManager.currentHeading ?? 0.0
+    }
+
+    private var headingDelta: Double {
+        var diff = targetHeading - currentHeading
+        while diff > 180 { diff -= 360 }
+        while diff < -180 { diff += 360 }
+        return diff
+    }
+
+    var body: some View {
+        ZStack {
+            Color.black.ignoresSafeArea()
+
+            VStack(spacing: 0) {
+                // Top Bar
+                HStack(spacing: 12) {
+                    Button {
+                        dismiss()
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 15, weight: .bold))
+                            .foregroundColor(.white)
+                            .frame(width: 40, height: 40)
+                            .background(Color.white.opacity(0.18))
+                            .clipShape(Circle())
+                    }
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack(spacing: 6) {
+                            Text("ORIGIN REFERENCE VANTAGE")
+                                .font(AppFonts.labelSpatial)
+                                .foregroundColor(Color(hex: "#00E5FF"))
+                                .tracking(1.2)
+                            if trail.isStartingFramePano == true {
+                                Text("360° PANO")
+                                    .font(.system(size: 8, weight: .black, design: .rounded))
+                                    .foregroundColor(.black)
+                                    .padding(.horizontal, 5)
+                                    .padding(.vertical, 2)
+                                    .background(Color(hex: "#00E5FF"))
+                                    .clipShape(Capsule())
+                            }
+                        }
+
+                        Text(trail.title)
+                            .font(AppFonts.headlineSmall)
+                            .foregroundColor(.white)
+                            .lineLimit(1)
+                    }
+
+                    Spacer()
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 20)
+                .padding(.bottom, 12)
+
+                // Immersive Panoramic / Frame Viewport
+                ZStack {
+                    if let url = trail.resolvedStartFrameURL(fallbackTrailId: trail.inspiredByTrailId),
+                       let uiImage = UIImage(contentsOfFile: url.path) {
+                        Image(uiImage: uiImage)
+                            .resizable()
+                            .scaledToFill()
+                            .offset(x: accumulatedOffset.width + dragOffset.width)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .clipped()
+                            .gesture(
+                                DragGesture()
+                                    .onChanged { val in dragOffset = val.translation }
+                                    .onEnded { val in
+                                        accumulatedOffset.width += val.translation.width
+                                        dragOffset = .zero
+                                    }
+                            )
+                    } else if let asset = trail.moments.first?.photoAssetName, let uiImage = UIImage(named: asset) {
+                        Image(uiImage: uiImage)
+                            .resizable()
+                            .scaledToFill()
+                            .offset(x: accumulatedOffset.width + dragOffset.width)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .clipped()
+                    } else {
+                        VStack(spacing: 12) {
+                            Image(systemName: "camera.viewfinder")
+                                .font(.system(size: 48))
+                                .foregroundColor(Color(hex: "#00E5FF"))
+                            Text("No starting reference frame recorded")
+                                .font(AppFonts.headlineSmall)
+                                .foregroundColor(.white)
+                        }
+                    }
+
+                    // Scrims
+                    LinearGradient(
+                        colors: [Color.black.opacity(0.5), Color.clear, Color.black.opacity(0.85)],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    .allowsHitTesting(false)
+
+                    // Pan Hint Overlay
+                    VStack {
+                        HStack(spacing: 6) {
+                            Image(systemName: "hand.draw")
+                                .font(.system(size: 11))
+                            Text("Drag horizontally to inspect surrounding vantage")
+                                .font(AppFonts.labelSpatial)
+                        }
+                        .foregroundColor(.white.opacity(0.85))
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(Color.black.opacity(0.6))
+                        .clipShape(Capsule())
+                        .padding(.top, 14)
+
+                        Spacer()
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                // Bottom Compass & Physical Orientation Navigation Dock
+                VStack(spacing: 12) {
+                    HStack(spacing: 14) {
+                        // Dynamic Compass Dial
+                        ZStack {
+                            Circle()
+                                .stroke(Color.white.opacity(0.2), lineWidth: 2)
+                                .frame(width: 52, height: 52)
+
+                            Image(systemName: "location.north.line.fill")
+                                .font(.system(size: 24, weight: .bold))
+                                .foregroundColor(abs(headingDelta) < 15 ? Color(hex: "#00E5FF") : Color.orange)
+                                .rotationEffect(Angle(degrees: headingDelta))
+                        }
+
+                        VStack(alignment: .leading, spacing: 3) {
+                            HStack(spacing: 6) {
+                                Circle()
+                                    .fill(abs(headingDelta) < 15 ? Color.green : Color.orange)
+                                    .frame(width: 7, height: 7)
+                                Text("TARGET HEADING · \(Int(targetHeading))°")
+                                    .font(AppFonts.labelSpatial)
+                                    .foregroundColor(abs(headingDelta) < 15 ? Color.green : Color.orange)
+                            }
+
+                            if abs(headingDelta) < 15 {
+                                Text("Facing starting vantage point ✓")
+                                    .font(AppFonts.headlineSmall)
+                                    .foregroundColor(.white)
+                            } else {
+                                Text("Turn \(Int(abs(headingDelta)))° \(headingDelta > 0 ? "Right" : "Left") to align")
+                                    .font(AppFonts.headlineSmall)
+                                    .foregroundColor(.white)
+                            }
+
+                            Text("Stand at this physical location and face \(Int(targetHeading))° before beginning your retrace.")
+                                .font(AppFonts.caption)
+                                .foregroundColor(Color.white.opacity(0.75))
+                        }
+
+                        Spacer()
+                    }
+                }
+                .padding(18)
+                .background(Color(hex: "#101622"))
+                .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+                .padding(.horizontal, 20)
+                .padding(.bottom, 24)
+            }
+        }
+        .onAppear {
+            locationManager.requestAccessIfNeeded()
+        }
+    }
 }

@@ -8,6 +8,7 @@
 
 import Foundation
 import CoreLocation
+import UIKit
 
 // MARK: - Place Models
 
@@ -184,6 +185,10 @@ public struct TrailDetail: Identifiable, Hashable, Codable {
     public var retraceSimilarityIndex: Double?
     public var retraceReferenceTrailTitle: String?
     public var retraceDate: Date?
+    public var startFramePhotoName: String?
+    public var startHeadingDegrees: Double?
+    public var startVantageDescription: String?
+    public var isStartingFramePano: Bool?
     public var createdAt: Date
     public var updatedAt: Date
 
@@ -194,6 +199,7 @@ public struct TrailDetail: Identifiable, Hashable, Codable {
         case moments, visibility, isDraft, coverImageName, latitude, longitude
         case inspiredByTrailId, inspiredByNote
         case isRetrace, retraceSimilarityIndex, retraceReferenceTrailTitle, retraceDate
+        case startFramePhotoName, startHeadingDegrees, startVantageDescription, isStartingFramePano
         case createdAt, updatedAt
     }
 
@@ -254,6 +260,10 @@ public struct TrailDetail: Identifiable, Hashable, Codable {
         retraceSimilarityIndex: Double? = nil,
         retraceReferenceTrailTitle: String? = nil,
         retraceDate: Date? = nil,
+        startFramePhotoName: String? = nil,
+        startHeadingDegrees: Double? = nil,
+        startVantageDescription: String? = nil,
+        isStartingFramePano: Bool? = nil,
         createdAt: Date = Date(),
         updatedAt: Date = Date()
     ) {
@@ -285,8 +295,35 @@ public struct TrailDetail: Identifiable, Hashable, Codable {
         self.retraceSimilarityIndex = retraceSimilarityIndex
         self.retraceReferenceTrailTitle = retraceReferenceTrailTitle
         self.retraceDate = retraceDate
+        self.startFramePhotoName = startFramePhotoName
+        self.startHeadingDegrees = startHeadingDegrees
+        self.startVantageDescription = startVantageDescription
+        self.isStartingFramePano = isStartingFramePano
         self.createdAt = createdAt
         self.updatedAt = updatedAt
+    }
+
+    public func resolvedStartFrameURL(fallbackTrailId: String? = nil) -> URL? {
+        if let startName = startFramePhotoName {
+            let fileURL = TrailPackageStore.shared.mediaDirectory(for: id).appendingPathComponent(startName)
+            if FileManager.default.fileExists(atPath: fileURL.path) {
+                return fileURL
+            }
+            if let fallback = fallbackTrailId ?? inspiredByTrailId {
+                let fallbackURL = TrailPackageStore.shared.mediaDirectory(for: fallback).appendingPathComponent(startName)
+                if FileManager.default.fileExists(atPath: fallbackURL.path) {
+                    return fallbackURL
+                }
+            }
+        }
+        // Fall back to first photo moment or video thumbnail
+        if let firstPhoto = moments.first(where: { ($0.hasPhoto || $0.mediaType == "photo") && $0.photoFileName != nil }) {
+            return firstPhoto.resolvedPhotoURL(trailId: id, fallbackTrailId: fallbackTrailId ?? inspiredByTrailId)
+        }
+        if let firstVideo = moments.first(where: { ($0.hasVideo || $0.mediaType == "video") && ($0.videoThumbnailAssetName != nil || $0.photoFileName != nil) }) {
+            return firstVideo.resolvedVideoThumbnailURL(trailId: id, fallbackTrailId: fallbackTrailId ?? inspiredByTrailId)
+        }
+        return nil
     }
 
     public init(from decoder: Decoder) throws {
@@ -319,6 +356,10 @@ public struct TrailDetail: Identifiable, Hashable, Codable {
         self.retraceSimilarityIndex = try container.decodeIfPresent(Double.self, forKey: .retraceSimilarityIndex)
         self.retraceReferenceTrailTitle = try container.decodeIfPresent(String.self, forKey: .retraceReferenceTrailTitle)
         self.retraceDate = try container.decodeIfPresent(Date.self, forKey: .retraceDate)
+        self.startFramePhotoName = try container.decodeIfPresent(String.self, forKey: .startFramePhotoName)
+        self.startHeadingDegrees = try container.decodeIfPresent(Double.self, forKey: .startHeadingDegrees)
+        self.startVantageDescription = try container.decodeIfPresent(String.self, forKey: .startVantageDescription)
+        self.isStartingFramePano = try container.decodeIfPresent(Bool.self, forKey: .isStartingFramePano)
         self.createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
         self.updatedAt = try container.decodeIfPresent(Date.self, forKey: .updatedAt) ?? Date()
     }
@@ -535,6 +576,9 @@ public struct ReferenceFrame: Codable, Hashable {
     public let createdAt: Date
     public let positioningMethod: String // "arWorldMap", "manualAnchor", "gps"
     public let alignmentAssetReferences: [String]
+    public var startFramePhotoName: String?
+    public var originHeadingDegrees: Double?
+    public var startVantageDescription: String?
 
     public init(
         id: String = UUID().uuidString,
@@ -544,7 +588,10 @@ public struct ReferenceFrame: Codable, Hashable {
         worldAlignmentConfiguration: String = "gravityAndHeading",
         createdAt: Date = Date(),
         positioningMethod: String = "arWorldMap",
-        alignmentAssetReferences: [String] = []
+        alignmentAssetReferences: [String] = [],
+        startFramePhotoName: String? = nil,
+        originHeadingDegrees: Double? = nil,
+        startVantageDescription: String? = nil
     ) {
         self.id = id
         self.sourceSessionId = sourceSessionId
@@ -554,6 +601,9 @@ public struct ReferenceFrame: Codable, Hashable {
         self.createdAt = createdAt
         self.positioningMethod = positioningMethod
         self.alignmentAssetReferences = alignmentAssetReferences
+        self.startFramePhotoName = startFramePhotoName
+        self.originHeadingDegrees = originHeadingDegrees
+        self.startVantageDescription = startVantageDescription
     }
 }
 
@@ -912,6 +962,16 @@ public final class TrailPackageStore {
         let dir = trailDirectory(for: trailId).appendingPathComponent("media", isDirectory: true)
         try? fileManager.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir
+    }
+
+    public func saveStartFrameImage(_ image: UIImage, for trailId: String) -> String {
+        let mediaDir = mediaDirectory(for: trailId)
+        let fileName = "start-frame-\(Int(Date().timeIntervalSince1970)).jpg"
+        let fileURL = mediaDir.appendingPathComponent(fileName)
+        if let data = image.jpegData(compressionQuality: 0.88) {
+            try? data.write(to: fileURL, options: .atomic)
+        }
+        return fileName
     }
 
     public func copyAssets(from sourceTrailId: String, to destinationTrailId: String) {
