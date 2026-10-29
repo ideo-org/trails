@@ -48,7 +48,7 @@ struct LoggerWrapper {
 
     init(category: String) {
         self.wrappedValue = DebugLogger(
-            subsystem: Bundle.main.bundleIdentifier ?? "cc.trails.app",
+            subsystem: Bundle.main.bundleIdentifier ?? "com.logos.trails",
             category: category
         )
     }

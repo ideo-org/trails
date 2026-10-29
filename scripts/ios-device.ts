@@ -178,8 +178,9 @@ export function resolveBuildDestination(
 	buildOnly: boolean,
 	deviceId?: string,
 ) {
-	// Always build for generic iOS device to bypass Xcode developer disk image mounting errors
-	// on newer iOS versions (like iOS 27). `devicectl` handles installation afterwards.
+	if (!buildOnly && deviceId) {
+		return `id=${deviceId}`;
+	}
 	return "generic/platform=iOS";
 }
 
@@ -737,8 +738,18 @@ function findBuiltApp(productsDir: string): string | null {
 	return null;
 }
 
-async function findAppBundle() {
+async function findAppBundle(isSimulator = false) {
 	const productsDir = path.join(DERIVED_DATA, "Build", "Products");
+	const targetFolder = isSimulator ? `${CONFIGURATION}-iphonesimulator` : `${CONFIGURATION}-iphoneos`;
+	const directPath = path.join(productsDir, targetFolder, `${SCHEME}.app`);
+	if (existsSync(directPath)) {
+		return directPath;
+	}
+	const specificDir = path.join(productsDir, targetFolder);
+	const specificApp = findBuiltApp(specificDir);
+	if (specificApp) {
+		return specificApp;
+	}
 	const appPath = findBuiltApp(productsDir);
 	if (!appPath) {
 		throw new Error(`Could not find built app bundle under ${productsDir}.`);
@@ -841,7 +852,7 @@ async function main() {
 		);
 	}
 
-	const appPath = await findAppBundle();
+	const appPath = await findAppBundle(isSimulator);
 	console.log(`App bundle: ${appPath}`);
 	console.log(`DerivedData: ${DERIVED_DATA}`);
 	console.log(`SourcePackages: ${SOURCE_PACKAGES_DIR}`);

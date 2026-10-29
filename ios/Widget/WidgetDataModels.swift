@@ -72,7 +72,7 @@ struct WidgetDataManager {
 
     // IMPORTANT: Replace with your actual App Group identifier
     // Format: group.<bundle-id>.widgets
-    private static let appGroupIdentifier = "group.cc.trails.app.widgets"
+    private static let appGroupIdentifier = "group.com.logos.trails.widgets"
 
     private static let streakDataKey = "widgetStreakData"
 

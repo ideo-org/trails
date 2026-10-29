@@ -3,7 +3,8 @@
 //  Trails
 //
 //  Centralized color definitions for Trails branding.
-//  Keep the palette aligned with the product's dark, spatial capture aesthetic.
+//  Preserves the high-performance dark spatial room scanner palette
+//  while providing design system tokens from docs/stitch/trails/DESIGN.md.
 //
 
 import SwiftUI
@@ -12,22 +13,91 @@ import SwiftUI
 
 struct AppColors {
 
-    // MARK: - Primary Palette
+    // MARK: - Trails Palette (PRD v0.1.0 & DESIGN.md)
 
-    /// Trails scanner blue (primary action and spatial markers)
-    static let primary = Color(hex: "#2F7BFF")
+    /// Primary brand color: Forest Green (structural anchors, primary actions, deep brand presence)
+    static let primary = Color(hex: "#173E35")
 
-    /// High-energy cyan used for LiDAR, focus rings, and active surfaces.
-    static let secondary = Color(hex: "#67E8F9")
-
-    /// Deep spatial black used behind scanner and library surfaces.
-    static let obsidian = Color(hex: "#05070A")
+    /// Secondary accent color: Restrained Brass (spatial waypoints, architectural milestones)
+    static let secondary = Color(hex: "#B59A58")
 
     /// Accent color for highlights
-    static let accent = Color(hex: "#B7D7FF")
+    static let accent = Color(hex: "#B59A58")
+
+    /// Active Journey: Terracotta for the active path
+    static let terracotta = Color(hex: "#C66B4E")
+    static let activeTrail = terracotta
+
+    /// Spatial Waypoints / Moment Pins: Restrained Brass
+    static let mutedBrass = Color(hex: "#B59A58")
+    static let momentPin = mutedBrass
+
+    /// Forest Green
+    static let forestGreen = Color(hex: "#173E35")
+    static let primaryDark = Color(hex: "#002820")
+
+    /// Canvas / Warm Limestone: Base background
+    static let canvas = Color(hex: "#F5F1E8")
+    static let limestone = Color(hex: "#F5F1E8")
+
+    /// Surfaces
+    static let surface = Color(hex: "#FDF9F0")
+    static let surfaceDim = Color(hex: "#DDDAD1")
+    static let surfaceContainerLowest = Color(hex: "#FFFFFF")
+    static let surfaceContainerLow = Color(hex: "#F7F3EA")
+    static let surfaceContainer = Color(hex: "#F1EEE5")
+    static let surfaceContainerHigh = Color(hex: "#ECE8DF")
+    static let surfaceContainerHighest = Color(hex: "#E6E2D9")
+    static let elevatedCanvas = Color(hex: "#FAF8F5")
+    static let pureWhite = Color(hex: "#FFFFFF")
+
+    /// Dark Ink Text (PRD 10.1)
+    static let deepInk = Color(hex: "#202923")
+    static let onSurface = Color(hex: "#1C1C16")
+    static let onSurfaceVariant = Color(hex: "#414846")
+    static let outline = Color(hex: "#717975")
+    static let outlineVariant = Color(hex: "#C0C8C4")
+    static let onPrimary = Color.white
+
+    // MARK: - Semantic Colors
+
+    static let backgroundPrimary = canvas
+    static let backgroundSecondary = surface
+    static let backgroundTertiary = surfaceContainer
+    static let textPrimary = deepInk
+    static let textSecondary = onSurfaceVariant
+    static let textTertiary = outline
+
+    static let divider = outlineVariant.opacity(0.3)
+    static let border = outlineVariant.opacity(0.4)
+    static let glass = Color.white.opacity(0.85)
+    static let glassStrong = Color.white.opacity(0.95)
+    static let controlSurface = surfaceContainerLow
+    static let controlSurfacePressed = surfaceContainerHigh
+
+    /// Volumetric and spatial traces
+    static let volumetricTrace = Color(hex: "#173E35").opacity(0.18)
+    static let inactiveVector = Color(hex: "#9C9A8E").opacity(0.40)
+
+    /// Success / Positive
+    static let success = Color(hex: "#2E7D32")
+
+    /// Warning
+    static let warning = Color(hex: "#D97706")
+
+    /// Error / Danger
+    static let error = Color(hex: "#BA1A1A")
+
+    /// Premium / Special
+    static let premium = mutedBrass
+
+    // MARK: - Viewfinder / Camera Surface Overlays
 
     /// LiDAR confidence green
     static let lidar = Color(hex: "#45F3A3")
+
+    /// Deep spatial black used behind live camera / scanner HUD
+    static let obsidian = Color(hex: "#05070A")
 
     /// Deep card background
     static let graphite = Color(hex: "#0D121A")
@@ -35,69 +105,16 @@ struct AppColors {
     /// Scan void/dark-fill color
     static let void = Color(hex: "#020304")
 
-    /// Success/positive color
-    static let success = Color(hex: "#22C55E")
-
-    /// Warning color
-    static let warning = Color(hex: "#F59E0B")
-
-    /// Error/danger color
-    static let error = Color(hex: "#EF4444")
-
-    /// Premium/special features
-    static let premium = Color(hex: "#A78BFA")
-
-    // MARK: - Streak Colors
-
-    /// Streak flame color (active)
-    static let streakActive = Color.orange
-
-    /// Streak flame color (inactive)
-    static let streakInactive = Color.gray
-
-    // MARK: - Semantic Colors
-
-    /// Primary background
-    static let backgroundPrimary = obsidian
-
-    /// Secondary background (cards, sections)
-    static let backgroundSecondary = graphite
-
-    /// Tertiary background
-    static let backgroundTertiary = Color(hex: "#172033")
-
-    /// Primary text color
-    static let textPrimary = Color.white
-
-    /// Secondary text color
-    static let textSecondary = Color.white.opacity(0.74)
-
-    /// Tertiary text color
-    static let textTertiary = Color.white.opacity(0.5)
-
-    // MARK: - Tab Bar Colors
-
-    static let tabHome = primary
-    static let tabLibrary = accent
-    static let tabSettings = secondary
-
-    // MARK: - Dividers and Borders
-
-    static let divider = Color.white.opacity(0.08)
-    static let border = Color.white.opacity(0.14)
-    static let glass = Color.white.opacity(0.08)
-    static let glassStrong = Color.white.opacity(0.14)
-    static let controlSurface = Color.white.opacity(0.12)
-    static let controlSurfacePressed = Color.white.opacity(0.2)
-
-    static let scannerGradient = LinearGradient(
-        colors: [void, obsidian, Color(hex: "#071A2F")],
+    /// Primary Gradient (Forest Green)
+    static let primaryGradient = LinearGradient(
+        colors: [Color(hex: "#1F4E43"), Color(hex: "#173E35")],
         startPoint: .topLeading,
         endPoint: .bottomTrailing
     )
 
-    static let primaryGradient = LinearGradient(
-        colors: [secondary, primary],
+    /// Subtle Warm Scanner Gradient
+    static let scannerGradient = LinearGradient(
+        colors: [canvas, surfaceContainerLow],
         startPoint: .topLeading,
         endPoint: .bottomTrailing
     )

@@ -13,6 +13,7 @@ class RoomScannerEngine: NSObject, ObservableObject, RoomCaptureSessionDelegate,
     @Published var isScanning = false
     @Published var capturedRoom: CapturedRoom?
     @Published var footsteps: [SIMD3<Float>] = []
+    @Published var recordedMoments: [SpatialMoment] = []
     
     // Support state
     @Published var isSupported: Bool = RoomCaptureSession.isSupported
@@ -21,7 +22,7 @@ class RoomScannerEngine: NSObject, ObservableObject, RoomCaptureSessionDelegate,
     private var isRelocalizing = false
     
     // For path plotting distance threshold (to avoid too many points)
-    private var lastRecordedPosition: SIMD3<Float>?
+    @Published var lastRecordedPosition: SIMD3<Float>?
     private let distanceThreshold: Float = 0.2 // meters
     
     override init() {
@@ -42,12 +43,32 @@ class RoomScannerEngine: NSObject, ObservableObject, RoomCaptureSessionDelegate,
         
         isScanning = true
         footsteps.removeAll()
+        recordedMoments.removeAll()
         lastRecordedPosition = nil
     }
     
     func stopScanning() {
         captureView?.captureSession.stop()
         isScanning = false
+    }
+
+    func addMoment(label: String, note: String = "") {
+        let index = recordedMoments.count + 1
+        let pos = lastRecordedPosition ?? SIMD3<Float>(0, 0, 0)
+        let walkedMeters = max(1, Int(Float(footsteps.count) * distanceThreshold))
+        let moment = SpatialMoment(
+            id: UUID().uuidString,
+            index: index,
+            title: label,
+            subtitle: note.isEmpty ? "Moment \(index)" : note,
+            narrative: note.isEmpty ? "Recorded at position (\(String(format: "%.1f", pos.x))m, \(String(format: "%.1f", pos.z))m)." : note,
+            architecturalNote: "Local survey coordinate: X=\(String(format: "%.2f", pos.x)), Z=\(String(format: "%.2f", pos.z))",
+            distanceAlongPathMeters: walkedMeters,
+            hasAudio: false,
+            positionX: Double(pos.x),
+            positionY: Double(pos.z)
+        )
+        recordedMoments.append(moment)
     }
     
     // MARK: - RoomCaptureSessionDelegate

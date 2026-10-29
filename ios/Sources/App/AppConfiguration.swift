@@ -83,7 +83,7 @@ enum AppConfiguration {
     ///
     /// Note: `enableAuth` requires `useFirebase = true` to function.
     /// If Firebase is disabled, sign-in UI is always hidden regardless of this flag.
-    static let enableAuth = false
+    static let enableAuth = true
 
     /// Enable scan cloud sync UI and background asset upload.
     ///

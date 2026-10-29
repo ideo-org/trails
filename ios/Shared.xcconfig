@@ -1,7 +1,7 @@
 // Shared.xcconfig
 // This file is committed to Git and contains shared build settings.
 
-APP_BUNDLE_IDENTIFIER = cc.trails.app
+APP_BUNDLE_IDENTIFIER = com.logos.trails
 APP_WIDGET_BUNDLE_IDENTIFIER = $(APP_BUNDLE_IDENTIFIER).widget
 APP_GROUP_IDENTIFIER = group.$(APP_BUNDLE_IDENTIFIER).widgets
 DEVELOPMENT_TEAM = BBNKWP3S9G

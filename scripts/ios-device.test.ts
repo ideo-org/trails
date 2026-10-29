@@ -9,7 +9,7 @@ import {
 describe("isRecoverableLockError", () => {
 	test("recognizes the exact locked-device launch failure", () => {
 		const error = new Error(
-			"Unable to launch cc.trails.app because the device was not, or could not be, unlocked.",
+			"Unable to launch com.logos.trails because the device was not, or could not be, unlocked.",
 		);
 
 		expect(isRecoverableLockError(error)).toBe(true);

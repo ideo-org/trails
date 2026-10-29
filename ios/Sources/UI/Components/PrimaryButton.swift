@@ -1,8 +1,8 @@
 //
 //  PrimaryButton.swift
-//  MyApp
+//  Trails
 //
-//  Primary and secondary button styles for the app.
+//  Primary and secondary button styles matching the Trails design monograph.
 //
 
 import SwiftUI
@@ -14,18 +14,18 @@ struct PrimaryButtonStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(AppFonts.button)
-            .foregroundColor(.white)
+            .font(AppFonts.headlineSmall)
+            .foregroundColor(AppColors.onPrimary)
             .padding(.horizontal, 24)
-            .padding(.vertical, 15)
+            .frame(height: 52)
             .frame(maxWidth: .infinity)
             .background(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .fill(isEnabled ? AnyShapeStyle(AppColors.primaryGradient) : AnyShapeStyle(Color.gray.opacity(0.55)))
+                Capsule()
+                    .fill(isEnabled ? AnyShapeStyle(AppColors.forestGreen) : AnyShapeStyle(AppColors.outlineVariant.opacity(0.6)))
             )
-            .shadow(color: isEnabled ? AppColors.primary.opacity(0.28) : .clear, radius: 18, y: 8)
-            .scaleEffect(configuration.isPressed ? 0.965 : 1.0)
-            .opacity(configuration.isPressed ? 0.88 : 1.0)
+            .shadow(color: isEnabled ? AppColors.forestGreen.opacity(0.18) : .clear, radius: 10, y: 4)
+            .scaleEffect(configuration.isPressed ? 0.97 : 1.0)
+            .opacity(configuration.isPressed ? 0.9 : 1.0)
             .animation(.snappy(duration: 0.14), value: configuration.isPressed)
     }
 }
@@ -35,21 +35,21 @@ struct PrimaryButtonStyle: ButtonStyle {
 struct SecondaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(AppFonts.button)
-            .foregroundColor(AppColors.primary)
+            .font(AppFonts.headlineSmall)
+            .foregroundColor(AppColors.forestGreen)
             .padding(.horizontal, 24)
-            .padding(.vertical, 14)
+            .frame(height: 52)
             .frame(maxWidth: .infinity)
             .background(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .fill(AppColors.controlSurface)
+                Capsule()
+                    .fill(AppColors.elevatedCanvas)
                     .overlay {
-                        RoundedRectangle(cornerRadius: 18, style: .continuous)
-                            .stroke(AppColors.secondary.opacity(0.45), lineWidth: 1)
+                        Capsule()
+                            .stroke(AppColors.forestGreen.opacity(0.14), lineWidth: 1)
                     }
             )
-            .scaleEffect(configuration.isPressed ? 0.965 : 1.0)
-            .opacity(configuration.isPressed ? 0.8 : 1.0)
+            .scaleEffect(configuration.isPressed ? 0.97 : 1.0)
+            .opacity(configuration.isPressed ? 0.85 : 1.0)
             .animation(.snappy(duration: 0.14), value: configuration.isPressed)
     }
 }
@@ -59,8 +59,8 @@ struct SecondaryButtonStyle: ButtonStyle {
 struct TertiaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(AppFonts.button)
-            .foregroundColor(AppColors.accent)
+            .font(AppFonts.labelUI)
+            .foregroundColor(AppColors.deepInk)
             .opacity(configuration.isPressed ? 0.6 : 1.0)
             .animation(.snappy(duration: 0.12), value: configuration.isPressed)
     }

@@ -2,7 +2,12 @@
 //  OnboardingView.swift
 //  Trails
 //
-//  Scan-first onboarding for new Trails users.
+//  First-launch onboarding aligned with Trails PRD v0.1.0:
+//  - Living Heritage & Human Authorship (PRD Section 1 & 10.1)
+//  - Quiet curiosity, spatial memory, and checkpoints (PRD Section 2 & 9.3)
+//  - Private by default: captures stay locally on device (PRD Section 8.1 & 11.3)
+//  - Welcome and local identity setup (PRD Section 7.2, 8.1 & 9.1)
+//  - Warm limestone, forest green, terracotta, and brass palette (PRD Section 10.1 & DESIGN.md)
 //
 
 import SwiftUI
@@ -10,97 +15,61 @@ import SwiftUI
 struct OnboardingView: View {
     @Binding var isOnboardingDone: Bool
 
-    @State private var currentPage = 0
+    @AppStorage("localCreatorId") private var localCreatorId: String = ""
+    @AppStorage("localDisplayName") private var localDisplayName: String = ""
+    @AppStorage("localIntroduction") private var localIntroduction: String = ""
 
-    private let pages: [OnboardingPage] = [
-        OnboardingPage(
-            title: AppConfiguration.appName,
-            description: "A LiDAR-first scanner built for precise iPhone captures, local archives, and fast revisits.",
-            imageName: "viewfinder.rectangular",
-            imageColor: AppColors.secondary,
-            eyebrow: "PRO SPATIAL SCANNER"
-        ),
-        OnboardingPage(
-            title: "Paint every surface",
-            description: "Walk naturally, sweep each surface once, and add a quick second pass only where the cloud looks thin.",
-            imageName: "dot.viewfinder",
-            imageColor: AppColors.lidar,
-            eyebrow: "SCAN TECHNIQUE"
-        ),
-        OnboardingPage(
-            title: "Tune the live view",
-            description: "Use the center mixer to balance camera passthrough against the point cloud while keeping scan controls responsive.",
-            imageName: "slider.vertical.3",
-            imageColor: AppColors.accent,
-            eyebrow: "LIVE MIXER"
-        ),
-        OnboardingPage(
-            title: "Build a spatial archive",
-            description: "Save scans locally, revisit them in 3D, export PLY files, and share selected captures when you need to move data.",
-            imageName: "cube.transparent.fill",
-            imageColor: AppColors.primary,
-            eyebrow: "LIBRARY"
-        )
-    ]
+    @State private var currentPage = 0
+    @State private var enteredDisplayName: String = ""
+    @State private var enteredIntroduction: String = ""
+
+    private let totalPages = 4
 
     var body: some View {
         ZStack {
-            AppColors.scannerGradient
+            AppColors.canvas
                 .ignoresSafeArea()
 
-            VStack {
-                HStack {
-                    Text(AppConfiguration.appTagline.uppercased())
-                        .font(.system(size: 11, weight: .black, design: .rounded))
-                        .tracking(1.8)
-                        .foregroundStyle(AppColors.secondary)
+            VStack(spacing: 0) {
+                // Top Header Bar
+                headerBar
+                    .padding(.horizontal, 24)
+                    .padding(.top, 14)
+                    .padding(.bottom, 8)
 
-                    Spacer()
-
-                    Button("Skip") {
-                        completeOnboarding()
-                    }
-                    .font(.system(.subheadline, design: .rounded).weight(.semibold))
-                    .foregroundStyle(.white.opacity(0.72))
-                    .opacity(currentPage < pages.count - 1 ? 1 : 0)
-                    .allowsHitTesting(currentPage < pages.count - 1)
-                    .accessibilityIdentifier("onboarding.skip")
-                }
-                .padding(.horizontal, 24)
-                .padding(.top, 18)
-
+                // Paged Content
                 TabView(selection: $currentPage) {
-                    ForEach(Array(pages.enumerated()), id: \.offset) { index, page in
-                        OnboardingPageView(page: page)
-                            .tag(index)
-                    }
-                }
-                .tabViewStyle(PageTabViewStyle(indexDisplayMode: .always))
+                    // Page 0: Product Definition & Living Heritage
+                    introPage
+                        .tag(0)
 
-                VStack(spacing: 16) {
-                    if currentPage < pages.count - 1 {
-                        Button("Next") {
-                            Haptics.selection()
-                            withAnimation(.snappy(duration: 0.2)) {
-                                currentPage += 1
-                            }
-                        }
-                        .primaryStyle()
-                        .accessibilityIdentifier("onboarding.next")
-                    } else {
-                        Button("Start scanning") {
-                            completeOnboarding()
-                        }
-                        .primaryStyle()
-                        .accessibilityIdentifier("onboarding.startScanning")
-                    }
+                    // Page 1: Moments & Human Perspective
+                    momentsPage
+                        .tag(1)
 
-                    Text("Best on LiDAR-capable iPhone Pro and iPad Pro devices.")
-                        .font(.caption)
-                        .foregroundStyle(.white.opacity(0.52))
+                    // Page 2: Local & Private by Default
+                    privacyPage
+                        .tag(2)
+
+                    // Page 3: Local Identity Setup (PRD 8.1 & 9.1)
+                    identityPage
+                        .tag(3)
                 }
-                .padding(.horizontal, 28)
-                .padding(.bottom, 40)
+                .tabViewStyle(PageTabViewStyle(indexDisplayMode: .never))
+
+                // Bottom Controls & Indicators
+                bottomControls
+                    .padding(.horizontal, 24)
+                    .padding(.bottom, 28)
+            }
+        }
+        .onAppear {
+            initializeLocalCreatorId()
+            if !localDisplayName.isEmpty {
+                enteredDisplayName = localDisplayName
+            }
+            if !localIntroduction.isEmpty {
+                enteredIntroduction = localIntroduction
             }
         }
         .task {
@@ -108,76 +77,394 @@ struct OnboardingView: View {
         }
     }
 
-    private func completeOnboarding() {
-        Haptics.success()
-        Analytics.trackOnboardingStep(pages.count, stepName: "completed")
-        isOnboardingDone = true
-    }
-}
+    // MARK: - Header Bar
 
-// MARK: - Onboarding Page Model
-
-struct OnboardingPage {
-    let title: String
-    let description: String
-    let imageName: String
-    let imageColor: Color
-    let eyebrow: String
-
-    init(title: String, description: String, imageName: String, imageColor: Color = .primary, eyebrow: String) {
-        self.title = title
-        self.description = description
-        self.imageName = imageName
-        self.imageColor = imageColor
-        self.eyebrow = eyebrow
-    }
-}
-
-// MARK: - Onboarding Page View
-
-struct OnboardingPageView: View {
-    let page: OnboardingPage
-
-    var body: some View {
-        VStack(spacing: 30) {
-            Spacer()
-
-            ZStack {
+    private var headerBar: some View {
+        HStack {
+            HStack(spacing: 6) {
                 Circle()
-                    .stroke(page.imageColor.opacity(0.18), lineWidth: 1)
-                    .frame(width: 180, height: 180)
-                Circle()
-                    .fill(page.imageColor.opacity(0.09))
-                    .frame(width: 132, height: 132)
-                    .blur(radius: 1)
-                Image(systemName: page.imageName)
-                    .font(.system(size: 78, weight: .light))
-                    .foregroundStyle(page.imageColor)
-                    .shadow(color: page.imageColor.opacity(0.35), radius: 24)
+                    .fill(AppColors.terracotta)
+                    .frame(width: 6, height: 6)
+
+                Text("TRAILS · PRIVATE SCANS")
+                    .font(AppFonts.labelSpatial)
+                    .tracking(1.4)
+                    .foregroundColor(AppColors.forestGreen)
             }
 
+            Spacer()
+
+            if currentPage < totalPages - 1 {
+                Button("Skip") {
+                    completeOnboarding()
+                }
+                .font(AppFonts.headlineSmall)
+                .foregroundColor(AppColors.onSurfaceVariant)
+                .accessibilityIdentifier("onboarding.skip")
+            }
+        }
+    }
+
+    // MARK: - Page 0: Living Heritage
+
+    private var introPage: some View {
+        VStack(spacing: 28) {
+            Spacer()
+
+            // Visual Emblem
+            ZStack {
+                Circle()
+                    .stroke(AppColors.forestGreen.opacity(0.12), lineWidth: 1)
+                    .frame(width: 190, height: 190)
+
+                Circle()
+                    .fill(AppColors.surfaceContainerLow)
+                    .frame(width: 140, height: 140)
+
+                Image(systemName: "compass.drawing")
+                    .font(.system(size: 64, weight: .light))
+                    .foregroundColor(AppColors.forestGreen)
+
+                // Small terracotta trail node
+                Circle()
+                    .fill(AppColors.terracotta)
+                    .frame(width: 14, height: 14)
+                    .offset(x: 48, y: -48)
+            }
+
+            // Copy
             VStack(spacing: 14) {
-                Text(page.eyebrow)
-                    .font(.system(size: 11, weight: .black, design: .rounded))
-                    .tracking(1.7)
-                    .foregroundStyle(page.imageColor)
+                Text("LIVING HERITAGE")
+                    .font(AppFonts.labelSpatial)
+                    .tracking(2.0)
+                    .foregroundColor(AppColors.mutedBrass)
 
-                Text(page.title)
-                    .font(.system(size: 36, weight: .black, design: .rounded))
-                    .foregroundStyle(.white)
+                Text("A place’s story includes the people who passed through it.")
+                    .font(AppFonts.headlineLarge)
+                    .foregroundColor(AppColors.deepInk)
                     .multilineTextAlignment(.center)
+                    .lineSpacing(2)
+                    .padding(.horizontal, 16)
 
-                Text(page.description)
-                    .font(.system(.body, design: .rounded))
-                    .foregroundColor(.white.opacity(0.72))
+                Text("Trails lets you capture movement through a space and preserve the observations, memories, and moments you associate with it.")
+                    .font(AppFonts.bodyMedium)
+                    .foregroundColor(AppColors.onSurfaceVariant)
                     .multilineTextAlignment(.center)
                     .lineSpacing(3)
-                    .padding(.horizontal, 30)
+                    .padding(.horizontal, 24)
             }
 
             Spacer()
             Spacer()
         }
+        .padding(.horizontal, 20)
+    }
+
+    // MARK: - Page 1: Human Perspective & Moments
+
+    private var momentsPage: some View {
+        VStack(spacing: 28) {
+            Spacer()
+
+            // Visual Emblem
+            ZStack {
+                Circle()
+                    .stroke(AppColors.terracotta.opacity(0.18), lineWidth: 1)
+                    .frame(width: 190, height: 190)
+
+                Circle()
+                    .fill(AppColors.surfaceContainerLow)
+                    .frame(width: 140, height: 140)
+
+                Image(systemName: "mappin.and.ellipse")
+                    .font(.system(size: 62, weight: .light))
+                    .foregroundColor(AppColors.terracotta)
+
+                // Brass waypoint accent
+                Circle()
+                    .fill(AppColors.mutedBrass)
+                    .frame(width: 12, height: 12)
+                    .offset(x: -46, y: -38)
+            }
+
+            // Copy
+            VStack(spacing: 14) {
+                Text("HUMAN PERSPECTIVE")
+                    .font(AppFonts.labelSpatial)
+                    .tracking(2.0)
+                    .foregroundColor(AppColors.terracotta)
+
+                Text("Mark moments along your journey.")
+                    .font(AppFonts.headlineLarge)
+                    .foregroundColor(AppColors.deepInk)
+                    .multilineTextAlignment(.center)
+                    .lineSpacing(2)
+                    .padding(.horizontal, 16)
+
+                Text("Drop checkpoints at meaningful thresholds—architectural details, quiet reflections, or notes on air and light. An authored perspective, not just geometry.")
+                    .font(AppFonts.bodyMedium)
+                    .foregroundColor(AppColors.onSurfaceVariant)
+                    .multilineTextAlignment(.center)
+                    .lineSpacing(3)
+                    .padding(.horizontal, 24)
+            }
+
+            Spacer()
+            Spacer()
+        }
+        .padding(.horizontal, 20)
+    }
+
+    // MARK: - Page 2: Private by Default
+
+    private var privacyPage: some View {
+        VStack(spacing: 24) {
+            Spacer()
+
+            // Visual Emblem
+            ZStack {
+                Circle()
+                    .stroke(AppColors.forestGreen.opacity(0.12), lineWidth: 1)
+                    .frame(width: 180, height: 180)
+
+                Circle()
+                    .fill(AppColors.surfaceContainerLow)
+                    .frame(width: 130, height: 130)
+
+                Image(systemName: "lock.shield")
+                    .font(.system(size: 58, weight: .light))
+                    .foregroundColor(AppColors.forestGreen)
+            }
+
+            // Copy
+            VStack(spacing: 12) {
+                Text("PRIVATE BY DEFAULT")
+                    .font(AppFonts.labelSpatial)
+                    .tracking(2.0)
+                    .foregroundColor(AppColors.forestGreen)
+
+                Text("Your captures stay on this device.")
+                    .font(AppFonts.headlineLarge)
+                    .foregroundColor(AppColors.deepInk)
+                    .multilineTextAlignment(.center)
+
+                Text("No account, password, or cloud sync is required for your core workflow. Scans, paths, and notes are preserved locally in your hands.")
+                    .font(AppFonts.bodyMedium)
+                    .foregroundColor(AppColors.onSurfaceVariant)
+                    .multilineTextAlignment(.center)
+                    .lineSpacing(3)
+                    .padding(.horizontal, 20)
+            }
+
+            // Approved Security & Privacy Reassurance Card (PRD 11.3)
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 10) {
+                    Image(systemName: "checkmark.shield.fill")
+                        .foregroundColor(AppColors.forestGreen)
+                    Text("Saved privately on this device.")
+                        .font(AppFonts.headlineSmall)
+                        .foregroundColor(AppColors.deepInk)
+                }
+
+                Text("Trails does not upload this capture. Captures stay on your device and are not automatically backed up.")
+                    .font(AppFonts.bodySmall)
+                    .foregroundColor(AppColors.onSurfaceVariant)
+                    .lineSpacing(2)
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(AppColors.pureWhite)
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(AppColors.outlineVariant.opacity(0.5), lineWidth: 1)
+            )
+            .shadow(color: Color.black.opacity(0.03), radius: 6, x: 0, y: 2)
+            .padding(.horizontal, 16)
+
+            Spacer()
+            Spacer()
+        }
+        .padding(.horizontal, 20)
+    }
+
+    // MARK: - Page 3: Local Identity Setup (PRD Section 8.1 & 9.1)
+
+    private var identityPage: some View {
+        ScrollView(.vertical, showsIndicators: false) {
+            VStack(spacing: 20) {
+                Spacer(minLength: 16)
+
+                // Icon
+                Circle()
+                    .fill(AppColors.surfaceContainerLow)
+                    .frame(width: 80, height: 80)
+                    .overlay(
+                        Image(systemName: "person.crop.circle.badge.checkmark")
+                            .font(.system(size: 40, weight: .light))
+                            .foregroundColor(AppColors.terracotta)
+                    )
+
+                // Headline
+                VStack(spacing: 10) {
+                    Text("LOCAL IDENTITY")
+                        .font(AppFonts.labelSpatial)
+                        .tracking(2.0)
+                        .foregroundColor(AppColors.mutedBrass)
+
+                    Text("Author your spatial journey.")
+                        .font(AppFonts.headlineLarge)
+                        .foregroundColor(AppColors.deepInk)
+                        .multilineTextAlignment(.center)
+
+                    Text("Set a display name to attribute your trails and moments. No password or email needed.")
+                        .font(AppFonts.bodyMedium)
+                        .foregroundColor(AppColors.onSurfaceVariant)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 16)
+                }
+
+                // Input Card
+                VStack(alignment: .leading, spacing: 14) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("DISPLAY NAME")
+                            .font(AppFonts.labelSpatial)
+                            .foregroundColor(AppColors.outline)
+
+                        TextField("e.g., Sarah Chen (or leave blank)", text: $enteredDisplayName)
+                            .font(AppFonts.bodyLarge)
+                            .foregroundColor(AppColors.deepInk)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 12)
+                            .background(AppColors.surfaceContainerLow)
+                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                    .stroke(AppColors.outlineVariant.opacity(0.5), lineWidth: 1)
+                            )
+                    }
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("CONTEXT / FOCUS (OPTIONAL)")
+                            .font(AppFonts.labelSpatial)
+                            .foregroundColor(AppColors.outline)
+
+                        TextField("e.g., Resident, Architect, Explorer", text: $enteredIntroduction)
+                            .font(AppFonts.bodyMedium)
+                            .foregroundColor(AppColors.deepInk)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 12)
+                            .background(AppColors.surfaceContainerLow)
+                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                    .stroke(AppColors.outlineVariant.opacity(0.5), lineWidth: 1)
+                            )
+                    }
+
+                    HStack(spacing: 8) {
+                        Image(systemName: "info.circle")
+                            .foregroundColor(AppColors.mutedBrass)
+                            .font(.system(size: 13))
+
+                        Text("Default attribution: “A trail by you” until a name is supplied.")
+                            .font(AppFonts.labelSpatial)
+                            .foregroundColor(AppColors.outline)
+                    }
+                    .padding(.top, 2)
+                }
+                .padding(20)
+                .background(AppColors.pureWhite)
+                .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .stroke(AppColors.outlineVariant.opacity(0.5), lineWidth: 1)
+                )
+                .shadow(color: Color.black.opacity(0.03), radius: 8, x: 0, y: 3)
+                .padding(.horizontal, 16)
+
+                Spacer(minLength: 16)
+            }
+        }
+    }
+
+    // MARK: - Bottom Controls
+
+    private var bottomControls: some View {
+        VStack(spacing: 16) {
+            // Page Indicator Dots
+            HStack(spacing: 8) {
+                ForEach(0..<totalPages, id: \.self) { index in
+                    if index == currentPage {
+                        Capsule()
+                            .fill(AppColors.forestGreen)
+                            .frame(width: 24, height: 6)
+                            .animation(.spring(response: 0.3, dampingFraction: 0.7), value: currentPage)
+                    } else {
+                        Circle()
+                            .fill(AppColors.outlineVariant.opacity(0.5))
+                            .frame(width: 6, height: 6)
+                    }
+                }
+            }
+            .padding(.vertical, 4)
+
+            // Action Buttons
+            if currentPage < totalPages - 1 {
+                Button("Continue") {
+                    Haptics.selection()
+                    withAnimation(.snappy(duration: 0.25)) {
+                        currentPage += 1
+                    }
+                }
+                .buttonStyle(PrimaryButtonStyle())
+                .accessibilityIdentifier("onboarding.next")
+            } else {
+                VStack(spacing: 10) {
+                    Button("Open My Trails") {
+                        saveIdentityAndComplete()
+                    }
+                    .buttonStyle(PrimaryButtonStyle())
+                    .accessibilityIdentifier("onboarding.startScanning")
+
+                    Button("Skip and use default identity") {
+                        completeOnboarding()
+                    }
+                    .buttonStyle(SecondaryButtonStyle())
+                }
+            }
+
+            // Contextual Guidance Note (PRD 8.1 & 10.3)
+            Text("LiDAR-ready on iPhone Pro & iPad Pro. Camera permission requested contextually.")
+                .font(AppFonts.labelSpatial)
+                .foregroundColor(AppColors.outline)
+                .multilineTextAlignment(.center)
+        }
+    }
+
+    // MARK: - Identity & Completion Logic
+
+    private func initializeLocalCreatorId() {
+        if localCreatorId.isEmpty {
+            localCreatorId = UUID().uuidString
+        }
+    }
+
+    private func saveIdentityAndComplete() {
+        let trimmedName = enteredDisplayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedIntro = enteredIntroduction.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        localDisplayName = trimmedName
+        localIntroduction = trimmedIntro
+
+        completeOnboarding()
+    }
+
+    private func completeOnboarding() {
+        initializeLocalCreatorId()
+        Haptics.success()
+        Analytics.trackOnboardingStep(totalPages, stepName: "completed")
+        isOnboardingDone = true
     }
 }
 

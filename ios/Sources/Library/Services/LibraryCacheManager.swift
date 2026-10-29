@@ -11,9 +11,9 @@ class LibraryCacheManager {
 
     static let shared = LibraryCacheManager()
 
-    private let indexCacheKey = "cc.trails.app.library.index"
-    private let indexLastUpdatedKey = "cc.trails.app.library.indexLastUpdated"
-    private let contentCachePrefix = "cc.trails.app.library.content."
+    private let indexCacheKey = "com.logos.trails.library.index"
+    private let indexLastUpdatedKey = "com.logos.trails.library.indexLastUpdated"
+    private let contentCachePrefix = "com.logos.trails.library.content."
     private let defaults = UserDefaults.standard
 
     private init() {}

@@ -16,7 +16,7 @@ struct WidgetHelper {
     // 1. Main app target -> Signing & Capabilities -> App Groups
     // 2. Widget extension target -> Signing & Capabilities -> App Groups
     // Format: group.<bundle-id>.widgets
-    private static let appGroupIdentifier = "group.cc.trails.app.widgets"
+    private static let appGroupIdentifier = "group.com.logos.trails.widgets"
 
     private static let streakDataKey = "widgetStreakData"
 

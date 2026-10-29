@@ -10,6 +10,7 @@ import simd
 struct RoomLayoutView: View {
     let capturedRoom: CapturedRoom?
     let footsteps: [SIMD3<Float>]
+    var moments: [SpatialMoment] = []
     
     var body: some View {
         GeometryReader { geometry in
@@ -45,6 +46,21 @@ struct RoomLayoutView: View {
                     
                     // Draw Footsteps (Dots style)
                     drawFootsteps(footsteps, scale: scale, offset: offset)
+
+                    // Draw Moments (Numbered Terracotta Pins - PRD §8.3 & §9.3)
+                    ForEach(moments) { moment in
+                        let pt = projectTo2D(SIMD3<Float>(Float(moment.positionX), 0, Float(moment.positionY)), scale: scale, offset: offset)
+                        ZStack {
+                            Circle()
+                                .fill(AppColors.terracotta)
+                                .frame(width: 18, height: 18)
+                                .shadow(color: Color.black.opacity(0.4), radius: 3, x: 0, y: 1)
+                            Text("\(moment.index)")
+                                .font(.system(size: 9, weight: .black, design: .rounded))
+                                .foregroundColor(.white)
+                        }
+                        .position(pt)
+                    }
                 }
             }
         }
