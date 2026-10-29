@@ -652,6 +652,7 @@ struct ScannerView: View {
         let durSeconds = Int(duration) % 60
         let durString = String(format: "%d:%02d", durMinutes, durSeconds)
         let pos = scannerEngine.lastRecordedPosition ?? SIMD3<Float>(0, 0, 0)
+        let heading = scannerEngine.currentYawDegrees != 0 ? scannerEngine.currentYawDegrees : locationManager.currentHeading
         let idx = recordedMoments.count + 1
 
         let moment = SpatialMoment(
@@ -670,6 +671,7 @@ struct ScannerView: View {
             positionX: Double(pos.x),
             positionY: Double(pos.z),
             positionZ: Double(pos.y),
+            headingDegrees: heading,
             placementStatus: "placed",
             createdAt: Date()
         )
@@ -683,6 +685,7 @@ struct ScannerView: View {
     private func handleSavedPhotoWaypoint(image: UIImage, fileURL: URL, thumbURL: URL) {
         let id = UUID().uuidString
         let pos = scannerEngine.lastRecordedPosition ?? SIMD3<Float>(0, 0, 0)
+        let heading = scannerEngine.currentYawDegrees != 0 ? scannerEngine.currentYawDegrees : locationManager.currentHeading
         let idx = recordedMoments.count + 1
 
         let moment = SpatialMoment(
@@ -699,6 +702,7 @@ struct ScannerView: View {
             positionX: Double(pos.x),
             positionY: Double(pos.z),
             positionZ: Double(pos.y),
+            headingDegrees: heading,
             placementStatus: "placed",
             createdAt: Date()
         )
@@ -715,6 +719,7 @@ struct ScannerView: View {
         let durSeconds = Int(duration) % 60
         let durString = String(format: "%d:%02d", durMinutes, durSeconds)
         let pos = scannerEngine.lastRecordedPosition ?? SIMD3<Float>(0, 0, 0)
+        let heading = scannerEngine.currentYawDegrees != 0 ? scannerEngine.currentYawDegrees : locationManager.currentHeading
         let idx = recordedMoments.count + 1
 
         let moment = SpatialMoment(
@@ -732,6 +737,7 @@ struct ScannerView: View {
             positionX: Double(pos.x),
             positionY: Double(pos.z),
             positionZ: Double(pos.y),
+            headingDegrees: heading,
             placementStatus: "placed",
             createdAt: Date()
         )
@@ -746,6 +752,7 @@ struct ScannerView: View {
         let idx = recordedMoments.count + 1
         let safeTitle = title.trimmingCharacters(in: .whitespaces).isEmpty ? "Stop \(idx) · Field Note" : title
         let pos = scannerEngine.lastRecordedPosition ?? SIMD3<Float>(0, 0, 0)
+        let heading = scannerEngine.currentYawDegrees != 0 ? scannerEngine.currentYawDegrees : locationManager.currentHeading
 
         let moment = SpatialMoment(
             id: id,
@@ -759,6 +766,7 @@ struct ScannerView: View {
             positionX: Double(pos.x),
             positionY: Double(pos.z),
             positionZ: Double(pos.y),
+            headingDegrees: heading,
             placementStatus: "placed",
             createdAt: Date()
         )
@@ -873,6 +881,25 @@ struct ScannerView: View {
         )
 
         dataStore.saveFinalTrail(trail: finalTrail, footsteps: scannerEngine.footsteps)
+
+        // PRD v0.3.1 §6 & §7: Export and persist ARWorldMap & ReferenceFrame
+        scannerEngine.exportWorldMap { worldMapData in
+            if let data = worldMapData {
+                TrailPackageStore.shared.saveWorldMapData(data, for: finalTrail.id)
+                let refFrame = ReferenceFrame(
+                    id: UUID().uuidString,
+                    sourceSessionId: finalTrail.id,
+                    units: "meters",
+                    axisConvention: "rightHanded_YUp_ZBack",
+                    worldAlignmentConfiguration: "gravityAndHeading",
+                    createdAt: Date(),
+                    positioningMethod: "arWorldMap",
+                    alignmentAssetReferences: ["spatial/worldmap.arworldmap"]
+                )
+                TrailPackageStore.shared.saveReferenceFrame(refFrame, for: finalTrail.id)
+            }
+        }
+
         teardownTrailSession()
         dataStore.reloadFromDisk()
         dismiss()

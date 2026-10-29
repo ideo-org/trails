@@ -6,6 +6,7 @@ import Combine
 final class TrailsLocationManager: NSObject, ObservableObject {
     @Published private(set) var authorizationStatus: CLAuthorizationStatus
     @Published private(set) var currentLocation: CLLocation?
+    @Published private(set) var currentHeading: Double?
 
     private let manager = CLLocationManager()
 
@@ -14,6 +15,7 @@ final class TrailsLocationManager: NSObject, ObservableObject {
         super.init()
         manager.delegate = self
         manager.desiredAccuracy = kCLLocationAccuracyBest
+        manager.headingFilter = 3.0
     }
 
     var statusDescription: String {
@@ -35,6 +37,9 @@ final class TrailsLocationManager: NSObject, ObservableObject {
             manager.requestWhenInUseAuthorization()
         case .authorizedAlways, .authorizedWhenInUse:
             manager.startUpdatingLocation()
+            if CLLocationManager.headingAvailable() {
+                manager.startUpdatingHeading()
+            }
         case .denied, .restricted:
             break
         @unknown default:
@@ -49,6 +54,9 @@ extension TrailsLocationManager: CLLocationManagerDelegate {
             authorizationStatus = manager.authorizationStatus
             if authorizationStatus == .authorizedAlways || authorizationStatus == .authorizedWhenInUse {
                 manager.startUpdatingLocation()
+                if CLLocationManager.headingAvailable() {
+                    manager.startUpdatingHeading()
+                }
             }
         }
     }
@@ -56,6 +64,13 @@ extension TrailsLocationManager: CLLocationManagerDelegate {
     nonisolated func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         Task { @MainActor in
             currentLocation = locations.last
+        }
+    }
+
+    nonisolated func locationManager(_ manager: CLLocationManager, didUpdateHeading newHeading: CLHeading) {
+        Task { @MainActor in
+            let heading = newHeading.trueHeading >= 0 ? newHeading.trueHeading : newHeading.magneticHeading
+            currentHeading = heading
         }
     }
 }

@@ -273,30 +273,34 @@ public struct MyTrailsView: View {
                 selectedTrailForRevisit = hero
             } label: {
                 VStack(alignment: .leading, spacing: 0) {
-                    // Image / Cover Bed
+                    // Image / Cover Bed: Authentic media or architectural cartographic header
+                    let heroMedia = hero.moments.filter { m in
+                        ((m.hasPhoto || m.mediaType == "photo") && m.resolvedPhotoURL(trailId: hero.id) != nil)
+                        || ((m.hasVideo || m.mediaType == "video") && (m.resolvedVideoURL(trailId: hero.id) != nil || m.resolvedVideoThumbnailURL(trailId: hero.id) != nil))
+                    }
+
                     ZStack(alignment: .bottomLeading) {
-                        if let firstPhoto = hero.moments.first(where: { $0.hasPhoto }),
-                           let photoURL = firstPhoto.resolvedPhotoURL(trailId: hero.id),
-                           let uiImage = UIImage(contentsOfFile: photoURL.path) {
-                            Image(uiImage: uiImage)
-                                .resizable()
-                                .scaledToFill()
-                                .frame(height: 240)
-                                .clipped()
-                        } else if let assetName = hero.coverImageName {
-                            Image(assetName)
-                                .resizable()
-                                .scaledToFill()
-                                .frame(height: 240)
-                                .clipped()
-                        } else {
-                            ZStack {
-                                AppColors.primary
-                                Image(systemName: "mountain.2.fill")
-                                    .font(.system(size: 48))
-                                    .foregroundColor(AppColors.mutedBrass.opacity(0.6))
+                        if let first = heroMedia.first {
+                            if first.hasVideo || first.mediaType == "video",
+                               let thumbURL = first.resolvedVideoThumbnailURL(trailId: hero.id),
+                               let uiImage = UIImage(contentsOfFile: thumbURL.path) {
+                                Image(uiImage: uiImage)
+                                    .resizable()
+                                    .scaledToFill()
+                                    .frame(height: 240)
+                                    .clipped()
+                            } else if let photoURL = first.resolvedPhotoURL(trailId: hero.id),
+                                      let uiImage = UIImage(contentsOfFile: photoURL.path) {
+                                Image(uiImage: uiImage)
+                                    .resizable()
+                                    .scaledToFill()
+                                    .frame(height: 240)
+                                    .clipped()
+                            } else {
+                                cartographicHeroHeader(for: hero)
                             }
-                            .frame(height: 240)
+                        } else {
+                            cartographicHeroHeader(for: hero)
                         }
 
                         // Dark gradient scrim
@@ -323,6 +327,20 @@ public struct MyTrailsView: View {
                                 .clipShape(Capsule())
 
                                 Spacer()
+
+                                if heroMedia.count > 1 {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "photo.stack")
+                                            .font(.system(size: 11))
+                                        Text("\(heroMedia.count) Moments")
+                                            .font(AppFonts.labelSpatial)
+                                    }
+                                    .foregroundColor(AppColors.pureWhite)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 4)
+                                    .background(Color.black.opacity(0.5))
+                                    .clipShape(Capsule())
+                                }
                             }
                             .padding(16)
                             Spacer()
@@ -408,6 +426,28 @@ public struct MyTrailsView: View {
             }
             .buttonStyle(PlainButtonStyle())
         }
+    }
+
+    private func cartographicHeroHeader(for trail: TrailDetail) -> some View {
+        ZStack {
+            LinearGradient(
+                colors: [AppColors.primary, AppColors.forestGreen],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+
+            VStack(spacing: 8) {
+                Image(systemName: "point.topleft.down.to.point.bottomright.curvepath")
+                    .font(.system(size: 34))
+                    .foregroundColor(AppColors.secondary.opacity(0.9))
+
+                Text("\(trail.distanceMeters)m Spatial Footprint · \(trail.floorCode)")
+                    .font(AppFonts.labelSpatial)
+                    .foregroundColor(AppColors.pureWhite.opacity(0.75))
+                    .tracking(1.0)
+            }
+        }
+        .frame(height: 240)
     }
 
     // MARK: - Earlier Trails Section
@@ -898,12 +938,25 @@ public struct MyTrailsView: View {
                 selectedTrailForRevisit = sample
             } label: {
                 HStack(spacing: 14) {
-                    Image(sample.coverImageName ?? "DhunHaveliEvening")
-                        .resizable()
-                        .scaledToFill()
+                    if let firstPhoto = sample.moments.first(where: { $0.hasPhoto }),
+                       let photoURL = firstPhoto.resolvedPhotoURL(trailId: sample.id),
+                       let uiImage = UIImage(contentsOfFile: photoURL.path) {
+                        Image(uiImage: uiImage)
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: 64, height: 64)
+                            .clipped()
+                            .cornerRadius(12)
+                    } else {
+                        ZStack {
+                            AppColors.surfaceContainerHigh
+                            Image(systemName: "doc.text.image")
+                                .font(.system(size: 24))
+                                .foregroundColor(AppColors.secondary)
+                        }
                         .frame(width: 64, height: 64)
-                        .clipped()
                         .cornerRadius(12)
+                    }
 
                     VStack(alignment: .leading, spacing: 3) {
                         Text(sample.title)

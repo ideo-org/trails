@@ -18,7 +18,11 @@ struct RoomLayoutView: View {
     // Live Companion & Trail Follower Support
     var liveFollowerFootsteps: [SIMD3<Float>] = []
     var liveFollowerPosition: SIMD3<Float>? = nil
+    var liveFollowerHeadingDegrees: Double? = nil
     var activeCheckpointIndex: Int? = nil
+    var visitedCheckpointIds: Set<String> = []
+    var isReferenceDashed: Bool = false
+    var referenceColor: Color = AppColors.terracotta
 
     var body: some View {
         GeometryReader { geometry in
@@ -70,8 +74,8 @@ struct RoomLayoutView: View {
                     .padding(24)
                 }
 
-                // Continuous Walking Vector (Terracotta recorded path)
-                drawPathVector(footsteps, scale: scale, offset: offset, color: AppColors.terracotta)
+                // Continuous Walking Vector (Reference path)
+                drawPathVector(footsteps, scale: scale, offset: offset, color: referenceColor, isDashed: isReferenceDashed)
 
                 // Footstep nodes
                 drawFootstepNodes(footsteps, scale: scale, offset: offset)
@@ -85,46 +89,80 @@ struct RoomLayoutView: View {
                 ForEach(moments) { moment in
                     let pt = projectTo2D(SIMD3<Float>(Float(moment.positionX), 0, Float(moment.positionY)), scale: scale, offset: offset)
                     let isActive = (moment.index == activeCheckpointIndex)
+                    let isVisited = visitedCheckpointIds.contains(moment.id)
 
                     ZStack {
                         if isActive {
                             Circle()
-                                .stroke(Color(hex: "#00D4FF"), lineWidth: 2)
+                                .stroke(Color(hex: "#00E5FF"), lineWidth: 2)
                                 .frame(width: 36, height: 36)
                         }
 
                         Circle()
-                            .fill(isActive ? Color(hex: "#00D4FF").opacity(0.35) : AppColors.mutedBrass.opacity(0.3))
+                            .fill(isVisited ? Color.green.opacity(0.3) : (isActive ? Color(hex: "#00E5FF").opacity(0.35) : AppColors.mutedBrass.opacity(0.3)))
                             .frame(width: 26, height: 26)
 
                         Circle()
-                            .fill(isActive ? Color(hex: "#00D4FF") : AppColors.terracotta)
+                            .fill(isVisited ? Color.green : (isActive ? Color(hex: "#00E5FF") : AppColors.terracotta))
                             .frame(width: 18, height: 18)
                             .shadow(color: Color.black.opacity(0.5), radius: 3, x: 0, y: 1)
 
-                        Text("\(moment.index)")
-                            .font(.system(size: 9, weight: .black, design: .rounded))
-                            .foregroundColor(.white)
+                        if isVisited {
+                            Image(systemName: "checkmark")
+                                .font(.system(size: 9, weight: .bold))
+                                .foregroundColor(.white)
+                        } else {
+                            Text("\(moment.index)")
+                                .font(.system(size: 9, weight: .black, design: .rounded))
+                                .foregroundColor(.white)
+                        }
                     }
                     .position(pt)
                 }
 
-                // Live Follower Current Position Beacon
+                // Live Follower Current Position Beacon with Compass Heading
                 if let livePos = liveFollowerPosition {
                     let livePt = projectTo2D(livePos, scale: scale, offset: offset)
                     ZStack {
+                        // Directional cone when heading is available
+                        if let heading = liveFollowerHeadingDegrees {
+                            // Beam pointing in facing direction
+                            Path { path in
+                                path.move(to: CGPoint(x: 20, y: 20))
+                                path.addLine(to: CGPoint(x: 8, y: -16))
+                                path.addLine(to: CGPoint(x: 32, y: -16))
+                                path.closeSubpath()
+                            }
+                            .fill(
+                                LinearGradient(
+                                    colors: [Color(hex: "#00E5FF").opacity(0.35), Color.clear],
+                                    startPoint: .bottom,
+                                    endPoint: .top
+                                )
+                            )
+                            .frame(width: 40, height: 40)
+                            .rotationEffect(Angle(degrees: heading))
+
+                            // Small compass chevron pointing forward
+                            Image(systemName: "arrowtriangle.up.fill")
+                                .font(.system(size: 10))
+                                .foregroundColor(Color(hex: "#00E5FF"))
+                                .offset(y: -18)
+                                .rotationEffect(Angle(degrees: heading))
+                        }
+
                         Circle()
-                            .fill(Color(hex: "#00D4FF").opacity(0.25))
+                            .fill(Color(hex: "#00E5FF").opacity(0.25))
                             .frame(width: 38, height: 38)
 
                         Circle()
-                            .stroke(Color(hex: "#00D4FF"), lineWidth: 2)
+                            .stroke(Color(hex: "#00E5FF"), lineWidth: 2)
                             .frame(width: 24, height: 24)
 
                         Circle()
-                            .fill(Color(hex: "#00D4FF"))
+                            .fill(Color(hex: "#00E5FF"))
                             .frame(width: 12, height: 12)
-                            .shadow(color: Color(hex: "#00D4FF").opacity(0.8), radius: 6)
+                            .shadow(color: Color(hex: "#00E5FF").opacity(0.8), radius: 6)
                     }
                     .position(livePt)
                 }
@@ -214,7 +252,7 @@ struct RoomLayoutView: View {
             .position(center)
     }
 
-    private func drawPathVector(_ footsteps: [SIMD3<Float>], scale: CGFloat, offset: CGSize, color: Color = AppColors.terracotta) -> some View {
+    private func drawPathVector(_ footsteps: [SIMD3<Float>], scale: CGFloat, offset: CGSize, color: Color = AppColors.terracotta, isDashed: Bool = false) -> some View {
         Path { path in
             guard footsteps.count > 1 else { return }
             let points = footsteps.map { projectTo2D($0, scale: scale, offset: offset) }
@@ -225,7 +263,7 @@ struct RoomLayoutView: View {
         }
         .stroke(
             color,
-            style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round)
+            style: StrokeStyle(lineWidth: isDashed ? 3 : 3.5, lineCap: .round, lineJoin: .round, dash: isDashed ? [6, 4] : [])
         )
     }
 

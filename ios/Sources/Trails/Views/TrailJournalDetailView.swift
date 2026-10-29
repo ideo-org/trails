@@ -19,6 +19,7 @@ public struct TrailJournalDetailView: View {
 
     // Revisit & Presentation Replay
     @State private var showingRevisitReplay: Bool = false
+    @State private var showingRetraceView: Bool = false
 
     // Media Viewer Sheets
     @State private var selectedPhotoURL: URL?
@@ -33,6 +34,9 @@ public struct TrailJournalDetailView: View {
     @State private var showingActionSheet: Bool = false
     @State private var showingEditSheet: Bool = false
     @State private var showingDeleteAlert: Bool = false
+
+    // Photo & Video Memories Carousel
+    @State private var currentMediaIndex: Int = 0
 
     // Edit fields
     @State private var editTitle: String = ""
@@ -151,6 +155,10 @@ public struct TrailJournalDetailView: View {
                         dataStore.activeTrail = trail
                     }
             }
+            // Fullscreen Retrace Live Companion
+            .fullScreenCover(isPresented: $showingRetraceView) {
+                RetraceTrailView(referenceTrail: trail)
+            }
             // Photo Viewer Sheet
             .sheet(item: Binding<IdentifiableURL?>(
                 get: { selectedPhotoURL.map { IdentifiableURL(url: $0) } },
@@ -208,40 +216,130 @@ public struct TrailJournalDetailView: View {
         }
     }
 
-    // MARK: - 1. Hero Cover Card
+    // MARK: - 1. Hero Cover Card: Photo Memories & Video Carousel
+
+    private var mediaMoments: [SpatialMoment] {
+        trail.moments.filter { m in
+            ((m.hasPhoto || m.mediaType == "photo") && m.resolvedPhotoURL(trailId: trail.id) != nil)
+            || ((m.hasVideo || m.mediaType == "video") && (m.resolvedVideoURL(trailId: trail.id) != nil || m.resolvedVideoThumbnailURL(trailId: trail.id) != nil))
+        }
+    }
 
     private var heroCoverCard: some View {
         ZStack(alignment: .bottomLeading) {
-            // Background Image
-            if let firstPhoto = trail.moments.first(where: { $0.hasPhoto }),
-               let photoURL = firstPhoto.resolvedPhotoURL(trailId: trail.id),
-               let uiImage = UIImage(contentsOfFile: photoURL.path) {
-                Image(uiImage: uiImage)
-                    .resizable()
-                    .scaledToFill()
-                    .frame(height: 260)
-                    .clipped()
-            } else if let assetName = trail.coverImageName, !assetName.isEmpty {
-                Image(assetName)
-                    .resizable()
-                    .scaledToFill()
-                    .frame(height: 260)
-                    .clipped()
+            if !mediaMoments.isEmpty {
+                // Interactive Photo & Video Memories Carousel
+                TabView(selection: $currentMediaIndex) {
+                    ForEach(Array(mediaMoments.enumerated()), id: \.element.id) { index, moment in
+                        ZStack(alignment: .center) {
+                            if moment.hasVideo || moment.mediaType == "video" {
+                                if let thumbURL = moment.resolvedVideoThumbnailURL(trailId: trail.id),
+                                   let uiImage = UIImage(contentsOfFile: thumbURL.path) {
+                                    Image(uiImage: uiImage)
+                                        .resizable()
+                                        .scaledToFill()
+                                        .frame(height: 260)
+                                        .clipped()
+                                } else {
+                                    ZStack {
+                                        AppColors.primary
+                                        Image(systemName: "video.fill")
+                                            .font(.system(size: 40))
+                                            .foregroundColor(AppColors.secondary.opacity(0.8))
+                                    }
+                                    .frame(height: 260)
+                                }
+
+                                // Play button overlay
+                                Circle()
+                                    .fill(AppColors.pureWhite.opacity(0.88))
+                                    .frame(width: 44, height: 44)
+                                    .overlay(
+                                        Image(systemName: "play.fill")
+                                            .font(.system(size: 16, weight: .bold))
+                                            .foregroundColor(AppColors.primary)
+                                            .offset(x: 1.5)
+                                    )
+                                    .shadow(color: Color.black.opacity(0.25), radius: 6)
+                            } else {
+                                if let photoURL = moment.resolvedPhotoURL(trailId: trail.id),
+                                   let uiImage = UIImage(contentsOfFile: photoURL.path) {
+                                    Image(uiImage: uiImage)
+                                        .resizable()
+                                        .scaledToFill()
+                                        .frame(height: 260)
+                                        .clipped()
+                                } else {
+                                    ZStack {
+                                        AppColors.primary
+                                        Image(systemName: "camera.fill")
+                                            .font(.system(size: 40))
+                                            .foregroundColor(AppColors.secondary.opacity(0.8))
+                                    }
+                                    .frame(height: 260)
+                                }
+                            }
+                        }
+                        .tag(index)
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            Haptics.selection()
+                            if moment.hasVideo || moment.mediaType == "video" {
+                                if let videoURL = moment.resolvedVideoURL(trailId: trail.id) {
+                                    selectedVideoURL = videoURL
+                                }
+                            } else if let photoURL = moment.resolvedPhotoURL(trailId: trail.id) {
+                                selectedPhotoURL = photoURL
+                                selectedPhotoTitle = moment.title
+                            }
+                        }
+                    }
+                }
+                .tabViewStyle(PageTabViewStyle(indexDisplayMode: .never))
+                .frame(height: 260)
             } else {
+                // Authentic Cartographic Spatial Header (Zero fake stock photos)
                 ZStack {
                     LinearGradient(
                         colors: [AppColors.primary, AppColors.forestGreen],
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
                     )
-                    VStack(spacing: 8) {
-                        Image(systemName: "map.fill")
-                            .font(.system(size: 38))
-                            .foregroundColor(AppColors.secondary)
-                        Text(trail.placeName)
-                            .font(AppFonts.labelSpatial)
-                            .foregroundColor(.white.opacity(0.8))
+
+                    VStack(spacing: 10) {
+                        HStack(spacing: 12) {
+                            ZStack {
+                                Circle()
+                                    .fill(AppColors.secondary.opacity(0.18))
+                                    .frame(width: 48, height: 48)
+                                Image(systemName: "point.topleft.down.to.point.bottomright.curvepath")
+                                    .font(.system(size: 22))
+                                    .foregroundColor(AppColors.secondary)
+                            }
+
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(trail.placeName)
+                                    .font(AppFonts.headlineLarge)
+                                    .foregroundColor(AppColors.pureWhite)
+                                Text("Spatial Footprint · \(trail.floorCode)")
+                                    .font(AppFonts.labelSpatial)
+                                    .foregroundColor(AppColors.secondary)
+                            }
+                        }
+
+                        HStack(spacing: 14) {
+                            Label("\(trail.distanceMeters)m Path", systemImage: "figure.walk")
+                            Label("\(trail.moments.count) Stops", systemImage: "mappin.and.ellipse")
+                            Label(trail.createdAt.formatted(date: .abbreviated, time: .omitted), systemImage: "calendar")
+                        }
+                        .font(AppFonts.caption)
+                        .foregroundColor(AppColors.pureWhite.opacity(0.9))
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 7)
+                        .background(Color.white.opacity(0.12))
+                        .clipShape(Capsule())
                     }
+                    .padding(20)
                 }
                 .frame(height: 260)
             }
@@ -252,8 +350,9 @@ public struct TrailJournalDetailView: View {
                 startPoint: .top,
                 endPoint: .bottom
             )
+            .allowsHitTesting(false)
 
-            // Top Status Chip
+            // Top Status & Counter Strip
             VStack {
                 HStack {
                     HStack(spacing: 6) {
@@ -272,26 +371,76 @@ public struct TrailJournalDetailView: View {
                     .shadow(color: Color.black.opacity(0.08), radius: 4, x: 0, y: 2)
 
                     Spacer()
+
+                    if mediaMoments.count > 1 {
+                        HStack(spacing: 4) {
+                            Image(systemName: "photo.stack")
+                                .font(.system(size: 11))
+                            Text("\(currentMediaIndex + 1) / \(mediaMoments.count)")
+                                .font(AppFonts.labelSpatial)
+                        }
+                        .foregroundColor(AppColors.pureWhite)
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 4)
+                        .background(Color.black.opacity(0.55))
+                        .clipShape(Capsule())
+                    }
                 }
                 .padding(14)
 
                 Spacer()
 
                 // Bottom Metadata Strip
-                HStack {
-                    Text("ID · \(trail.id.prefix(8).uppercased())")
-                        .font(AppFonts.labelSpatial)
-                        .foregroundColor(.white.opacity(0.9))
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(Color.black.opacity(0.45))
-                        .clipShape(Capsule())
+                HStack(alignment: .bottom) {
+                    if !mediaMoments.isEmpty, currentMediaIndex < mediaMoments.count {
+                        let activeMoment = mediaMoments[currentMediaIndex]
+                        VStack(alignment: .leading, spacing: 2) {
+                            HStack(spacing: 5) {
+                                Image(systemName: activeMoment.hasVideo || activeMoment.mediaType == "video" ? "video.fill" : "camera.fill")
+                                    .font(.system(size: 11))
+                                Text("Stop \(activeMoment.index) · \(activeMoment.title)")
+                                    .font(AppFonts.labelUI)
+                                    .fontWeight(.medium)
+                            }
+                            .foregroundColor(AppColors.pureWhite)
+                            .lineLimit(1)
+
+                            if !activeMoment.subtitle.isEmpty {
+                                Text(activeMoment.subtitle)
+                                    .font(AppFonts.caption)
+                                    .foregroundColor(AppColors.pureWhite.opacity(0.8))
+                                    .lineLimit(1)
+                            }
+                        }
+                    } else {
+                        Text("ID · \(trail.id.prefix(8).uppercased())")
+                            .font(AppFonts.labelSpatial)
+                            .foregroundColor(.white.opacity(0.9))
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(Color.black.opacity(0.45))
+                            .clipShape(Capsule())
+                    }
 
                     Spacer()
 
-                    Text("\(trail.moments.count) Moments Recorded")
-                        .font(AppFonts.labelMetric)
-                        .foregroundColor(.white.opacity(0.95))
+                    if mediaMoments.count > 1 {
+                        HStack(spacing: 5) {
+                            ForEach(0..<mediaMoments.count, id: \.self) { idx in
+                                Circle()
+                                    .fill(idx == currentMediaIndex ? AppColors.pureWhite : AppColors.pureWhite.opacity(0.4))
+                                    .frame(width: idx == currentMediaIndex ? 7 : 5, height: idx == currentMediaIndex ? 7 : 5)
+                            }
+                        }
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Color.black.opacity(0.4))
+                        .clipShape(Capsule())
+                    } else {
+                        Text("\(trail.moments.count) Moments Recorded")
+                            .font(AppFonts.labelMetric)
+                            .foregroundColor(.white.opacity(0.95))
+                    }
                 }
                 .padding(14)
             }
@@ -422,27 +571,67 @@ public struct TrailJournalDetailView: View {
         }
     }
 
-    // MARK: - 4. Revisit Trail CTA
+    // MARK: - 4. Retrace & Revisit CTAs (PRD v0.3.0)
 
     private var revisitTrailCTAButton: some View {
-        Button {
-            Haptics.medium()
-            showingRevisitReplay = true
-        } label: {
-            HStack(spacing: 10) {
-                Text("Revisit trail")
-                    .font(AppFonts.headlineSmall)
-                    .fontWeight(.semibold)
+        VStack(spacing: 10) {
+            // Primary: Retrace Trail (Walk along with live guidance)
+            Button {
+                Haptics.medium()
+                showingRetraceView = true
+            } label: {
+                HStack(spacing: 10) {
+                    ZStack {
+                        Circle()
+                            .fill(Color(hex: "#00E5FF").opacity(0.2))
+                            .frame(width: 32, height: 32)
+                        Image(systemName: "figure.walk.motion")
+                            .font(.system(size: 15, weight: .bold))
+                            .foregroundColor(Color(hex: "#00E5FF"))
+                    }
 
-                Image(systemName: "arrow.right")
-                    .font(.system(size: 16, weight: .bold))
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("Retrace this trail")
+                            .font(AppFonts.headlineSmall)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.white)
+                        Text("Follow along with turn guidance & comparison")
+                            .font(AppFonts.caption)
+                            .foregroundColor(Color.white.opacity(0.75))
+                    }
+
+                    Spacer()
+
+                    Image(systemName: "arrow.right")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundColor(.white)
+                }
+                .padding(.horizontal, 16)
+                .frame(maxWidth: .infinity)
+                .frame(height: 56)
+                .background(AppColors.primary)
+                .clipShape(Capsule())
+                .shadow(color: AppColors.primary.opacity(0.25), radius: 8, x: 0, y: 4)
             }
-            .foregroundColor(.white)
-            .frame(maxWidth: .infinity)
-            .frame(height: 52)
-            .background(AppColors.primary)
-            .clipShape(Capsule())
-            .shadow(color: AppColors.primary.opacity(0.2), radius: 8, x: 0, y: 4)
+
+            // Secondary: Explore 3D Virtual Replay
+            Button {
+                Haptics.light()
+                showingRevisitReplay = true
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "viewfinder")
+                        .font(.system(size: 14, weight: .semibold))
+                    Text("Explore 3D Virtual Replay")
+                        .font(AppFonts.labelUI)
+                        .fontWeight(.medium)
+                }
+                .foregroundColor(AppColors.primary)
+                .frame(maxWidth: .infinity)
+                .frame(height: 44)
+                .background(AppColors.surfaceContainerLow)
+                .clipShape(Capsule())
+            }
         }
     }
 

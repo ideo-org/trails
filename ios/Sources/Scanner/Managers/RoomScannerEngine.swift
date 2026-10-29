@@ -28,7 +28,14 @@ class RoomScannerEngine: NSObject, ObservableObject, RoomCaptureSessionDelegate,
 
     // For path plotting distance threshold (to avoid redundant points)
     @Published var lastRecordedPosition: SIMD3<Float>?
+    @Published var currentYawDegrees: Double = 0 // Spatial orientation / compass yaw in world frame (0..360)
+    @Published var currentForwardVector: SIMD2<Float> = SIMD2<Float>(0, -1)
     private let distanceThreshold: Float = 0.2 // meters
+
+    // PRD v0.3.1 Relocalisation & Alignment State Tracking
+    @Published var trackingState: ARCamera.TrackingState = .notAvailable
+    @Published var isRelocalized: Bool = false
+    @Published var relocalizationStatusText: String = "Initializing"
 
     override init() {
         super.init()
@@ -113,6 +120,17 @@ class RoomScannerEngine: NSObject, ObservableObject, RoomCaptureSessionDelegate,
         let z = 1.6 * sin(2 * t)
         let pos = SIMD3<Float>(x, 0, z)
 
+        if let last = lastRecordedPosition {
+            let delta = pos - last
+            if simd_length(delta) > 0.001 {
+                let yawRad = atan2(-delta.x, -delta.z)
+                var yawDeg = Double(yawRad * 180.0 / .pi)
+                if yawDeg < 0 { yawDeg += 360.0 }
+                currentYawDegrees = yawDeg
+                currentForwardVector = SIMD2<Float>(-delta.x, -delta.z)
+            }
+        }
+
         footsteps.append(pos)
         lastRecordedPosition = pos
     }
@@ -138,7 +156,8 @@ class RoomScannerEngine: NSObject, ObservableObject, RoomCaptureSessionDelegate,
         hasVideo: Bool = false,
         videoDuration: String? = nil,
         videoFileName: String? = nil,
-        videoThumbnailAssetName: String? = nil
+        videoThumbnailAssetName: String? = nil,
+        headingDegrees: Double? = nil
     ) {
         let index = recordedMoments.count + 1
         let pos = lastRecordedPosition ?? SIMD3<Float>(0, 0, 0)
@@ -162,7 +181,9 @@ class RoomScannerEngine: NSObject, ObservableObject, RoomCaptureSessionDelegate,
             videoFileName: videoFileName,
             videoThumbnailAssetName: videoThumbnailAssetName,
             positionX: Double(pos.x),
-            positionY: Double(pos.z)
+            positionY: Double(pos.z),
+            positionZ: Double(pos.y),
+            headingDegrees: headingDegrees ?? (currentYawDegrees != 0 ? currentYawDegrees : nil)
         )
         recordedMoments.append(moment)
     }
@@ -179,14 +200,82 @@ class RoomScannerEngine: NSObject, ObservableObject, RoomCaptureSessionDelegate,
         // Handle end of scan if necessary
     }
 
+    func exportWorldMap(completion: @escaping (Data?) -> Void) {
+        guard let arSession = captureView?.captureSession.arSession else {
+            completion(nil)
+            return
+        }
+        arSession.getCurrentWorldMap { worldMap, error in
+            guard let map = worldMap, error == nil else {
+                completion(nil)
+                return
+            }
+            let data = try? NSKeyedArchiver.archivedData(withRootObject: map, requiringSecureCoding: true)
+            completion(data)
+        }
+    }
+
+    func startRetraceRelocalization(worldMapData: Data) {
+        guard let arSession = captureView?.captureSession.arSession else { return }
+        guard let worldMap = try? NSKeyedUnarchiver.unarchivedObject(ofClass: ARWorldMap.self, from: worldMapData) else {
+            return
+        }
+        let config = ARWorldTrackingConfiguration()
+        config.initialWorldMap = worldMap
+        config.planeDetection = [.horizontal]
+        config.environmentTexturing = .automatic
+        arSession.run(config, options: [.resetTracking, .removeExistingAnchors])
+        isRelocalized = false
+        relocalizationStatusText = "Relocalizing against reference map..."
+    }
+
     // MARK: - ARSessionDelegate
 
+    nonisolated func session(_ session: ARSession, cameraDidChangeTrackingState camera: ARCamera) {
+        Task { @MainActor in
+            self.trackingState = camera.trackingState
+            switch camera.trackingState {
+            case .normal:
+                self.isRelocalized = true
+                self.relocalizationStatusText = "Aligned"
+            case .limited(let reason):
+                self.isRelocalized = false
+                switch reason {
+                case .relocalizing:
+                    self.relocalizationStatusText = "Searching for reference area..."
+                case .excessiveMotion:
+                    self.relocalizationStatusText = "Slow down — excessive motion"
+                case .insufficientFeatures:
+                    self.relocalizationStatusText = "Low visual detail"
+                case .initializing:
+                    self.relocalizationStatusText = "Initializing sensors"
+                @unknown default:
+                    self.relocalizationStatusText = "Tracking limited"
+                }
+            case .notAvailable:
+                self.isRelocalized = false
+                self.relocalizationStatusText = "Tracking unavailable"
+            }
+        }
+    }
+
     nonisolated func session(_ session: ARSession, didUpdate frame: ARFrame) {
-        let position = frame.camera.transform.columns.3
+        let transform = frame.camera.transform
+        let position = transform.columns.3
         let currentPos = SIMD3<Float>(position.x, position.y, position.z)
+
+        // Calculate world yaw and forward vector from camera transform
+        let forward = -transform.columns.2
+        let yawRad = atan2(-forward.x, -forward.z)
+        var yawDeg = Double(yawRad * 180.0 / .pi)
+        if yawDeg < 0 { yawDeg += 360.0 }
+        let forward2D = SIMD2<Float>(-forward.x, -forward.z)
 
         Task { @MainActor in
             guard self.isScanning, !self.isSimulated else { return }
+
+            self.currentYawDegrees = yawDeg
+            self.currentForwardVector = forward2D
 
             if let lastPos = self.lastRecordedPosition {
                 let distance = simd_distance(lastPos, currentPos)

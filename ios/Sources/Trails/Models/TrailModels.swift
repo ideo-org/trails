@@ -291,6 +291,7 @@ public struct SpatialMoment: Identifiable, Hashable, Codable {
     public var positionX: Double // Local survey coordinate X
     public var positionY: Double // Local survey coordinate Y (or Z in 3D frame)
     public var positionZ: Double?
+    public var headingDegrees: Double? // Orientation / Compass heading when captured
     public var placementStatus: String // "placed" | "unplaced" per PRD §12.4
     public var createdAt: Date
 
@@ -317,6 +318,7 @@ public struct SpatialMoment: Identifiable, Hashable, Codable {
         positionX: Double = 0.5,
         positionY: Double = 0.5,
         positionZ: Double? = 0.0,
+        headingDegrees: Double? = nil,
         placementStatus: String = "placed",
         createdAt: Date = Date()
     ) {
@@ -342,6 +344,7 @@ public struct SpatialMoment: Identifiable, Hashable, Codable {
         self.positionX = positionX
         self.positionY = positionY
         self.positionZ = positionZ
+        self.headingDegrees = headingDegrees
         self.placementStatus = placementStatus
         self.createdAt = createdAt
     }
@@ -384,6 +387,161 @@ public struct SpatialMoment: Identifiable, Hashable, Codable {
             }
         }
         return nil
+    }
+}
+
+// MARK: - Retrace Session Model (PRD v0.3.0)
+
+public struct RetraceSession: Identifiable, Codable {
+    public let id: String
+    public let sourceTrailId: String
+    public var startedAt: Date
+    public var endedAt: Date?
+    public var distanceWalkedMeters: Int
+    public var visitedMomentIds: [String]
+    public var similarityIndex: Double // 0.0 to 1.0 (PRD v0.3.0 similarity metric)
+    public var pathCoveragePercentage: Double // 0.0 to 1.0
+    public var checkpointsOrder: [String] // IDs in order visited (supports out-of-order retrace)
+    public var positioningMode: String // PRD v0.3.1 §5: "localSpatialAligned", "localSpatialUnaligned", "manualFollowAlong", "geographic"
+    public var alignmentState: String // PRD v0.3.1 §8: "unavailable", "loading", "searching", "verifying", "aligned", "degraded", "lost"
+    public var alignmentMethod: String? // "arWorldMap", "twoPointReference", "manualProgression"
+    public var referenceFrameId: String?
+    public var segmentIds: [String]
+    public var newMoments: [SpatialMoment]
+
+    public init(
+        id: String = UUID().uuidString,
+        sourceTrailId: String,
+        startedAt: Date = Date(),
+        endedAt: Date? = nil,
+        distanceWalkedMeters: Int = 0,
+        visitedMomentIds: [String] = [],
+        similarityIndex: Double = 0.0,
+        pathCoveragePercentage: Double = 0.0,
+        checkpointsOrder: [String] = [],
+        positioningMode: String = "localSpatialUnaligned",
+        alignmentState: String = "searching",
+        alignmentMethod: String? = nil,
+        referenceFrameId: String? = nil,
+        segmentIds: [String] = [],
+        newMoments: [SpatialMoment] = []
+    ) {
+        self.id = id
+        self.sourceTrailId = sourceTrailId
+        self.startedAt = startedAt
+        self.endedAt = endedAt
+        self.distanceWalkedMeters = distanceWalkedMeters
+        self.visitedMomentIds = visitedMomentIds
+        self.similarityIndex = similarityIndex
+        self.pathCoveragePercentage = pathCoveragePercentage
+        self.checkpointsOrder = checkpointsOrder
+        self.positioningMode = positioningMode
+        self.alignmentState = alignmentState
+        self.alignmentMethod = alignmentMethod
+        self.referenceFrameId = referenceFrameId
+        self.segmentIds = segmentIds
+        self.newMoments = newMoments
+    }
+}
+
+// MARK: - PRD v0.3.1 Reference Frame & Alignment Tracking Models
+
+public struct ReferenceFrame: Codable, Hashable {
+    public let id: String
+    public let sourceSessionId: String
+    public let units: String // "meters"
+    public let axisConvention: String // "rightHanded_YUp_ZBack" (ARKit)
+    public let worldAlignmentConfiguration: String // "gravityAndHeading" or "gravity"
+    public let createdAt: Date
+    public let positioningMethod: String // "arWorldMap", "manualAnchor", "gps"
+    public let alignmentAssetReferences: [String]
+
+    public init(
+        id: String = UUID().uuidString,
+        sourceSessionId: String,
+        units: String = "meters",
+        axisConvention: String = "rightHanded_YUp_ZBack",
+        worldAlignmentConfiguration: String = "gravityAndHeading",
+        createdAt: Date = Date(),
+        positioningMethod: String = "arWorldMap",
+        alignmentAssetReferences: [String] = []
+    ) {
+        self.id = id
+        self.sourceSessionId = sourceSessionId
+        self.units = units
+        self.axisConvention = axisConvention
+        self.worldAlignmentConfiguration = worldAlignmentConfiguration
+        self.createdAt = createdAt
+        self.positioningMethod = positioningMethod
+        self.alignmentAssetReferences = alignmentAssetReferences
+    }
+}
+
+public struct TrackingSegment: Identifiable, Codable {
+    public let id: String
+    public let sessionId: String
+    public let coordinateFrameId: String
+    public let startedAt: Date
+    public var endedAt: Date?
+    public var rawPathReference: String?
+    public var transformToReference: [Float]?
+    public var transformStatus: String // "identity", "aligned", "unaligned"
+    public var interruptionReason: String?
+
+    public init(
+        id: String = UUID().uuidString,
+        sessionId: String,
+        coordinateFrameId: String,
+        startedAt: Date = Date(),
+        endedAt: Date? = nil,
+        rawPathReference: String? = nil,
+        transformToReference: [Float]? = nil,
+        transformStatus: String = "identity",
+        interruptionReason: String? = nil
+    ) {
+        self.id = id
+        self.sessionId = sessionId
+        self.coordinateFrameId = coordinateFrameId
+        self.startedAt = startedAt
+        self.endedAt = endedAt
+        self.rawPathReference = rawPathReference
+        self.transformToReference = transformToReference
+        self.transformStatus = transformStatus
+        self.interruptionReason = interruptionReason
+    }
+}
+
+public struct AlignmentAttempt: Identifiable, Codable {
+    public let id: String
+    public let retraceSessionId: String
+    public var referenceAssetIds: [String]
+    public var method: String // "arWorldMap", "twoPointReference", "manualFallback"
+    public var startedAt: Date
+    public var endedAt: Date?
+    public var outcome: String // "success", "failed", "timeout", "manualFallback"
+    public var verificationResults: String?
+    public var failureReason: String?
+
+    public init(
+        id: String = UUID().uuidString,
+        retraceSessionId: String,
+        referenceAssetIds: [String] = [],
+        method: String = "arWorldMap",
+        startedAt: Date = Date(),
+        endedAt: Date? = nil,
+        outcome: String = "pending",
+        verificationResults: String? = nil,
+        failureReason: String? = nil
+    ) {
+        self.id = id
+        self.retraceSessionId = retraceSessionId
+        self.referenceAssetIds = referenceAssetIds
+        self.method = method
+        self.startedAt = startedAt
+        self.endedAt = endedAt
+        self.outcome = outcome
+        self.verificationResults = verificationResults
+        self.failureReason = failureReason
     }
 }
 
@@ -626,10 +784,97 @@ public final class TrailPackageStore {
         return records.map { SIMD3<Float>($0.positionX, $0.positionY, $0.positionZ) }
     }
 
+    // MARK: - Retrace Sessions (PRD v0.3.0 §2 & §7)
+
+    public func saveRetraceSession(session: RetraceSession, footsteps: [SIMD3<Float>]) {
+        let dir = trailDirectory(for: session.sourceTrailId).appendingPathComponent("retraces", isDirectory: true)
+        let sessionDir = dir.appendingPathComponent(session.id, isDirectory: true)
+        try? fileManager.createDirectory(at: sessionDir, withIntermediateDirectories: true)
+
+        let sessionFile = sessionDir.appendingPathComponent("session.json")
+        if let data = try? encoder.encode(session) {
+            try? data.write(to: sessionFile, options: .atomic)
+        }
+
+        let samplesFile = sessionDir.appendingPathComponent("samples.json")
+        let now = Date().timeIntervalSince1970
+        let sampleRecords = footsteps.enumerated().map { index, step in
+            PathSampleRecord(
+                timestamp: now + Double(index) * 0.1,
+                positionX: step.x,
+                positionY: step.y,
+                positionZ: step.z,
+                trackingState: "retrace"
+            )
+        }
+        if let data = try? encoder.encode(sampleRecords) {
+            try? data.write(to: samplesFile, options: .atomic)
+        }
+    }
+
+    public func loadRetraceSessions(for sourceTrailId: String) -> [RetraceSession] {
+        let dir = trailDirectory(for: sourceTrailId).appendingPathComponent("retraces", isDirectory: true)
+        guard let subdirs = try? fileManager.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil) else {
+            return []
+        }
+        var sessions: [RetraceSession] = []
+        for subdir in subdirs {
+            let file = subdir.appendingPathComponent("session.json")
+            if let data = try? Data(contentsOf: file),
+               let s = try? decoder.decode(RetraceSession.self, from: data) {
+                sessions.append(s)
+            }
+        }
+        return sessions.sorted(by: { $0.startedAt > $1.startedAt })
+    }
+
     public func mediaDirectory(for trailId: String) -> URL {
         let dir = trailDirectory(for: trailId).appendingPathComponent("media", isDirectory: true)
         try? fileManager.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir
+    }
+
+    // MARK: - Spatial & Reference Frame Storage (PRD v0.3.1 §6 & §7)
+
+    public func spatialDirectory(for trailId: String) -> URL {
+        let dir = trailDirectory(for: trailId).appendingPathComponent("spatial", isDirectory: true)
+        try? fileManager.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir
+    }
+
+    public func worldMapURL(for trailId: String) -> URL {
+        spatialDirectory(for: trailId).appendingPathComponent("worldmap.arworldmap")
+    }
+
+    public func referenceFrameURL(for trailId: String) -> URL {
+        spatialDirectory(for: trailId).appendingPathComponent("reference-frame.json")
+    }
+
+    public func hasWorldMap(for trailId: String) -> Bool {
+        fileManager.fileExists(atPath: worldMapURL(for: trailId).path)
+    }
+
+    public func saveWorldMapData(_ data: Data, for trailId: String) {
+        let url = worldMapURL(for: trailId)
+        try? data.write(to: url, options: .atomic)
+    }
+
+    public func loadWorldMapData(for trailId: String) -> Data? {
+        let url = worldMapURL(for: trailId)
+        return try? Data(contentsOf: url)
+    }
+
+    public func saveReferenceFrame(_ frame: ReferenceFrame, for trailId: String) {
+        let url = referenceFrameURL(for: trailId)
+        if let data = try? encoder.encode(frame) {
+            try? data.write(to: url, options: .atomic)
+        }
+    }
+
+    public func loadReferenceFrame(for trailId: String) -> ReferenceFrame? {
+        let url = referenceFrameURL(for: trailId)
+        guard let data = try? Data(contentsOf: url) else { return nil }
+        return try? decoder.decode(ReferenceFrame.self, from: data)
     }
 
     // MARK: - Places Persistence (PRD §12 & §14)

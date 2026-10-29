@@ -80,9 +80,8 @@ public struct SpatialTrailViewerView: View {
                     narrative: "The outer door threshold remains cool even after 8 hours of desert sun. Intricate peacock carvings on yellow sandstone.",
                     architecturalNote: "Lighting: Golden Hour · 2800K | Portal Width: 1.42m Clear Width",
                     distanceAlongPathMeters: 0,
-                    hasPhoto: true,
+                    hasPhoto: false,
                     mediaType: "photo",
-                    photoAssetName: "SandstoneArchway",
                     positionX: -90,
                     positionY: 100
                 ),
@@ -96,9 +95,8 @@ public struct SpatialTrailViewerView: View {
                     distanceAlongPathMeters: 18,
                     audioDuration: "0:18",
                     hasAudio: true,
-                    hasPhoto: true,
+                    hasPhoto: false,
                     mediaType: "voice",
-                    photoAssetName: "SandstoneArchway",
                     positionX: -30,
                     positionY: 30
                 ),
@@ -125,11 +123,9 @@ public struct SpatialTrailViewerView: View {
                     architecturalNote: "Forged 1892; zero mechanical wear on bearing stone after 130 years of daily rotation.",
                     distanceAlongPathMeters: 85,
                     videoDuration: "0:24",
-                    hasPhoto: true,
-                    hasVideo: true,
-                    mediaType: "video",
-                    photoAssetName: "DhunHaveliEvening",
-                    videoThumbnailAssetName: "DhunHaveliEvening",
+                    hasPhoto: false,
+                    hasVideo: false,
+                    mediaType: "note",
                     positionX: 70,
                     positionY: -80
                 )
@@ -624,20 +620,27 @@ public struct SpatialTrailViewerView: View {
                             .frame(width: 88, height: 88)
                             .clipped()
                             .cornerRadius(14)
-                    } else if let assetName = currentMoment.videoThumbnailAssetName {
-                        Image(assetName)
+                    } else if let assetName = currentMoment.videoThumbnailAssetName, let uiImage = UIImage(named: assetName) {
+                        Image(uiImage: uiImage)
                             .resizable()
                             .scaledToFill()
                             .frame(width: 88, height: 88)
                             .clipped()
                             .cornerRadius(14)
                     } else {
-                        Image("DhunHaveliEvening")
-                            .resizable()
-                            .scaledToFill()
-                            .frame(width: 88, height: 88)
-                            .clipped()
-                            .cornerRadius(14)
+                        ZStack {
+                            AppColors.surfaceContainerHigh
+                            VStack(spacing: 4) {
+                                Image(systemName: "video.fill")
+                                    .font(.system(size: 24))
+                                    .foregroundColor(AppColors.secondary)
+                                Text("VIDEO")
+                                    .font(AppFonts.labelSpatial)
+                                    .foregroundColor(AppColors.onSurfaceVariant)
+                            }
+                        }
+                        .frame(width: 88, height: 88)
+                        .cornerRadius(14)
                     }
 
                     // Translucent dark overlay with play/pause button
@@ -749,20 +752,27 @@ public struct SpatialTrailViewerView: View {
                         .frame(width: 80, height: 80)
                         .clipped()
                         .cornerRadius(12)
-                } else if let assetName = currentMoment.photoAssetName {
-                    Image(assetName)
+                } else if let assetName = currentMoment.photoAssetName, let uiImage = UIImage(named: assetName) {
+                    Image(uiImage: uiImage)
                         .resizable()
                         .scaledToFill()
                         .frame(width: 80, height: 80)
                         .clipped()
                         .cornerRadius(12)
                 } else {
-                    Image("SandstoneArchway")
-                        .resizable()
-                        .scaledToFill()
-                        .frame(width: 80, height: 80)
-                        .clipped()
-                        .cornerRadius(12)
+                    ZStack {
+                        AppColors.surfaceContainerHigh
+                        VStack(spacing: 3) {
+                            Image(systemName: "camera.fill")
+                                .font(.system(size: 22))
+                                .foregroundColor(AppColors.secondary)
+                            Text("PHOTO")
+                                .font(AppFonts.labelSpatial)
+                                .foregroundColor(AppColors.onSurfaceVariant)
+                        }
+                    }
+                    .frame(width: 80, height: 80)
+                    .cornerRadius(12)
                 }
             }
             .onTapGesture {

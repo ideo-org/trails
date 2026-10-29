@@ -70,14 +70,40 @@ public struct PlaceCollectionView: View {
                                 .foregroundColor(AppColors.onSurfaceVariant)
                         }
 
-                        // Curated Photography Visual Frame
+                        // Authentic Visual Frame: Real trail photo or Architectural Cartographic banner
                         ZStack(alignment: .bottomLeading) {
-                            Image(place.coverImageName ?? "DhunHaveliEvening")
-                                .resizable()
-                                .scaledToFill()
+                            if let trailWithPhoto = placeTrails.first(where: { t in t.moments.contains(where: { $0.hasPhoto }) }),
+                               let photoMoment = trailWithPhoto.moments.first(where: { $0.hasPhoto }),
+                               let photoURL = photoMoment.resolvedPhotoURL(trailId: trailWithPhoto.id),
+                               let uiImage = UIImage(contentsOfFile: photoURL.path) {
+                                Image(uiImage: uiImage)
+                                    .resizable()
+                                    .scaledToFill()
+                                    .frame(height: 220)
+                                    .clipped()
+                                    .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+                            } else {
+                                ZStack {
+                                    LinearGradient(
+                                        colors: [AppColors.primary, AppColors.forestGreen],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
+
+                                    VStack(spacing: 8) {
+                                        Image(systemName: "map.fill")
+                                            .font(.system(size: 36))
+                                            .foregroundColor(AppColors.secondary.opacity(0.9))
+
+                                        Text(String(format: "%.4f° N, %.4f° E", place.coordinate.latitude, place.coordinate.longitude))
+                                            .font(AppFonts.labelSpatial)
+                                            .foregroundColor(AppColors.pureWhite.opacity(0.75))
+                                            .tracking(1.0)
+                                    }
+                                }
                                 .frame(height: 220)
-                                .clipped()
                                 .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+                            }
 
                             LinearGradient(
                                 colors: [Color.clear, AppColors.primary.opacity(0.85)],
@@ -87,7 +113,7 @@ public struct PlaceCollectionView: View {
                             .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
 
                             VStack(alignment: .leading, spacing: 3) {
-                                Text("Spatial Taxonomy · Haveli No. 04")
+                                Text("Spatial Taxonomy · \(place.category.rawValue)")
                                     .font(AppFonts.labelSpatial)
                                     .foregroundColor(AppColors.secondary)
                                     .textCase(.uppercase)
