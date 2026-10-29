@@ -1,0 +1,223 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"><meta content="mobile_stack" name="shell-type"><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"><link href="https://fonts.googleapis.com" rel="preconnect"><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=JetBrains+Mono:wght@400;500&amp;family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"><style>@layer base{html,body{width:100vw;margin:0;padding:0;}body{overscroll-behavior:none;}.pb-safe{padding-bottom:env(safe-area-inset-bottom,0px);}.pt-safe{padding-top:env(safe-area-inset-top,0px);}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = { darkMode: "class", theme: { extend: { colors: { "inverse-surface": "#31302b", "secondary-container": "#ffdf96", "surface": "#fdf9f0", "tertiary-fixed-dim": "#ffb59e", "on-secondary-container": "#786226", "error": "#ba1a1a", "outline": "#717975", "on-error": "#ffffff", "on-surface-variant": "#414846", "surface-variant": "#e6e2d9", "inverse-on-surface": "#f4f0e7", "outline-variant": "#c0c8c4", "primary": "#002820", "secondary-fixed-dim": "#e1c37d", "on-primary-container": "#81a99d", "surface-container-highest": "#e6e2d9", "on-secondary-fixed-variant": "#584409", "tertiary-container": "#65210a", "on-primary-fixed-variant": "#274e44", "error-container": "#ffdad6", "surface-container-low": "#f7f3ea", "primary-fixed": "#c2ebde", "secondary": "#725c20", "on-surface": "#1c1c16", "surface-tint": "#40665b", "tertiary": "#450f00", "on-tertiary": "#ffffff", "surface-container-high": "#ece8df", "on-tertiary-container": "#e98768", "on-secondary-fixed": "#251a00", "on-tertiary-fixed-variant": "#793018", "background": "#fdf9f0", "on-error-container": "#93000a", "primary-container": "#173e35", "on-secondary": "#ffffff", "on-background": "#1c1c16", "surface-bright": "#fdf9f0", "inverse-primary": "#a6cfc2", "surface-container-lowest": "#ffffff", "on-tertiary-fixed": "#3a0b00", "tertiary-fixed": "#ffdbd0", "primary-fixed-dim": "#a6cfc2", "on-primary-fixed": "#00201a", "surface-dim": "#dddad1", "on-primary": "#ffffff", "surface-container": "#f1eee5", "secondary-fixed": "#ffdf96" }, borderRadius: { "DEFAULT": "1rem", "lg": "2rem", "xl": "3rem", "full": "9999px" }, spacing: { "margin": "1.25rem", "space-sm": "0.5rem", "space-md": "1rem", "space-xs": "0.25rem", "space-lg": "1.5rem", "space-xl": "2.25rem", "gutter": "1rem" }, fontFamily: { "label-metric": ["JetBrains Mono"], "body-sm": ["Inter"], "body-lg": ["Inter"], "display-lg": ["Newsreader"], "body-md": ["Inter"], "headline-md": ["Newsreader"], "headline-sm": ["Inter"], "display-lg-mobile": ["Newsreader"], "headline-lg": ["Newsreader"], "label-spatial": ["JetBrains Mono"], "label-ui": ["Inter"] }, fontSize: { "label-metric": ["13px", { "lineHeight": "16px", "letterSpacing": "0.02em", "fontWeight": "500" }], "body-sm": ["12px", { "lineHeight": "16px", "fontWeight": "400" }], "body-lg": ["16px", { "lineHeight": "24px", "fontWeight": "400" }], "display-lg": ["40px", { "lineHeight": "48px", "letterSpacing": "-0.02em", "fontWeight": "400" }], "body-md": ["14px", { "lineHeight": "20px", "fontWeight": "400" }], "headline-md": ["22px", { "lineHeight": "30px", "fontWeight": "400" }], "headline-sm": ["17px", { "lineHeight": "24px", "letterSpacing": "-0.01em", "fontWeight": "600" }], "display-lg-mobile": ["32px", { "lineHeight": "40px", "letterSpacing": "-0.015em", "fontWeight": "400" }], "headline-lg": ["28px", { "lineHeight": "36px", "letterSpacing": "-0.01em", "fontWeight": "400" }], "label-spatial": ["11px", { "lineHeight": "14px", "letterSpacing": "0.06em", "fontWeight": "500" }], "label-ui": ["13px", { "lineHeight": "18px", "fontWeight": "500" }] } } } };</script><style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head><body class="bg-surface text-on-surface antialiased flex flex-col min-h-screen"><header class="fixed top-0 w-full z-50 pt-safe bg-surface/85 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.03)]"><div class="h-12 px-5 flex items-center justify-between font-label-spatial text-label-spatial text-on-surface-variant tracking-wider"><span class="font-label-metric text-label-metric">9:41</span><div class="w-28 h-5 bg-on-surface rounded-full flex items-center justify-center"><div class="w-2.5 h-2.5 rounded-full bg-surface/20 ml-auto mr-2.5"></div></div><div class="flex items-center gap-1.5"><span class="material-symbols-outlined text-[15px]">signal_cellular_alt</span><span class="material-symbols-outlined text-[15px]">wifi</span><span class="material-symbols-outlined text-[18px]">battery_full</span></div></div><div class="h-14 px-margin flex items-center justify-between"><div class="flex items-center gap-space-xs"><button aria-label="Go Back" class="min-h-[44px] min-w-[44px] -ml-2 flex items-center justify-center text-on-surface hover:text-primary transition-colors" onclick="history.back()"><span class="material-symbols-outlined text-[22px]">arrow_back_ios_new</span></button><img alt="Trails" class="h-8 w-8 object-contain ml-1 shrink-0" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDIuUk1SFJUcmB4KIbaAMUlMqTU0T5KXpriZZeAbUkhtGN8_HHemyH6ou6ThF-sOJ8aTD2xMm7QAYZ_gE0A1pgHDV8Xqea3ucKqSsXx8HBMEkZtnFaEXz_pSoZ1-RbDIspayrDelaF6N2q8t4uuEGrA3bb7GuwBDLoQo6Nt5_hsxPNcAjnCduwaAp5wdsglMGAyE9uJ3jN20yPowfrB7e4wDciC0b4ZFTcfHv9itTrFSSY37eEliqNm"><span class="font-headline-sm text-headline-sm text-on-surface select-none truncate ml-2">Spatial Viewer</span></div><img alt="Profile" class="w-8 h-8 rounded-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCMH7teg4rBh_4x3dpfn7gCvqHzggpN-lrB70Y8_J7bNK4fE1piAskGb2AxAAu1uJyQU0Y5cqKjxAM0-9q1E2QFX_q82II4ZFSBiZWWFqie7SKuC0yTSGXQ8g6FEvotlfi-S5ZmHlaMdWQgx3MtZxJ8q7pCsjBZPLUo-rtTuCpEzbSOkXnU7X7z-2BRwCcvWnd9j4oJTTsHkrnCHhDSmLvdtM7-8Vzbev7ZvfwVw7k"></div></header><main class="flex-1 flex flex-col relative w-full pt-[6.5rem] pb-safe bg-surface px-margin"><div class="flex flex-col w-full relative select-none pb-6">
+<!-- Top Floating Controls Chrome -->
+<div class="flex flex-col gap-space-xs w-full z-20 mb-space-md">
+<div class="flex items-center justify-between gap-space-xs w-full">
+<!-- Close Pill -->
+<button aria-label="Exit Viewer" class="w-10 h-10 rounded-full bg-surface-container/90 backdrop-blur-md text-on-surface flex items-center justify-center shadow-sm active:scale-95 transition-transform" onclick="history.back()">
+<span class="material-symbols-outlined text-[20px]">close</span>
+</button>
+<!-- Center Title and Curator Identity -->
+<div class="flex flex-col items-center justify-center text-center px-space-xs min-w-0">
+<div class="flex items-center gap-1.5 max-w-[200px] truncate">
+<span class="font-headline-sm text-headline-sm text-on-surface truncate">Dhun Haveli</span>
+<span class="text-outline-variant text-[10px]">•</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant truncate">Courtyard</span>
+</div>
+<div class="flex items-center gap-1 mt-0.5">
+<span class="font-label-spatial text-label-spatial text-on-surface-variant uppercase tracking-wider">Trail</span>
+<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-surface-container-high text-on-surface-variant font-label-spatial text-label-spatial">
+<span class="w-1.5 h-1.5 rounded-full bg-secondary"></span>
+            by Hiro
+          </span>
+</div>
+</div>
+<!-- Right View Switch & Recenter -->
+<div class="flex items-center gap-1.5">
+<div class="inline-flex p-0.5 rounded-full bg-surface-container/90 backdrop-blur-md shadow-sm">
+<button class="px-2.5 py-1 rounded-full bg-primary-container text-on-primary font-label-spatial text-label-spatial transition-all shadow-xs" id="toggle-3d">3D</button>
+<button class="px-2 py-1 rounded-full text-on-surface-variant font-label-spatial text-label-spatial transition-all hover:text-on-surface" id="toggle-2d">2D</button>
+</div>
+<button aria-label="Recenter Scene" class="w-10 h-10 rounded-full bg-surface-container/90 backdrop-blur-md text-on-surface flex items-center justify-center shadow-sm active:scale-95 transition-transform">
+<span class="material-symbols-outlined text-[18px]">filter_center_focus</span>
+</button>
+</div>
+</div>
+<!-- Telemetry & Disclaimer Strip -->
+<div class="flex items-center justify-between px-2 pt-1 font-label-spatial text-label-spatial text-on-surface-variant">
+<div class="flex items-center gap-2">
+<span class="inline-flex items-center gap-1">
+<span class="material-symbols-outlined text-[13px] text-secondary">explore</span>
+          N · Ground Floor
+        </span>
+<span class="text-outline-variant">|</span>
+<span class="">1:50 scale</span>
+</div>
+<span class="italic text-on-surface-variant/80">Replay · Not live navigation</span>
+</div>
+</div>
+<!-- Spatial Viewport Visualizer (RoomPlan LiDAR Canvas Simulation) -->
+<div class="relative w-full h-[360px] rounded-lg bg-surface-container-low overflow-hidden shadow-sm flex items-center justify-center">
+<!-- Ambient Architectural Grid & Dot Matrix -->
+<div class="absolute inset-0 bg-[radial-gradient(#c0c8c4_1px,transparent_1px)] [background-size:16px_16px] opacity-40"></div>
+<!-- Volumetric Haveli Courtyard Isometric SVG Canvas -->
+<svg class="w-full h-full object-contain pointer-events-none" fill="none" viewBox="0 0 380 340" xmlns="http://www.w3.org/2000/svg">
+<!-- Ground Floor Boundary -->
+<polygon fill="#fdf9f0" fill-opacity="0.8" points="190,40 340,120 190,260 40,170" stroke="#c0c8c4" stroke-dasharray="2 2" stroke-width="1"></polygon>
+<!-- Central Basin / Fountain Geometry -->
+<polygon fill="#e6e2d9" points="190,145 225,165 190,188 155,168" stroke="#717975" stroke-width="1.2"></polygon>
+<polygon fill="#40665b" fill-opacity="0.18" points="190,152 215,166 190,182 165,168"></polygon>
+<!-- Surrounding Architectural Volumetric Solids & Doorways -->
+<!-- East Colonnade Solid Block -->
+<polygon fill="#f1eee5" points="70,140 110,115 110,75 70,98" stroke="#414846" stroke-width="1.2"></polygon>
+<polygon fill="#e6e2d9" points="110,75 140,92 140,132 110,115" stroke="#414846" stroke-width="1.2"></polygon>
+<polygon fill="#faf8f5" points="70,98 100,80 140,92 110,75" stroke="#414846" stroke-width="1.2"></polygon>
+<!-- Lintel Arch Structure (The Light Well) -->
+<polygon fill="#ece8df" points="180,70 230,96 230,125 180,95" stroke="#1c1c16" stroke-width="1.5"></polygon>
+<polygon fill="#ded9ce" points="230,96 265,77 265,105 230,125" stroke="#1c1c16" stroke-width="1.5"></polygon>
+<polygon fill="#fdf9f0" points="180,70 215,52 265,77 230,96" stroke="#1c1c16" stroke-width="1.5"></polygon>
+<!-- Arch Cutout Aperture -->
+<path d="M 195 104 Q 205 92 218 99 L 218 118 L 195 104 Z" fill="#e6e2d9" stroke="#414846" stroke-width="1"></path>
+<!-- North Stone Bench Volume -->
+<polygon fill="#ded9ce" points="260,180 295,160 305,166 270,186" stroke="#717975" stroke-width="1"></polygon>
+<polygon fill="#c0c8c4" points="270,186 305,166 305,174 270,194" stroke="#717975" stroke-width="1"></polygon>
+<!-- Recorded Trail Vectors (Terracotta Path) -->
+<!-- Traversed Path: From Portal (Point 1) to Light Well (Point 2) -->
+<path d="M 95 155 Q 135 180 160 170 T 205 118" fill="none" stroke="#65210a" stroke-linecap="round" stroke-width="3"></path>
+<!-- Traversed Path Core Glow -->
+<path d="M 95 155 Q 135 180 160 170 T 205 118" fill="none" opacity="0.9" stroke="#ffb59e" stroke-linecap="round" stroke-width="1.5"></path>
+<!-- Upcoming Unvisited Trail Vector (Dashed Soft Vector) -->
+<path d="M 205 118 Q 235 110 260 140 T 275 180" fill="none" opacity="0.6" stroke="#717975" stroke-dasharray="4 4" stroke-linecap="round" stroke-width="2"></path>
+<!-- Moment Node 1 (Visited Ring) -->
+<circle cx="95" cy="155" fill="#fdf9f0" r="7" stroke="#65210a" stroke-width="2"></circle>
+<circle cx="95" cy="155" fill="#65210a" r="2.5"></circle>
+<!-- Moment Node 3 (Upcoming Soft Dot) -->
+<circle cx="260" cy="140" fill="#c0c8c4" r="3.5" stroke="#717975" stroke-width="1"></circle>
+<circle cx="275" cy="180" fill="#c0c8c4" r="3.5" stroke="#717975" stroke-width="1"></circle>
+</svg>
+<!-- Anchored Spatial Marker for Moment 1 (Passed) -->
+<div class="absolute left-6 bottom-[135px] pointer-events-none">
+<div class="flex items-center gap-1 px-2 py-0.5 rounded-full bg-surface/90 shadow-sm backdrop-blur-sm">
+<span class="w-1.5 h-1.5 rounded-full bg-tertiary-container"></span>
+<span class="font-label-spatial text-label-spatial text-on-surface-variant">1. Eastern Portal</span>
+</div>
+</div>
+<!-- Active Pulsing Anchor for Moment 2 (Selected) -->
+<div class="absolute top-[88px] right-[130px] flex flex-col items-center pointer-events-auto cursor-pointer group">
+<!-- Pulsing Aura rings -->
+<div class="relative flex items-center justify-center">
+<span class="absolute w-8 h-8 rounded-full bg-secondary-container/60 animate-ping"></span>
+<span class="relative w-6 h-6 rounded-full bg-secondary flex items-center justify-center shadow-md">
+<span class="w-2.5 h-2.5 rounded-full bg-surface"></span>
+</span>
+</div>
+<!-- Pin Tag Card -->
+<div class="mt-1 px-2.5 py-1 rounded-full bg-primary text-on-primary shadow-md flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[12px] text-secondary-fixed">push_pin</span>
+<span class="font-headline-sm text-[12px] text-on-primary tracking-tight whitespace-nowrap">2. Light Well Lintels</span>
+</div>
+</div>
+<!-- Spatial HUD Compass & Elevation Pill (Bottom Left of Canvas) -->
+<div class="absolute bottom-3 left-3 flex items-center gap-1.5 bg-surface/90 backdrop-blur-md px-2.5 py-1 rounded-full shadow-sm text-on-surface-variant font-label-spatial text-label-spatial">
+<span class="material-symbols-outlined text-[13px] text-primary">view_in_ar</span>
+<span class="">LiDAR Mesh: 98% density</span>
+</div>
+<!-- Level Step Indicator (Bottom Right of Canvas) -->
+<div class="absolute bottom-3 right-3 flex items-center gap-1 bg-surface/90 backdrop-blur-md px-2 py-1 rounded-full shadow-sm font-label-spatial text-label-spatial text-on-surface">
+<span class="text-secondary font-medium">LVL 01</span>
+<span class="text-outline-variant">·</span>
+<span class="text-on-surface-variant">+0.00m</span>
+</div>
+</div>
+<!-- Interactive Moment Sheet Card -->
+<div class="flex flex-col w-full bg-surface-container-lowest rounded-lg p-space-md shadow-sm mt-space-md">
+<!-- Header: Sequence Tag & Scale Meta -->
+<div class="flex items-center justify-between w-full mb-space-xs">
+<div class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-secondary-container text-on-secondary-container font-label-spatial text-label-spatial">
+<span class="material-symbols-outlined text-[13px]" style="font-variation-settings: 'FILL' 1;">star</span>
+<span class="tracking-wider">MOMENT 2 OF 5</span>
+</div>
+<div class="flex items-center gap-1 text-on-surface-variant font-label-spatial text-label-spatial">
+<span class="material-symbols-outlined text-[14px]">distance</span>
+<span class="">18m along path</span>
+</div>
+</div>
+<!-- Moment Title -->
+<h2 class="font-headline-lg text-headline-lg text-on-surface mt-1">The Light Well Lintels</h2>
+<!-- Contributor Curatorial Note -->
+<div class="relative my-space-sm pl-3 bg-surface-container-low rounded-r-DEFAULT py-2.5 pr-3">
+<div class="absolute left-0 top-0 bottom-0 w-1 bg-secondary rounded-l-full"></div>
+<p class="font-display-lg-mobile text-[16px] leading-relaxed text-on-surface italic">
+        “Stand directly under the east archway. Look up before you walk through—notice how the hand-chiseled sandstone catches the indirect daylight reflecting off the limestone courtyard floor.”
+      </p>
+<div class="flex items-center gap-2 mt-2">
+<div class="w-4 h-4 rounded-full bg-secondary-fixed flex items-center justify-center text-[10px] font-bold text-on-secondary-fixed">H</div>
+<span class="font-label-spatial text-label-spatial text-on-surface-variant">Hiroshi Tanaka · Recorded 3:45 PM</span>
+</div>
+</div>
+<!-- Media Preview & Acoustic Field Note Section -->
+<div class="grid grid-cols-1 gap-2.5 my-space-xs">
+<!-- Audio Recording Snippet Pill -->
+<div class="flex items-center justify-between p-2.5 rounded-DEFAULT bg-surface-container hover:bg-surface-container-high transition-colors cursor-pointer">
+<div class="flex items-center gap-2.5 min-w-0">
+<button aria-label="Play acoustic field sample" class="w-8 h-8 rounded-full bg-primary-container text-on-primary flex items-center justify-center shrink-0 active:scale-95 transition-transform">
+<span class="material-symbols-outlined text-[18px]">play_arrow</span>
+</button>
+<div class="flex flex-col min-w-0">
+<span class="font-headline-sm text-[13px] text-on-surface truncate">Sound of courtyard draft</span>
+<span class="font-label-spatial text-label-spatial text-on-surface-variant">Spatial Binaural · 0:24</span>
+</div>
+</div>
+<!-- Mini Waveform Graphic -->
+<div class="flex items-center gap-0.5 h-5 px-2">
+<div class="w-0.5 h-2 bg-surface-tint rounded-full"></div>
+<div class="w-0.5 h-4 bg-surface-tint rounded-full"></div>
+<div class="w-0.5 h-3 bg-surface-tint rounded-full"></div>
+<div class="w-0.5 h-5 bg-surface-tint rounded-full"></div>
+<div class="w-0.5 h-2.5 bg-surface-tint rounded-full"></div>
+<div class="w-0.5 h-4.5 bg-surface-tint rounded-full"></div>
+<div class="w-0.5 h-1.5 bg-surface-tint rounded-full"></div>
+<div class="w-0.5 h-3 bg-surface-tint rounded-full"></div>
+</div>
+</div>
+<!-- Macro Photo Attachment (Lintel Texture) -->
+<div class="flex items-center gap-3 p-2 rounded-DEFAULT bg-surface-container">
+<img class="w-14 h-14 rounded-DEFAULT object-cover shrink-0" data-alt="Macro close-up architectural photograph of hand-chiseled porous yellow-ochre sandstone lintel showing rhythmic tool marks, warm grazing sunlight, soft ambient limestone dust, and subtle earthy courtyard reflections." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAlOLRv_kSg9rWWvldpFyI6dcibk9mGvTT8NgDD-g1kBgWVChlh-c1lLJHG9d8q_x5eo3X5-snaKVhLdB2UlSyv8m0wtjgjkr9pXRwaanALHvNGB_JAvGoE6Sw6XMa-Uw3UDZcNH2ZP-3dIA7MDDW4NQZasg1vDcOZZBzYn8d0PdDLI03-RDobdtHPdzg_FX9X_cDIkLBj5zpqV3-mru478CGWM3TOAVt1XVRCmLT0">
+<div class="flex flex-col min-w-0 justify-center">
+<span class="font-headline-sm text-[13px] text-on-surface">Sandstone Chisel Marks</span>
+<p class="font-body-sm text-body-sm text-on-surface-variant line-clamp-1 mt-0.5">Late 18th-century craft detail, undamaged corner joinery.</p>
+</div>
+</div>
+</div>
+<!-- Stepper Navigation Controls -->
+<div class="flex items-center justify-between gap-space-xs pt-space-sm mt-space-xs">
+<button class="flex-1 py-3 px-3 rounded-full bg-surface-container text-on-surface font-headline-sm text-[13px] flex items-center justify-center gap-1 active:scale-[0.98] transition-transform shadow-xs">
+<span class="material-symbols-outlined text-[16px]">arrow_back</span>
+<span class="truncate">Prev (Portal)</span>
+</button>
+<button class="flex-[1.4] py-3 px-4 rounded-full bg-primary-container text-on-primary font-headline-sm text-[13px] flex items-center justify-center gap-1 active:scale-[0.98] transition-transform shadow-sm">
+<span class="truncate">Next: Water Sump</span>
+<span class="material-symbols-outlined text-[16px]">arrow_forward</span>
+</button>
+</div>
+</div>
+<!-- Intimate Monograph Micro Footer -->
+<div class="flex items-center justify-center gap-2 mt-space-md text-center">
+<span class="material-symbols-outlined text-[14px] text-outline">history_edu</span>
+<span class="font-label-spatial text-label-spatial text-on-surface-variant">Archived Spatial Walk · Dhun Haveli Series · No. 04</span>
+</div>
+</div>
+<script>
+  // Simple Toggle interaction for 3D/2D View Buttons
+  const btn3d = document.getElementById('toggle-3d');
+  const btn2d = document.getElementById('toggle-2d');
+
+  if (btn3d && btn2d) {
+    btn3d.addEventListener('click', () => {
+      btn3d.className = 'px-2.5 py-1 rounded-full bg-primary-container text-on-primary font-label-spatial text-label-spatial transition-all shadow-xs';
+      btn2d.className = 'px-2 py-1 rounded-full text-on-surface-variant font-label-spatial text-label-spatial transition-all hover:text-on-surface';
+    });
+
+    btn2d.addEventListener('click', () => {
+      btn2d.className = 'px-2.5 py-1 rounded-full bg-primary-container text-on-primary font-label-spatial text-label-spatial transition-all shadow-xs';
+      btn3d.className = 'px-2 py-1 rounded-full text-on-surface-variant font-label-spatial text-label-spatial transition-all hover:text-on-surface';
+    });
+  }
+</script></main>
+
+</body></html>

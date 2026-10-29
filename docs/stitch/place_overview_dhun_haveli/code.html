@@ -1,0 +1,310 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"><meta content="mobile_stack" name="shell-type"><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"><link href="https://fonts.googleapis.com" rel="preconnect"><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=JetBrains+Mono:wght@400;500&amp;family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"><style>@layer base{html,body{width:100vw;margin:0;padding:0;}body{overscroll-behavior:none;}.pb-safe{padding-bottom:env(safe-area-inset-bottom,0px);}.pt-safe{padding-top:env(safe-area-inset-top,0px);}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = { darkMode: "class", theme: { extend: { colors: { "inverse-surface": "#31302b", "secondary-container": "#ffdf96", "surface": "#fdf9f0", "tertiary-fixed-dim": "#ffb59e", "on-secondary-container": "#786226", "error": "#ba1a1a", "outline": "#717975", "on-error": "#ffffff", "on-surface-variant": "#414846", "surface-variant": "#e6e2d9", "inverse-on-surface": "#f4f0e7", "outline-variant": "#c0c8c4", "primary": "#002820", "secondary-fixed-dim": "#e1c37d", "on-primary-container": "#81a99d", "surface-container-highest": "#e6e2d9", "on-secondary-fixed-variant": "#584409", "tertiary-container": "#65210a", "on-primary-fixed-variant": "#274e44", "error-container": "#ffdad6", "surface-container-low": "#f7f3ea", "primary-fixed": "#c2ebde", "secondary": "#725c20", "on-surface": "#1c1c16", "surface-tint": "#40665b", "tertiary": "#450f00", "on-tertiary": "#ffffff", "surface-container-high": "#ece8df", "on-tertiary-container": "#e98768", "on-secondary-fixed": "#251a00", "on-tertiary-fixed-variant": "#793018", "background": "#fdf9f0", "on-error-container": "#93000a", "primary-container": "#173e35", "on-secondary": "#ffffff", "on-background": "#1c1c16", "surface-bright": "#fdf9f0", "inverse-primary": "#a6cfc2", "surface-container-lowest": "#ffffff", "on-tertiary-fixed": "#3a0b00", "tertiary-fixed": "#ffdbd0", "primary-fixed-dim": "#a6cfc2", "on-primary-fixed": "#00201a", "surface-dim": "#dddad1", "on-primary": "#ffffff", "surface-container": "#f1eee5", "secondary-fixed": "#ffdf96" }, borderRadius: { "DEFAULT": "1rem", "lg": "2rem", "xl": "3rem", "full": "9999px" }, spacing: { "margin": "1.25rem", "space-sm": "0.5rem", "space-md": "1rem", "space-xs": "0.25rem", "space-lg": "1.5rem", "space-xl": "2.25rem", "gutter": "1rem" }, fontFamily: { "label-metric": ["JetBrains Mono"], "body-sm": ["Inter"], "body-lg": ["Inter"], "display-lg": ["Newsreader"], "body-md": ["Inter"], "headline-md": ["Newsreader"], "headline-sm": ["Inter"], "display-lg-mobile": ["Newsreader"], "headline-lg": ["Newsreader"], "label-spatial": ["JetBrains Mono"], "label-ui": ["Inter"] }, fontSize: { "label-metric": ["13px", { "lineHeight": "16px", "letterSpacing": "0.02em", "fontWeight": "500" }], "body-sm": ["12px", { "lineHeight": "16px", "fontWeight": "400" }], "body-lg": ["16px", { "lineHeight": "24px", "fontWeight": "400" }], "display-lg": ["40px", { "lineHeight": "48px", "letterSpacing": "-0.02em", "fontWeight": "400" }], "body-md": ["14px", { "lineHeight": "20px", "fontWeight": "400" }], "headline-md": ["22px", { "lineHeight": "30px", "fontWeight": "400" }], "headline-sm": ["17px", { "lineHeight": "24px", "letterSpacing": "-0.01em", "fontWeight": "600" }], "display-lg-mobile": ["32px", { "lineHeight": "40px", "letterSpacing": "-0.015em", "fontWeight": "400" }], "headline-lg": ["28px", { "lineHeight": "36px", "letterSpacing": "-0.01em", "fontWeight": "400" }], "label-spatial": ["11px", { "lineHeight": "14px", "letterSpacing": "0.06em", "fontWeight": "500" }], "label-ui": ["13px", { "lineHeight": "18px", "fontWeight": "500" }] } } } };</script></head><body class="bg-surface text-on-surface antialiased flex flex-col min-h-screen"><header class="fixed top-0 w-full z-50 pt-safe bg-surface/85 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.03)]"><div class="h-12 px-5 flex items-center justify-between font-label-spatial text-label-spatial text-on-surface-variant tracking-wider"><span class="font-label-metric text-label-metric">9:41</span><div class="w-28 h-5 bg-on-surface rounded-full flex items-center justify-center"><div class="w-2.5 h-2.5 rounded-full bg-surface/20 ml-auto mr-2.5"></div></div><div class="flex items-center gap-1.5"><span class="material-symbols-outlined text-[15px]">signal_cellular_alt</span><span class="material-symbols-outlined text-[15px]">wifi</span><span class="material-symbols-outlined text-[18px]">battery_full</span></div></div><div class="h-14 px-margin flex items-center justify-between"><div class="flex items-center gap-space-xs"><button aria-label="Go Back" class="min-h-[44px] min-w-[44px] -ml-2 flex items-center justify-center text-on-surface hover:text-primary transition-colors" onclick="history.back()"><span class="material-symbols-outlined text-[22px]">arrow_back_ios_new</span></button><img alt="Trails" class="h-8 w-8 object-contain ml-1" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDIuUk1SFJUcmB4KIbaAMUlMqTU0T5KXpriZZeAbUkhtGN8_HHemyH6ou6ThF-sOJ8aTD2xMm7QAYZ_gE0A1pgHDV8Xqea3ucKqSsXx8HBMEkZtnFaEXz_pSoZ1-RbDIspayrDelaF6N2q8t4uuEGrA3bb7GuwBDLoQo6Nt5_hsxPNcAjnCduwaAp5wdsglMGAyE9uJ3jN20yPowfrB7e4wDciC0b4ZFTcfHv9itTrFSSY37eEliqNm"><span class="font-headline-sm text-headline-sm text-on-surface select-none truncate ml-2">Trail Detail</span></div><img alt="Profile" class="w-8 h-8 rounded-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCMH7teg4rBh_4x3dpfn7gCvqHzggpN-lrB70Y8_J7bNK4fE1piAskGb2AxAAu1uJyQU0Y5cqKjxAM0-9q1E2QFX_q82II4ZFSBiZWWFqie7SKuC0yTSGXQ8g6FEvotlfi-S5ZmHlaMdWQgx3MtZxJ8q7pCsjBZPLUo-rtTuCpEzbSOkXnU7X7z-2BRwCcvWnd9j4oJTTsHkrnCHhDSmLvdtM7-8Vzbev7ZvfwVw7k"></div></header><main class="flex-1 flex flex-col relative w-full pt-[6.5rem] pb-safe bg-surface px-margin"><div class="flex flex-col w-full pb-8">
+<!-- Place Header Context -->
+<section class="flex flex-col gap-space-sm pt-space-xs pb-space-md">
+<div class="flex items-baseline justify-between">
+<h1 class="font-headline-lg text-headline-lg text-primary tracking-tight">Dhun Haveli</h1>
+<span class="font-label-spatial text-label-spatial px-2.5 py-1 rounded-full bg-surface-container-high text-on-surface-variant uppercase tracking-wider">Surv. 1884</span>
+</div>
+<p class="font-display-lg-mobile text-headline-md italic text-on-surface-variant font-light -mt-1">
+      “A place, through its people.”
+    </p>
+<!-- Meta Chips -->
+<div class="flex flex-wrap items-center gap-space-xs mt-1">
+<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-surface-container text-on-surface text-label-ui font-label-ui">
+<span class="material-symbols-outlined text-[14px] text-secondary">location_on</span>
+        Jaipur / Dhun district
+      </span>
+<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-surface-container text-on-surface text-label-ui font-label-ui">
+<span class="material-symbols-outlined text-[14px] text-tertiary-container">conversion_path</span>
+        8 public trails
+      </span>
+<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-surface-container text-on-surface text-label-ui font-label-ui">
+<span class="material-symbols-outlined text-[14px] text-primary-container">group</span>
+        6 contributors
+      </span>
+</div>
+<!-- Editorial Descriptive Text -->
+<p class="font-body-md text-body-md text-on-surface-variant leading-relaxed mt-1">
+      A 19th-century courtyard dwelling oriented around passive ventilation and shared light wells. Authors have traced movements from morning light to evening gathering.
+    </p>
+</section>
+<!-- High Tactile Controls -->
+<section class="flex flex-col gap-space-sm mb-space-md">
+<!-- View Toggle Segmented Control -->
+<div class="flex items-center p-1 rounded-full bg-surface-container-highest shadow-inner">
+<button class="flex-1 py-1.5 px-3 rounded-full bg-surface-container-lowest text-primary shadow-sm font-label-ui text-label-ui flex items-center justify-center gap-1.5 transition-all" id="viewToggleSpatial">
+<span class="material-symbols-outlined text-[16px]">view_in_ar</span>
+        Spatial view
+      </button>
+<button class="flex-1 py-1.5 px-3 rounded-full text-on-surface-variant font-label-ui text-label-ui flex items-center justify-center gap-1.5 transition-all hover:text-on-surface" id="viewToggleList">
+<span class="material-symbols-outlined text-[16px]">format_list_bulleted</span>
+        Trail list (8)
+      </button>
+</div>
+<!-- Architectural Floor Filter Pill Ribbon -->
+<div class="flex items-center gap-space-xs overflow-x-auto pb-0.5 no-scrollbar">
+<button class="px-3.5 py-1.5 rounded-full bg-primary-container text-on-primary font-label-spatial text-label-spatial whitespace-nowrap shadow-sm">
+        LVL 00 · Ground floor
+      </button>
+<button class="px-3.5 py-1.5 rounded-full bg-surface-container text-on-surface-variant hover:text-on-surface font-label-spatial text-label-spatial whitespace-nowrap transition-colors">
+        LVL 01 · Mezzanine
+      </button>
+<button class="px-3.5 py-1.5 rounded-full bg-surface-container text-on-surface-variant hover:text-on-surface font-label-spatial text-label-spatial whitespace-nowrap transition-colors">
+        LVL 02 · Upper terrace
+      </button>
+</div>
+</section>
+<!-- Main Spatial Canvas: Architectural RoomPlan + Overlapping Traces -->
+<section class="relative w-full rounded-2xl bg-surface-container-low shadow-sm overflow-hidden mb-space-lg flex flex-col">
+<!-- Architectural Canvas HUD Header -->
+<div class="absolute top-3 left-3 right-3 z-10 flex items-center justify-between pointer-events-none">
+<div class="flex items-center gap-1.5 bg-surface/90 backdrop-blur-md px-2.5 py-1 rounded-full shadow-sm pointer-events-auto">
+<span class="w-2 h-2 rounded-full bg-secondary animate-pulse"></span>
+<span class="font-label-spatial text-label-spatial text-primary tracking-widest uppercase">LiDAR MESH 1:50</span>
+</div>
+<div class="flex items-center gap-1 bg-surface/90 backdrop-blur-md px-2.5 py-1 rounded-full shadow-sm pointer-events-auto text-on-surface-variant">
+<span class="material-symbols-outlined text-[14px]">compass_calibration</span>
+<span class="font-label-spatial text-label-spatial">N 26°55'</span>
+</div>
+</div>
+<!-- Interactive SVG Floorplan & Trail Vectors -->
+<div class="relative w-full aspect-[4/3.8] bg-surface-container-low flex items-center justify-center p-3 select-none">
+<svg class="w-full h-full" id="haveliMapSvg" viewBox="0 0 380 340" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<!-- Grid Hatching for Courtyard Void -->
+<pattern height="8" id="hatchCourtyard" patternTransform="rotate(45 0 0)" patternUnits="userSpaceOnUse" width="8">
+<line stroke="#414846" stroke-opacity="0.12" stroke-width="0.5" x1="0" x2="0" y1="0" y2="8"></line>
+</pattern>
+<!-- Subtle Glow Filter for Terracotta Primary Trail -->
+<filter height="140%" id="terracottaGlow" width="140%" x="-20%" y="-20%">
+<feDropShadow dx="0" dy="1" flood-color="#65210a" flood-opacity="0.35" stdDeviation="2"></feDropShadow>
+</filter>
+</defs>
+<!-- Haveli Outer Masonry Enclosure -->
+<path d="M 30,30 L 350,30 L 350,310 L 30,310 Z" fill="#fdf9f0" stroke="#002820" stroke-linecap="round" stroke-linejoin="round" stroke-width="3"></path>
+<!-- Interior Thick Walls & Chamber Partitions -->
+<!-- North Arcade Chambers -->
+<rect fill="#f7f3ea" height="60" stroke="#002820" stroke-width="2" width="100" x="30" y="30"></rect>
+<rect fill="#f7f3ea" height="60" stroke="#002820" stroke-width="2" width="100" x="250" y="30"></rect>
+<path d="M 130,55 L 250,55" stroke="#002820" stroke-dasharray="4,3" stroke-width="1.5"></path>
+<!-- West Vaulted Gallery -->
+<rect fill="#f7f3ea" height="150" stroke="#002820" stroke-width="2" width="55" x="30" y="90"></rect>
+<!-- East Service Wing -->
+<rect fill="#f7f3ea" height="150" stroke="#002820" stroke-width="2" width="55" x="295" y="90"></rect>
+<!-- South Vestibule & Entry Deorhi -->
+<rect fill="#f7f3ea" height="70" stroke="#002820" stroke-width="2" width="115" x="30" y="240"></rect>
+<rect fill="#f7f3ea" height="70" stroke="#002820" stroke-width="2" width="115" x="235" y="240"></rect>
+<!-- Courtyard Void (Brahmasthan / Passive Light Well) -->
+<rect fill="url(#hatchCourtyard)" height="120" stroke="#002820" stroke-width="1.5" width="140" x="120" y="105"></rect>
+<text fill="#717975" font-family="Newsreader" font-size="11" font-style="italic" text-anchor="middle" x="190" y="165">Central Courtyard Void</text>
+<!-- Colonnade Pillars around Courtyard (Stone Octagons) -->
+<circle cx="115" cy="100" fill="#002820" r="3.5"></circle>
+<circle cx="165" cy="100" fill="#002820" r="3.5"></circle>
+<circle cx="215" cy="100" fill="#002820" r="3.5"></circle>
+<circle cx="265" cy="100" fill="#002820" r="3.5"></circle>
+<circle cx="115" cy="230" fill="#002820" r="3.5"></circle>
+<circle cx="165" cy="230" fill="#002820" r="3.5"></circle>
+<circle cx="215" cy="230" fill="#002820" r="3.5"></circle>
+<circle cx="265" cy="230" fill="#002820" r="3.5"></circle>
+<circle cx="115" cy="165" fill="#002820" r="3.5"></circle>
+<circle cx="265" cy="165" fill="#002820" r="3.5"></circle>
+<!-- Doorway Portals & Ventilation Slits -->
+<line stroke="#fdf9f0" stroke-width="4" x1="180" x2="200" y1="310" y2="310"></line>
+<text fill="#717975" font-family="JetBrains Mono" font-size="8" text-anchor="middle" x="190" y="326">MAIN DEORHI ENTRY</text>
+<!-- OVERLAPPING TRAIL 2: Kael's Trail "Hidden Shadows & Water Catch" (Forest Green Dotted) -->
+<g class="transition-opacity duration-300" id="trailKael" opacity="0.35">
+<path d="M 190,305 L 190,260 L 140,255 L 75,220 L 60,140 L 75,65 L 140,45" fill="none" stroke="#173e35" stroke-dasharray="2,5" stroke-linecap="round" stroke-width="2.5"></path>
+<circle cx="140" cy="45" fill="#173e35" r="4"></circle>
+<circle cx="60" cy="140" fill="#173e35" r="3.5"></circle>
+</g>
+<!-- OVERLAPPING TRAIL 1: Maya's Trail "Acoustics of the Stone Portico" (Muted Brass Dashed) -->
+<g class="transition-opacity duration-300" id="trailMaya" opacity="0.45">
+<path d="M 190,305 L 205,250 L 265,220 L 270,120 L 225,95 L 190,95 L 155,95" fill="none" stroke="#725c20" stroke-dasharray="6,4" stroke-linecap="round" stroke-width="2.8"></path>
+<circle cx="270" cy="120" fill="#ffdf96" r="4.5" stroke="#725c20" stroke-width="1.5"></circle>
+<circle cx="190" cy="95" fill="#ffdf96" r="4.5" stroke="#725c20" stroke-width="1.5"></circle>
+</g>
+<!-- PRIMARY HIGHLIGHTED TRAIL: Hiro's Trail "Through the Courtyard" (Terracotta Core) -->
+<g class="transition-opacity duration-300" filter="url(#terracottaGlow)" id="trailHiro">
+<path d="M 190,305 C 190,280 180,260 170,240 C 150,200 135,175 145,145 C 155,115 185,110 200,125 C 215,140 230,170 245,185 C 265,205 285,200 300,165" fill="none" stroke="#65210a" stroke-linecap="round" stroke-linejoin="round" stroke-width="3.5"></path>
+<!-- Moment Node 1: Entry Threshold -->
+<g transform="translate(190,305)">
+<circle cx="0" cy="0" fill="#ffdbd0" fill-opacity="0.4" r="9"></circle>
+<circle cx="0" cy="0" fill="#65210a" r="5"></circle>
+<text fill="#ffffff" font-family="JetBrains Mono" font-size="6" font-weight="600" text-anchor="middle" x="0" y="2.5">1</text>
+</g>
+<!-- Moment Node 2: Shaded Southern Colonnade -->
+<g transform="translate(170,240)">
+<circle cx="0" cy="0" fill="#ffdbd0" fill-opacity="0.4" r="9"></circle>
+<circle cx="0" cy="0" fill="#65210a" r="5"></circle>
+<text fill="#ffffff" font-family="JetBrains Mono" font-size="6" font-weight="600" text-anchor="middle" x="0" y="2.5">2</text>
+</g>
+<!-- Moment Node 3: Open Courtyard Well & Draft -->
+<g transform="translate(145,145)">
+<circle cx="0" cy="0" fill="#ffdbd0" fill-opacity="0.6" r="11"></circle>
+<circle cx="0" cy="0" fill="#65210a" r="6"></circle>
+<text fill="#ffffff" font-family="JetBrains Mono" font-size="7" font-weight="600" text-anchor="middle" x="0" y="3">3</text>
+</g>
+<!-- Moment Node 4: Eastern Stone Lintel Transition -->
+<g transform="translate(200,125)">
+<circle cx="0" cy="0" fill="#ffdbd0" fill-opacity="0.4" r="9"></circle>
+<circle cx="0" cy="0" fill="#65210a" r="5"></circle>
+<text fill="#ffffff" font-family="JetBrains Mono" font-size="6" font-weight="600" text-anchor="middle" x="0" y="2.5">4</text>
+</g>
+<!-- Moment Node 5: Morning Light Chamber -->
+<g transform="translate(300,165)">
+<circle cx="0" cy="0" fill="#ffdbd0" fill-opacity="0.5" r="10"></circle>
+<circle cx="0" cy="0" fill="#65210a" r="5.5"></circle>
+<text fill="#ffffff" font-family="JetBrains Mono" font-size="6.5" font-weight="600" text-anchor="middle" x="0" y="3">5</text>
+</g>
+</g>
+</svg>
+</div>
+<!-- Overlapping Traces Interactive Switcher Dock -->
+<div class="p-2.5 bg-surface-container flex items-center justify-between gap-1 overflow-x-auto no-scrollbar">
+<button class="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-surface-container-lowest text-tertiary-container shadow-sm font-label-spatial text-label-spatial whitespace-nowrap transition-all" id="btnTrailHiro" onclick="highlightTrail('hiro')">
+<span class="w-2.5 h-2.5 rounded-full bg-tertiary-container"></span>
+        Hiro (Courtyard)
+      </button>
+<button class="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-surface-container-low text-on-surface-variant font-label-spatial text-label-spatial whitespace-nowrap hover:bg-surface-container-lowest transition-all" id="btnTrailMaya" onclick="highlightTrail('maya')">
+<span class="w-2 h-2 rounded-full bg-secondary"></span>
+        Maya (Acoustics)
+      </button>
+<button class="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-surface-container-low text-on-surface-variant font-label-spatial text-label-spatial whitespace-nowrap hover:bg-surface-container-lowest transition-all" id="btnTrailKael" onclick="highlightTrail('kael')">
+<span class="w-2 h-2 rounded-full bg-primary-container"></span>
+        Kael (Shadows)
+      </button>
+<button class="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-surface-container-low text-on-surface-variant font-label-spatial text-label-spatial whitespace-nowrap hover:bg-surface-container-lowest transition-all" id="btnTrailSarah" onclick="highlightTrail('sarah')">
+<span class="w-2 h-2 rounded-full bg-outline"></span>
+        Sarah (Terrace)
+      </button>
+</div>
+</section>
+<!-- Tactile Bottom Card: Selected Trail Context & Author Narrative -->
+<section class="rounded-3xl bg-surface-container-lowest p-space-lg shadow-sm flex flex-col gap-space-md">
+<!-- Draggable Tactile Handle Indicator -->
+<div class="w-10 h-1 bg-surface-variant rounded-full mx-auto -mt-2 mb-1"></div>
+<!-- Active Trail Header & Metas -->
+<div class="flex items-start justify-between gap-space-sm">
+<div class="flex flex-col">
+<span class="font-label-spatial text-label-spatial uppercase tracking-widest text-on-surface-variant mb-0.5" id="activeFloorSpan">GROUND FLOOR · SEQUENCE</span>
+<h2 class="font-headline-md text-headline-md text-on-surface" id="activeTrailTitle">Through the Courtyard</h2>
+</div>
+<span class="font-label-metric text-label-metric text-on-tertiary-container bg-tertiary-fixed px-2.5 py-1 rounded-full whitespace-nowrap mt-1">
+        5 moments
+      </span>
+</div>
+<!-- Author Profile Monograph Row -->
+<div class="flex items-center gap-space-sm p-space-sm rounded-2xl bg-surface-container-low">
+<img alt="Hiro portrait" class="w-13 h-13 w-[52px] h-[52px] rounded-full object-cover shadow-sm" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCMH7teg4rBh_4x3dpfn7gCvqHzggpN-lrB70Y8_J7bNK4fE1piAskGb2AxAAu1uJyQU0Y5cqKjxAM0-9q1E2QFX_q82II4ZFSBiZWWFqie7SKuC0yTSGXQ8g6FEvotlfi-S5ZmHlaMdWQgx3MtZxJ8q7pCsjBZPLUo-rtTuCpEzbSOkXnU7X7z-2BRwCcvWnd9j4oJTTsHkrnCHhDSmLvdtM7-8Vzbev7ZvfwVw7k">
+<div class="flex flex-col min-w-0">
+<div class="flex items-center gap-1.5">
+<span class="font-headline-sm text-headline-sm text-on-surface truncate">A trail by Hiro</span>
+<span class="material-symbols-outlined text-[15px] text-primary">verified</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant truncate">Architect &amp; Spatial Explorer</p>
+<span class="font-label-spatial text-label-spatial text-on-surface-variant mt-0.5">Ground floor · 5 moments · 12 min</span>
+</div>
+</div>
+<!-- Author Personal Contemplative Quote -->
+<blockquote class="p-space-md rounded-2xl bg-surface-container font-display-lg-mobile text-[16px] leading-relaxed italic text-on-surface" id="activeAuthorQuote">
+      “A few details I wanted the next person to notice: the shifting morning draft through the eastern screen and the worn limestone lintels.”
+    </blockquote>
+<!-- Sequential Moments Micro-Track Preview -->
+<div class="flex flex-col gap-2 pt-1">
+<div class="flex items-center justify-between text-label-spatial font-label-spatial text-on-surface-variant uppercase">
+<span class="">Survey Path Checkpoints</span>
+<span class="">180m Walk</span>
+</div>
+<div class="grid grid-cols-5 gap-1.5">
+<div class="h-1.5 rounded-full bg-tertiary-container"></div>
+<div class="h-1.5 rounded-full bg-tertiary-container"></div>
+<div class="h-1.5 rounded-full bg-tertiary-container"></div>
+<div class="h-1.5 rounded-full bg-tertiary-container"></div>
+<div class="h-1.5 rounded-full bg-tertiary-container"></div>
+</div>
+</div>
+<!-- Action Buttons -->
+<div class="flex flex-col gap-space-sm pt-space-xs">
+<!-- Primary Walk CTA -->
+<button class="w-full h-13 py-3.5 px-6 rounded-full bg-primary-container text-on-primary font-headline-sm text-headline-sm flex items-center justify-center gap-2 shadow-md active:scale-[0.98] transition-transform">
+<span class="">Explore trail</span>
+<span class="material-symbols-outlined text-[18px]">arrow_forward</span>
+</button>
+<!-- Secondary Spatial Actions -->
+<div class="grid grid-cols-2 gap-space-sm">
+<button class="py-2.5 px-3 rounded-full bg-surface-container text-on-surface font-label-ui text-label-ui flex items-center justify-center gap-1.5 hover:bg-surface-container-high transition-colors">
+<span class="material-symbols-outlined text-[16px]">shuffle</span>
+          Select another
+        </button>
+<button class="py-2.5 px-3 rounded-full bg-surface-container-low text-tertiary-container font-label-ui text-label-ui flex items-center justify-center gap-1.5 shadow-sm hover:bg-surface-variant transition-colors">
+<span class="material-symbols-outlined text-[16px]">edit_location_alt</span>
+          Leave a trail here
+        </button>
+</div>
+</div>
+</section>
+<!-- Interactive Trail Switcher Logic -->
+<script>
+    function highlightTrail(trailKey) {
+      const hiroTrail = document.getElementById('trailHiro');
+      const mayaTrail = document.getElementById('trailMaya');
+      const kaelTrail = document.getElementById('trailKael');
+      
+      const btnHiro = document.getElementById('btnTrailHiro');
+      const btnMaya = document.getElementById('btnTrailMaya');
+      const btnKael = document.getElementById('btnTrailKael');
+      const btnSarah = document.getElementById('btnTrailSarah');
+
+      const title = document.getElementById('activeTrailTitle');
+      const quote = document.getElementById('activeAuthorQuote');
+      const floorSpan = document.getElementById('activeFloorSpan');
+
+      // Reset button styles
+      [btnHiro, btnMaya, btnKael, btnSarah].forEach(btn => {
+        btn.className = "flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-surface-container-low text-on-surface-variant font-label-spatial text-label-spatial whitespace-nowrap transition-all";
+      });
+
+      if (trailKey === 'hiro') {
+        hiroTrail.setAttribute('opacity', '1');
+        hiroTrail.setAttribute('stroke-width', '3.5');
+        mayaTrail.setAttribute('opacity', '0.35');
+        kaelTrail.setAttribute('opacity', '0.25');
+
+        btnHiro.className = "flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-surface-container-lowest text-tertiary-container shadow-sm font-label-spatial text-label-spatial whitespace-nowrap transition-all";
+        title.innerText = "Through the Courtyard";
+        floorSpan.innerText = "GROUND FLOOR · SEQUENCE";
+        quote.innerHTML = "&ldquo;A few details I wanted the next person to notice: the shifting morning draft through the eastern screen and the worn limestone lintels.&rdquo;";
+      } else if (trailKey === 'maya') {
+        hiroTrail.setAttribute('opacity', '0.25');
+        mayaTrail.setAttribute('opacity', '1');
+        kaelTrail.setAttribute('opacity', '0.25');
+
+        btnMaya.className = "flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-surface-container-lowest text-secondary shadow-sm font-label-spatial text-label-spatial whitespace-nowrap transition-all";
+        title.innerText = "Acoustics of the Stone Portico";
+        floorSpan.innerText = "GROUND & MEZZANINE · PORTICO";
+        quote.innerHTML = "&ldquo;Listen to how footsteps dampen as you cross from the sunlit courtyard into the triple-arched stone colonnade.&rdquo;";
+      } else if (trailKey === 'kael') {
+        hiroTrail.setAttribute('opacity', '0.25');
+        mayaTrail.setAttribute('opacity', '0.25');
+        kaelTrail.setAttribute('opacity', '1');
+
+        btnKael.className = "flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-surface-container-lowest text-primary shadow-sm font-label-spatial text-label-spatial whitespace-nowrap transition-all";
+        title.innerText = "Hidden Shadows & Water Catch";
+        floorSpan.innerText = "PERIMETER DUCTS & RAIN WELL";
+        quote.innerHTML = "&ldquo;The haveli catches water at three sunken points. In late afternoon, temperatures drop five degrees along this narrow passage.&rdquo;";
+      } else if (trailKey === 'sarah') {
+        hiroTrail.setAttribute('opacity', '0.2');
+        mayaTrail.setAttribute('opacity', '0.2');
+        kaelTrail.setAttribute('opacity', '0.2');
+
+        btnSarah.className = "flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-surface-container-lowest text-on-surface shadow-sm font-label-spatial text-label-spatial whitespace-nowrap transition-all";
+        title.innerText = "Upper Terrace Wind Apertures";
+        floorSpan.innerText = "LVL 02 · HIGH ROOF WALK";
+        quote.innerHTML = "&ldquo;Climb to where the jali screens meet the open horizon. Traced during the amber sunset hour.&rdquo;";
+      }
+    }
+  </script>
+</div></main>
+
+</body></html>
