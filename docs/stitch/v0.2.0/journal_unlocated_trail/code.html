@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+
+<html class="h-full" lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"/><meta content="mobile_tab" name="shell-type"/><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=JetBrains+Mono:wght@400;500&amp;family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&amp;display=swap" rel="stylesheet"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{width:100%;margin:0;padding:0;background-color:#fdf9f0;color:#1c1c16;}.pb-safe{padding-bottom:env(safe-area-inset-bottom,0px);}.pt-safe{padding-top:env(safe-area-inset-top,0px);}.h-safe-top{height:env(safe-area-inset-top,0px);}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = { darkMode: "class", theme: { extend: { colors: { "on-tertiary-fixed": "#3a0b00", "on-tertiary": "#ffffff", "secondary-container": "#ffdf96", "primary-container": "#173e35", "on-secondary-fixed": "#251a00", "surface-container-high": "#ece8df", "surface-dim": "#dddad1", "surface-container": "#f1eee5", "tertiary": "#450f00", "on-tertiary-container": "#e98768", "tertiary-fixed-dim": "#ffb59e", "outline": "#717975", "surface-tint": "#40665b", "primary": "#002820", "on-tertiary-fixed-variant": "#793018", "outline-variant": "#c0c8c4", "on-secondary-fixed-variant": "#584409", "surface-variant": "#e6e2d9", "surface-container-low": "#f7f3ea", "on-secondary": "#ffffff", "surface-container-lowest": "#ffffff", "on-secondary-container": "#786226", "tertiary-fixed": "#ffdbd0", "on-surface-variant": "#414846", "on-primary-fixed": "#00201a", "secondary-fixed-dim": "#e1c37d", "on-surface": "#1c1c16", "error-container": "#ffdad6", "secondary": "#725c20", "primary-fixed-dim": "#a6cfc2", "on-background": "#1c1c16", "on-primary-fixed-variant": "#274e44", "primary-fixed": "#c2ebde", "background": "#fdf9f0", "error": "#ba1a1a", "inverse-primary": "#a6cfc2", "secondary-fixed": "#ffdf96", "surface-bright": "#fdf9f0", "inverse-on-surface": "#f4f0e7", "surface": "#fdf9f0", "surface-container-highest": "#e6e2d9", "inverse-surface": "#31302b", "tertiary-container": "#65210a", "on-primary-container": "#81a99d", "on-primary": "#ffffff", "on-error": "#ffffff", "on-error-container": "#93000a" }, borderRadius: { "DEFAULT": "1rem", "lg": "2rem", "xl": "3rem", "full": "9999px" }, spacing: { "margin": "1.25rem", "space-lg": "1.5rem", "space-xl": "2.25rem", "space-sm": "0.5rem", "gutter": "1rem", "space-md": "1rem", "space-xs": "0.25rem" }, fontFamily: { "headline-md": ["Newsreader"], "label-metric": ["JetBrains Mono"], "body-sm": ["Inter"], "display-lg-mobile": ["Newsreader"], "label-ui": ["Inter"], "body-lg": ["Inter"], "body-md": ["Inter"], "label-spatial": ["JetBrains Mono"], "headline-sm": ["Inter"], "display-lg": ["Newsreader"], "headline-lg": ["Newsreader"] }, fontSize: { "headline-md": ["22px", { "lineHeight": "30px", "fontWeight": "400" }], "label-metric": ["13px", { "lineHeight": "16px", "letterSpacing": "0.02em", "fontWeight": "500" }], "body-sm": ["12px", { "lineHeight": "16px", "fontWeight": "400" }], "display-lg-mobile": ["32px", { "lineHeight": "40px", "letterSpacing": "-0.015em", "fontWeight": "400" }], "label-ui": ["13px", { "lineHeight": "18px", "fontWeight": "500" }], "body-lg": ["16px", { "lineHeight": "24px", "fontWeight": "400" }], "body-md": ["14px", { "lineHeight": "20px", "fontWeight": "400" }], "label-spatial": ["11px", { "lineHeight": "14px", "letterSpacing": "0.06em", "fontWeight": "500" }], "headline-sm": ["17px", { "lineHeight": "24px", "letterSpacing": "-0.01em", "fontWeight": "600" }], "display-lg": ["40px", { "lineHeight": "48px", "letterSpacing": "-0.02em", "fontWeight": "400" }], "headline-lg": ["28px", { "lineHeight": "36px", "letterSpacing": "-0.01em", "fontWeight": "400" }] } } } }</script><style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head><body class="bg-surface font-body-md text-on-surface antialiased min-h-screen flex flex-col"><header class="fixed top-0 w-full z-50 pt-safe bg-surface/85 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.03)]"><div class="h-20 px-margin flex items-center justify-between"><div class="flex items-center gap-space-sm"><img alt="Official Trails logo faithfully vectorised from the uploaded artwork: an organic looped path mark in dark forest green forming an open pebble/contour knot with a distinct terracotta warm river-stone droplet nested inside the lower right aperture, paired with the lower-case humanist wordmark 'trails' underneath.. Brand logo. - Primary color: #173e35
+- Font: newsreader
+- Mode: light
+- Roundness: rounded-full
+" class="h-8 w-auto object-contain" src="https://lh3.googleusercontent.com/aida/AEtjO1VbkZ3ak4SFCFGFu45iCZGdZ-DpXc4EpuLfoQRPiKOkdnhzzpXFDDN5iN2DHtbdY3WhSiDfGhBmToaUxOVIl-Zqh7bmmQ5yJ5vvb8eFk6Es0aMuq4nTG_w3UH46uxLUI7fnSq_1Y_HFYVmP98G6cQqOwdMrtwHjlxDW0HBqnigIgYwZrUhYANEBGezUsUurMnlX_00g34chf1qWlJ-aI3Oxn3852Jfo__zl2ZsKf2j2"/><div class="flex flex-col"><span class="font-headline-sm text-headline-sm text-primary leading-none tracking-tight">Trails</span><span class="font-label-spatial text-label-spatial text-on-surface-variant flex items-center gap-1 mt-0.5"><span class="w-1.5 h-1.5 rounded-full bg-surface-tint inline-block"></span>Saved on this iPhone</span></div></div><div class="flex items-center gap-space-sm"><span class="sr-only">Journals</span><button aria-label="Search Archive" class="w-11 h-11 flex items-center justify-center rounded-full text-on-surface-variant hover:text-primary active:scale-95 transition-transform"><span class="material-symbols-outlined text-[22px]">search</span></button><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></div></header><main class="flex-1 flex flex-col relative w-full pt-20 pb-28 bg-surface"><div class="flex flex-col w-full px-margin space-y-space-md">
+<!-- Segmented View Switcher -->
+<div class="flex items-center justify-center w-full pt-space-xs">
+<div class="inline-flex p-1 bg-surface-container rounded-full shadow-inner">
+<button class="flex items-center gap-1.5 px-space-md py-1.5 bg-primary-container text-on-primary rounded-full transition-transform active:scale-95 shadow-sm" id="tab-journal">
+<span class="material-symbols-outlined text-[16px]">menu_book</span>
+<span class="font-label-ui text-label-ui">Journal</span>
+</button>
+<button class="flex items-center gap-1.5 px-space-md py-1.5 text-on-surface-variant hover:text-primary rounded-full transition-transform active:scale-95" id="tab-map">
+<span class="material-symbols-outlined text-[16px]">map</span>
+<span class="font-label-ui text-label-ui">Map</span>
+</button>
+</div>
+</div>
+<!-- Search Input Bar -->
+<div class="relative w-full">
+<div class="w-full h-12 bg-surface-container-low rounded-full flex items-center px-space-md shadow-sm">
+<span class="material-symbols-outlined text-outline text-[20px] mr-2">search</span>
+<input class="w-full bg-transparent border-0 outline-none font-body-md text-on-surface placeholder:text-outline text-body-md" placeholder="Search my places and trails" type="text"/>
+<button aria-label="Audio search" class="text-on-surface-variant flex items-center justify-center p-1 active:scale-90">
+<span class="material-symbols-outlined text-[18px]">mic</span>
+</button>
+</div>
+</div>
+<!-- Filter Chips Row -->
+<div class="flex items-center gap-space-xs overflow-x-auto no-scrollbar py-0.5">
+<button class="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-surface-container text-on-surface font-label-ui text-label-ui shadow-sm active:scale-95">
+<span>All Time</span>
+<span class="material-symbols-outlined text-[16px]">expand_more</span>
+</button>
+<button class="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-surface-container text-on-surface font-label-ui text-label-ui shadow-sm active:scale-95">
+<span>All Places</span>
+<span class="material-symbols-outlined text-[16px]">expand_more</span>
+</button>
+<button class="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-tertiary-fixed text-on-tertiary-fixed font-label-ui text-label-ui shadow-sm active:scale-95">
+<span class="w-1.5 h-1.5 rounded-full bg-tertiary inline-block"></span>
+<span>Unanchored (1)</span>
+</button>
+</div>
+<!-- Integrity & State Notice Pill -->
+<div class="w-full bg-surface-container-low rounded-DEFAULT px-space-md py-2.5 flex items-center justify-between shadow-sm">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-secondary text-[18px]">cloud_off</span>
+<span class="font-label-metric text-label-spatial text-on-surface">1 trail without geographic anchor · Saved offline</span>
+</div>
+<span class="material-symbols-outlined text-outline text-[16px]">info</span>
+</div>
+<!-- Primary Card: Unlocated Trail with Spatial Respect -->
+<div class="w-full bg-surface-container-lowest rounded-xl p-space-md shadow-md flex flex-col space-y-space-md">
+<!-- Visual Preview: High Precision RoomPlan LiDAR Wireframe Mesh Thumbnail -->
+<div class="relative w-full h-44 rounded-lg overflow-hidden bg-primary flex items-center justify-center">
+<!-- Architectural Wireframe Grid Overlay -->
+<svg class="absolute inset-0 w-full h-full opacity-40" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<pattern height="24" id="roomplan-grid" patternunits="userSpaceOnUse" width="24">
+<path d="M 24 0 L 0 0 0 24" fill="none" stroke="#a6cfc2" stroke-dasharray="1 3" stroke-width="0.5"></path>
+</pattern>
+</defs>
+<rect fill="url(#roomplan-grid)" height="100%" width="100%"></rect>
+<!-- Isometric Wall Mesh Lines -->
+<path d="M 40 120 L 120 70 L 260 70 L 320 110 L 240 155 Z" fill="none" stroke="#c2ebde" stroke-width="1.5"></path>
+<path d="M 120 70 L 120 30 L 260 30 L 260 70" fill="none" stroke="#a6cfc2" stroke-dasharray="2 2" stroke-width="1.2"></path>
+<path d="M 40 120 L 40 80 L 120 30" fill="none" stroke="#a6cfc2" stroke-dasharray="2 2" stroke-width="1.2"></path>
+<path d="M 320 110 L 320 70 L 260 30" fill="none" stroke="#a6cfc2" stroke-dasharray="2 2" stroke-width="1.2"></path>
+<!-- RoomPlan Identified Anchor Core -->
+<circle cx="180" cy="112" fill="#ffb59e" r="4"></circle>
+<circle cx="180" cy="112" fill="none" opacity="0.6" r="12" stroke="#ffb59e" stroke-width="0.8"></circle>
+<!-- Path Nodes -->
+<path d="M 70 110 Q 140 130 180 112 T 270 95" fill="none" stroke="#e98768" stroke-linecap="round" stroke-width="2.5"></path>
+</svg>
+<!-- Pill Badge: Floating LiDAR Status -->
+<div class="absolute top-3 left-3 px-2.5 py-1 rounded-full bg-primary-container/85 backdrop-blur-md flex items-center gap-1.5 shadow-sm">
+<span class="w-1.5 h-1.5 rounded-full bg-primary-fixed-dim animate-pulse"></span>
+<span class="font-label-spatial text-label-spatial text-primary-fixed">ROOMPLAN V2.4 MESH</span>
+</div>
+<!-- Pill Badge: Floor Area Metric -->
+<div class="absolute top-3 right-3 px-2.5 py-1 rounded-full bg-primary-container/85 backdrop-blur-md flex items-center gap-1 shadow-sm">
+<span class="material-symbols-outlined text-primary-fixed text-[13px]">straighten</span>
+<span class="font-label-metric text-label-spatial text-primary-fixed">142 m²</span>
+</div>
+<!-- Center Floating Visual Prompt -->
+<div class="relative z-10 flex flex-col items-center justify-center p-3 rounded-DEFAULT bg-surface-container-lowest/15 backdrop-blur-lg">
+<span class="material-symbols-outlined text-primary-fixed text-[28px]">view_in_ar</span>
+<span class="font-label-metric text-label-spatial text-surface-bright mt-0.5 tracking-wider">LOCAL COORDINATE SPACE</span>
+</div>
+</div>
+<!-- Metadata & Description -->
+<div class="flex flex-col space-y-2">
+<!-- Tag: Warm Terracotta Badge for Unanchored GPS Status -->
+<div class="self-start">
+<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-tertiary-fixed text-on-tertiary-fixed font-label-spatial text-label-spatial shadow-sm">
+<span class="material-symbols-outlined text-[14px] text-tertiary">location_off</span>
+<span>No Geographic Location</span>
+</span>
+</div>
+<div class="flex flex-col">
+<h2 class="font-headline-md text-headline-md text-primary tracking-tight">Subterranean Workshop &amp; Vault</h2>
+<span class="font-body-sm text-body-sm text-on-surface-variant">A trail by Hiro · Recorded yesterday, 21:15</span>
+</div>
+<!-- Architectural Context Note -->
+<div class="p-space-sm rounded-DEFAULT bg-surface-container-low flex items-start gap-2.5">
+<span class="material-symbols-outlined text-tertiary text-[18px] shrink-0 mt-0.5">help_outline</span>
+<p class="font-body-sm text-body-sm text-on-surface-variant leading-relaxed">
+          Recorded indoors without GPS lock. This trail is securely saved in your journal but not anchored on the map.
+        </p>
+</div>
+</div>
+<!-- Dual Actions -->
+<div class="flex flex-col gap-2 pt-1">
+<!-- Primary Action: Open Map Pin Picker / Location Anchoring Sheet -->
+<button class="w-full h-[52px] bg-primary-container text-on-primary rounded-full font-headline-sm text-headline-sm flex items-center justify-center gap-2 shadow-md active:scale-[0.98] transition-transform" id="btn-add-location">
+<span class="material-symbols-outlined text-[20px] text-primary-fixed">add_location_alt</span>
+<span>Add geographic location</span>
+</button>
+<!-- Secondary Action: Revisit in AR/LiDAR Mesh Only -->
+<button class="w-full h-11 bg-surface-container text-primary rounded-full font-label-ui text-label-ui flex items-center justify-center gap-1.5 active:scale-[0.98] transition-transform">
+<span class="material-symbols-outlined text-[18px]">3d_rotation</span>
+<span>Revisit trail (Indoor view only)</span>
+</button>
+</div>
+</div>
+<!-- Standard Anchored Trail Card for Monographic Comparison -->
+<div class="w-full bg-surface-container-lowest rounded-xl p-space-md shadow-sm flex flex-col space-y-3 opacity-95">
+<!-- Anchored Photography Preview -->
+<div class="relative w-full h-36 rounded-lg overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="Warm night atmosphere of a heritage Rajasthani stone haveli courtyard in Jaipur with intricate carved sandstone archways, glowing brass lanterns casting amber light on flagstone pavers, low traditional charpai seating with embroidered textiles, and tranquil architectural symmetry under an ink-blue evening sky." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCUsZ84MIs6oXqEAkA8KIXoiKOp0XX1jRZBryppp_qulflb2qbw69nhwZunkTWku1CfvzQYbg7exAnYQvlsIgNVRL1phPK1bQvcPPKpIHZqWmUl9TGw93gYuu-m2uHBzyXMnBuHyIaRgmoXPk99mwobxubh1Y59bXqP7cn2B8y8xI_IOtcfLSyXlfEvKtt6m2cYjzd3d_OmF1pIUtttGFh41UoU4QMfLwDtNDAtD40"/>
+<div class="absolute inset-0 bg-gradient-to-t from-primary/60 via-transparent to-black/20"></div>
+<!-- Pill Badge: Verified Geographic Node -->
+<div class="absolute top-3 left-3 px-2.5 py-1 rounded-full bg-surface-container-lowest/85 backdrop-blur-md flex items-center gap-1 shadow-sm">
+<span class="material-symbols-outlined text-surface-tint text-[14px]">pin_drop</span>
+<span class="font-label-spatial text-label-spatial text-primary">26.9124° N, 75.7873° E</span>
+</div>
+<!-- Elevation Profile & Level Marker -->
+<div class="absolute bottom-2.5 right-3 px-2 py-0.5 rounded-full bg-surface-container-lowest/90 backdrop-blur-md font-label-spatial text-label-spatial text-on-surface">
+        LVL 01 · COURTYARD
+      </div>
+</div>
+<!-- Title & Location Metadata -->
+<div class="flex items-start justify-between">
+<div class="flex flex-col">
+<h3 class="font-headline-md text-headline-md text-primary leading-tight">An evening through the Haveli</h3>
+<span class="font-body-sm text-body-sm text-on-surface-variant flex items-center gap-1 mt-0.5">
+<span class="material-symbols-outlined text-[14px] text-surface-tint">check_circle</span>
+<span>Dhun, Jaipur · Anchored on Map</span>
+</span>
+</div>
+<button aria-label="Trail options" class="w-8 h-8 rounded-full flex items-center justify-center text-on-surface-variant active:scale-90">
+<span class="material-symbols-outlined text-[20px]">more_vert</span>
+</button>
+</div>
+<!-- Monograph Narrative Snippet -->
+<p class="font-body-sm text-body-sm text-on-surface-variant line-clamp-2 leading-relaxed">
+      Continuous path passing the colonnade transition, into the shaded stone light wells, settling before the low stepwell water reservoir.
+    </p>
+<!-- Anchored Meta Strip -->
+<div class="flex items-center gap-4 pt-1 text-on-surface-variant font-label-metric text-label-spatial">
+<span class="flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">route</span>
+        340m
+      </span>
+<span class="flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">timer</span>
+        24 min
+      </span>
+<span class="flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">photo_camera</span>
+        12 waypoints
+      </span>
+</div>
+</div>
+<!-- Interactive Modal / Native Sheet for Location Anchoring -->
+<div class="fixed inset-0 z-50 bg-inverse-surface/40 backdrop-blur-sm hidden flex-col justify-end transition-opacity duration-200" id="location-sheet">
+<div class="w-full bg-surface-container-lowest rounded-t-xl p-space-md shadow-2xl flex flex-col space-y-space-md animate-in slide-in-from-bottom duration-300 pb-safe">
+<!-- Sheet Pull Bar Indicator -->
+<div class="w-10 h-1 bg-outline-variant rounded-full mx-auto self-center -mt-1"></div>
+<!-- Sheet Header -->
+<div class="flex items-center justify-between">
+<div class="flex flex-col">
+<span class="font-headline-md text-headline-md text-primary">Anchor Spatial Trail</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Set coordinate origin without distorting indoor LiDAR data</span>
+</div>
+<button class="w-8 h-8 rounded-full bg-surface-container flex items-center justify-center text-on-surface active:scale-90" id="close-sheet">
+<span class="material-symbols-outlined text-[18px]">close</span>
+</button>
+</div>
+<!-- Search Place Field -->
+<div class="w-full h-11 bg-surface-container-low rounded-full flex items-center px-space-md">
+<span class="material-symbols-outlined text-outline text-[18px] mr-2">search</span>
+<input class="w-full bg-transparent border-0 outline-none font-body-sm text-on-surface text-body-sm" placeholder="Search architectural venue or address" type="text" value="Old City Studio Vaults"/>
+</div>
+<!-- Map Pinpoint Interactive Preview Frame -->
+<div class="w-full h-44 rounded-lg bg-cover bg-center relative flex items-center justify-center overflow-hidden shadow-inner" data-location="Jaipur, Rajasthan, India" style="">
+<!-- Floating Reticle Crosshair -->
+<div class="relative flex flex-col items-center">
+<div class="w-10 h-10 rounded-full bg-primary-container/20 flex items-center justify-center animate-ping absolute"></div>
+<div class="w-8 h-8 rounded-full bg-primary-container text-on-primary flex items-center justify-center shadow-lg relative z-10">
+<span class="material-symbols-outlined text-[18px]">location_searching</span>
+</div>
+<span class="mt-1 px-2 py-0.5 rounded-full bg-surface-container-lowest font-label-spatial text-label-spatial text-primary shadow-sm font-semibold">
+            ORIGIN ANCHOR
+          </span>
+</div>
+</div>
+<!-- Action Confirmation Buttons -->
+<div class="flex items-center gap-2 pt-1">
+<button class="flex-1 h-12 bg-primary-container text-on-primary rounded-full font-headline-sm text-headline-sm flex items-center justify-center gap-2 active:scale-98 shadow-md" id="confirm-anchor">
+<span class="material-symbols-outlined text-[18px]">check</span>
+<span>Bind to Map</span>
+</button>
+<button class="px-5 h-12 bg-surface-container text-on-surface rounded-full font-label-ui text-label-ui active:scale-98" id="cancel-sheet">
+          Cancel
+        </button>
+</div>
+</div>
+</div>
+</div>
+<script>
+  (function() {
+    const addLocationBtn = document.getElementById('btn-add-location');
+    const locationSheet = document.getElementById('location-sheet');
+    const closeSheet = document.getElementById('close-sheet');
+    const cancelSheet = document.getElementById('cancel-sheet');
+    const confirmAnchor = document.getElementById('confirm-anchor');
+    const tabJournal = document.getElementById('tab-journal');
+    const tabMap = document.getElementById('tab-map');
+
+    function openModal() {
+      locationSheet.classList.remove('hidden');
+      locationSheet.classList.add('flex');
+    }
+
+    function closeModal() {
+      locationSheet.classList.add('hidden');
+      locationSheet.classList.remove('flex');
+    }
+
+    if (addLocationBtn) addLocationBtn.addEventListener('click', openModal);
+    if (closeSheet) closeSheet.addEventListener('click', closeModal);
+    if (cancelSheet) cancelSheet.addEventListener('click', closeModal);
+
+    if (confirmAnchor) {
+      confirmAnchor.addEventListener('click', function() {
+        confirmAnchor.innerHTML = '<span class="material-symbols-outlined animate-spin text-[18px]">progress_activity</span><span>Anchoring...</span>';
+        setTimeout(function() {
+          closeModal();
+          confirmAnchor.innerHTML = '<span class="material-symbols-outlined text-[18px]">check</span><span>Bind to Map</span>';
+        }, 700);
+      });
+    }
+
+    if (tabJournal && tabMap) {
+      tabMap.addEventListener('click', function() {
+        tabMap.classList.add('bg-primary-container', 'text-on-primary', 'shadow-sm');
+        tabMap.classList.remove('text-on-surface-variant');
+        tabJournal.classList.remove('bg-primary-container', 'text-on-primary', 'shadow-sm');
+        tabJournal.classList.add('text-on-surface-variant');
+      });
+
+      tabJournal.addEventListener('click', function() {
+        tabJournal.classList.add('bg-primary-container', 'text-on-primary', 'shadow-sm');
+        tabJournal.classList.remove('text-on-surface-variant');
+        tabMap.classList.remove('bg-primary-container', 'text-on-primary', 'shadow-sm');
+        tabMap.classList.add('text-on-surface-variant');
+      });
+    }
+  })();
+</script></main><nav class="fixed bottom-0 w-full z-50 pb-safe bg-surface-container-low/90 backdrop-blur-xl shadow-[0_-4px_24px_rgba(23,62,53,0.04)]" data-active-classes="text-primary-container font-medium"><div class="h-16 px-space-md flex items-center justify-around"><a aria-current="page" class="flex flex-col items-center justify-center min-w-[56px] min-h-[44px] gap-0.5 transition-colors text-primary-container font-medium" data-path="journals" href="#"><span class="material-symbols-outlined text-[24px]">auto_stories</span><span class="font-label-ui text-label-ui">Journals</span></a><a class="flex flex-col items-center justify-center min-w-[56px] min-h-[44px] gap-0.5 text-on-surface-variant transition-colors" data-path="capture" href="#"><div class="w-11 h-8 rounded-full bg-primary-container text-on-primary flex items-center justify-center shadow-[0_2px_8px_rgba(23,62,53,0.2)]"><span class="material-symbols-outlined text-[20px]">view_in_ar</span></div><span class="font-label-ui text-label-ui">Capture</span></a><a class="flex flex-col items-center justify-center min-w-[56px] min-h-[44px] gap-0.5 text-on-surface-variant transition-colors" data-path="revisit" href="#"><span class="material-symbols-outlined text-[24px]">explore</span><span class="font-label-ui text-label-ui">Revisit</span></a></div></nav></body></html>
