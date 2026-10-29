@@ -15,6 +15,11 @@ struct RoomLayoutView: View {
     let footsteps: [SIMD3<Float>]
     var moments: [SpatialMoment] = []
 
+    // Live Companion & Trail Follower Support
+    var liveFollowerFootsteps: [SIMD3<Float>] = []
+    var liveFollowerPosition: SIMD3<Float>? = nil
+    var activeCheckpointIndex: Int? = nil
+
     var body: some View {
         GeometryReader { geometry in
             let boundingBox = calculateBoundingBox(for: capturedRoom, footsteps: footsteps)
@@ -65,22 +70,35 @@ struct RoomLayoutView: View {
                     .padding(24)
                 }
 
-                // Continuous Walking Vector (Terracotta path)
-                drawPathVector(footsteps, scale: scale, offset: offset)
+                // Continuous Walking Vector (Terracotta recorded path)
+                drawPathVector(footsteps, scale: scale, offset: offset, color: AppColors.terracotta)
 
                 // Footstep nodes
                 drawFootstepNodes(footsteps, scale: scale, offset: offset)
 
+                // Live Follower Walking Path (Electric Cyan)
+                if !liveFollowerFootsteps.isEmpty {
+                    drawPathVector(liveFollowerFootsteps, scale: scale, offset: offset, color: Color(hex: "#00D4FF"))
+                }
+
                 // Moments (Numbered Terracotta Pins - PRD §8.3 & §9.3)
                 ForEach(moments) { moment in
                     let pt = projectTo2D(SIMD3<Float>(Float(moment.positionX), 0, Float(moment.positionY)), scale: scale, offset: offset)
+                    let isActive = (moment.index == activeCheckpointIndex)
+
                     ZStack {
+                        if isActive {
+                            Circle()
+                                .stroke(Color(hex: "#00D4FF"), lineWidth: 2)
+                                .frame(width: 36, height: 36)
+                        }
+
                         Circle()
-                            .fill(AppColors.mutedBrass.opacity(0.3))
+                            .fill(isActive ? Color(hex: "#00D4FF").opacity(0.35) : AppColors.mutedBrass.opacity(0.3))
                             .frame(width: 26, height: 26)
 
                         Circle()
-                            .fill(AppColors.terracotta)
+                            .fill(isActive ? Color(hex: "#00D4FF") : AppColors.terracotta)
                             .frame(width: 18, height: 18)
                             .shadow(color: Color.black.opacity(0.5), radius: 3, x: 0, y: 1)
 
@@ -89,6 +107,26 @@ struct RoomLayoutView: View {
                             .foregroundColor(.white)
                     }
                     .position(pt)
+                }
+
+                // Live Follower Current Position Beacon
+                if let livePos = liveFollowerPosition {
+                    let livePt = projectTo2D(livePos, scale: scale, offset: offset)
+                    ZStack {
+                        Circle()
+                            .fill(Color(hex: "#00D4FF").opacity(0.25))
+                            .frame(width: 38, height: 38)
+
+                        Circle()
+                            .stroke(Color(hex: "#00D4FF"), lineWidth: 2)
+                            .frame(width: 24, height: 24)
+
+                        Circle()
+                            .fill(Color(hex: "#00D4FF"))
+                            .frame(width: 12, height: 12)
+                            .shadow(color: Color(hex: "#00D4FF").opacity(0.8), radius: 6)
+                    }
+                    .position(livePt)
                 }
 
                 // Coordinate Origin Indicator (Center 0,0)
@@ -176,7 +214,7 @@ struct RoomLayoutView: View {
             .position(center)
     }
 
-    private func drawPathVector(_ footsteps: [SIMD3<Float>], scale: CGFloat, offset: CGSize) -> some View {
+    private func drawPathVector(_ footsteps: [SIMD3<Float>], scale: CGFloat, offset: CGSize, color: Color = AppColors.terracotta) -> some View {
         Path { path in
             guard footsteps.count > 1 else { return }
             let points = footsteps.map { projectTo2D($0, scale: scale, offset: offset) }
@@ -186,7 +224,7 @@ struct RoomLayoutView: View {
             }
         }
         .stroke(
-            AppColors.terracotta,
+            color,
             style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round)
         )
     }

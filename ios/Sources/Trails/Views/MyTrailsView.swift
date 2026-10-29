@@ -52,7 +52,7 @@ public struct MyTrailsView: View {
                 ScannerView()
             }
             .fullScreenCover(item: $selectedTrailForRevisit) { trail in
-                SpatialTrailViewerView()
+                TrailJournalDetailView(trail: trail)
                     .onAppear {
                         dataStore.activeTrail = trail
                     }
@@ -172,8 +172,18 @@ public struct MyTrailsView: View {
                 searchBar
 
                 if dataStore.filteredTrails.isEmpty {
-                    noResultsView
+                    if dataStore.searchText.isEmpty && dataStore.selectedPlaceFilter == nil && dataStore.selectedYearFilter == nil {
+                        // PRD §7 First launch / honest empty state
+                        firstLaunchEmptyState
+                    } else {
+                        noResultsView
+                    }
                 } else {
+                    // Recoverable Drafts (PRD §21 & §23)
+                    if !dataStore.userDrafts.isEmpty {
+                        recoverableDraftsSection
+                    }
+
                     // Latest Encounter Hero Card (Stitch design specification)
                     if let hero = dataStore.filteredTrails.first {
                         latestEncounterSection(hero)
@@ -186,6 +196,11 @@ public struct MyTrailsView: View {
 
                     // Introspective Reflection Prompt
                     introspectiveReflectionCard
+                }
+
+                // Explicitly Separated Sample Reference (PRD §7 & §26)
+                if let sample = dataStore.sampleMonograph {
+                    sampleReferenceSection(sample)
                 }
 
                 Spacer(minLength: 120)
@@ -260,11 +275,29 @@ public struct MyTrailsView: View {
                 VStack(alignment: .leading, spacing: 0) {
                     // Image / Cover Bed
                     ZStack(alignment: .bottomLeading) {
-                        Image(hero.coverImageName ?? "DhunHaveliEvening")
-                            .resizable()
-                            .scaledToFill()
+                        if let firstPhoto = hero.moments.first(where: { $0.hasPhoto }),
+                           let photoURL = firstPhoto.resolvedPhotoURL(trailId: hero.id),
+                           let uiImage = UIImage(contentsOfFile: photoURL.path) {
+                            Image(uiImage: uiImage)
+                                .resizable()
+                                .scaledToFill()
+                                .frame(height: 240)
+                                .clipped()
+                        } else if let assetName = hero.coverImageName {
+                            Image(assetName)
+                                .resizable()
+                                .scaledToFill()
+                                .frame(height: 240)
+                                .clipped()
+                        } else {
+                            ZStack {
+                                AppColors.primary
+                                Image(systemName: "mountain.2.fill")
+                                    .font(.system(size: 48))
+                                    .foregroundColor(AppColors.mutedBrass.opacity(0.6))
+                            }
                             .frame(height: 240)
-                            .clipped()
+                        }
 
                         // Dark gradient scrim
                         LinearGradient(
@@ -312,7 +345,7 @@ public struct MyTrailsView: View {
                     // Bottom Card Spec Sheet
                     VStack(alignment: .leading, spacing: 12) {
                         HStack {
-                            Label("Yesterday · 18:40", systemImage: "clock")
+                            Label(hero.createdAt.formatted(date: .abbreviated, time: .shortened), systemImage: "clock")
                                 .font(AppFonts.labelSpatial)
                                 .foregroundColor(AppColors.secondary)
 
@@ -736,6 +769,183 @@ public struct MyTrailsView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 40)
+    }
+
+    // MARK: - First Launch Honest Empty State (PRD §7)
+
+    private var firstLaunchEmptyState: some View {
+        VStack(spacing: 20) {
+            Image(systemName: "map.fill")
+                .font(.system(size: 48))
+                .foregroundColor(AppColors.terracotta)
+                .padding(.top, 40)
+
+            VStack(spacing: 8) {
+                Text("Keep the places you experience, and the moments you want to remember.")
+                    .font(AppFonts.headlineLarge)
+                    .foregroundColor(AppColors.primary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 28)
+
+                Text("Start recording a journey. Capture photos, videos, voice notes, and thoughts as you walk.")
+                    .font(AppFonts.bodyMedium)
+                    .foregroundColor(AppColors.onSurfaceVariant)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 36)
+            }
+
+            Button {
+                Haptics.success()
+                dataStore.targetPlaceForRecording = nil
+                showingScanner = true
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "record.circle")
+                        .font(.system(size: 16, weight: .bold))
+                    Text("Start a trail")
+                        .font(AppFonts.headlineSmall)
+                }
+                .foregroundColor(AppColors.onPrimary)
+                .padding(.horizontal, 28)
+                .padding(.vertical, 16)
+                .background(AppColors.primary)
+                .clipShape(Capsule())
+                .shadow(color: AppColors.primary.opacity(0.3), radius: 10, x: 0, y: 5)
+            }
+            .padding(.top, 12)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 32)
+    }
+
+    // MARK: - Recoverable Drafts (PRD §21 & §23)
+
+    private var recoverableDraftsSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("RECOVERABLE DRAFTS")
+                    .font(AppFonts.labelSpatial)
+                    .foregroundColor(AppColors.terracotta)
+                    .tracking(1.5)
+
+                Spacer()
+
+                Text("\(dataStore.userDrafts.count) pending")
+                    .font(AppFonts.labelSpatial)
+                    .foregroundColor(AppColors.outline)
+            }
+            .padding(.horizontal, 22)
+
+            ForEach(dataStore.userDrafts) { draft in
+                HStack(spacing: 12) {
+                    Image(systemName: "clock.arrow.circlepath")
+                        .font(.system(size: 20))
+                        .foregroundColor(AppColors.terracotta)
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(draft.title)
+                            .font(AppFonts.labelUI)
+                            .fontWeight(.semibold)
+                            .foregroundColor(AppColors.primary)
+
+                        Text("Interrupted · \(draft.moments.count) moments · \(draft.updatedAt.formatted(date: .omitted, time: .shortened))")
+                            .font(AppFonts.caption)
+                            .foregroundColor(AppColors.onSurfaceVariant)
+                    }
+
+                    Spacer()
+
+                    Button {
+                        selectedTrailForRevisit = draft
+                    } label: {
+                        Text("Resume")
+                            .font(AppFonts.labelSpatial)
+                            .fontWeight(.semibold)
+                            .foregroundColor(AppColors.onPrimary)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(AppColors.primary)
+                            .clipShape(Capsule())
+                    }
+                }
+                .padding(14)
+                .background(AppColors.surfaceContainerLow)
+                .cornerRadius(14)
+                .padding(.horizontal, 20)
+            }
+        }
+    }
+
+    // MARK: - Explicit Sample Reference Section (PRD §7 & §26)
+
+    private func sampleReferenceSection(_ sample: TrailDetail) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("EXPLORE SAMPLE MONOGRAPH")
+                    .font(AppFonts.labelSpatial)
+                    .foregroundColor(AppColors.secondary)
+                    .tracking(1.5)
+
+                Spacer()
+
+                Text("Architectural Reference")
+                    .font(AppFonts.labelSpatial)
+                    .foregroundColor(AppColors.outline)
+            }
+            .padding(.horizontal, 22)
+
+            Button {
+                selectedTrailForRevisit = sample
+            } label: {
+                HStack(spacing: 14) {
+                    Image(sample.coverImageName ?? "DhunHaveliEvening")
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: 64, height: 64)
+                        .clipped()
+                        .cornerRadius(12)
+
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(sample.title)
+                            .font(AppFonts.labelUI)
+                            .fontWeight(.semibold)
+                            .foregroundColor(AppColors.primary)
+                            .lineLimit(1)
+
+                        Text(sample.subtitle)
+                            .font(AppFonts.caption)
+                            .foregroundColor(AppColors.onSurfaceVariant)
+                            .lineLimit(1)
+
+                        HStack(spacing: 6) {
+                            Text("Sample Monograph")
+                                .font(AppFonts.labelSpatial)
+                                .foregroundColor(AppColors.mutedBrass)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(AppColors.surfaceContainerHigh)
+                                .clipShape(Capsule())
+
+                            Text("· \(sample.moments.count) Moments")
+                                .font(AppFonts.labelSpatial)
+                                .foregroundColor(AppColors.outline)
+                        }
+                    }
+
+                    Spacer()
+
+                    Image(systemName: "arrow.up.right")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(AppColors.outlineVariant)
+                }
+                .padding(14)
+                .background(AppColors.surfaceContainerLow)
+                .clipShape(RoundedRectangle(cornerRadius: 16))
+                .padding(.horizontal, 20)
+            }
+            .buttonStyle(PlainButtonStyle())
+        }
+        .padding(.top, 16)
     }
 
     // MARK: - Floating "Start a trail" CTA Button

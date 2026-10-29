@@ -24,9 +24,11 @@ public struct SpatialTrailViewerView: View {
 
     // Navigation and inspection state
     @State private var is3DMode: Bool = true
-    @State private var currentMomentIndex: Int = 1 // 0-based index
+    @State private var currentMomentIndex: Int = 0 // 0-based index
     @State private var explorationMode: ExplorationMode = .moments
     @State private var isPresentationMode: Bool = false
+    @State private var isSheetCollapsed: Bool = false
+    @State private var footsteps: [SIMD3<Float>] = []
 
     // Smooth delta-based camera rotation and pitch
     @State private var cameraAngle: Double = 35.0
@@ -43,6 +45,12 @@ public struct SpatialTrailViewerView: View {
     @State private var isVideoPlaying: Bool = false
     @State private var videoPlaybackTime: Double = 0.0
     @State private var videoTimer: Timer?
+
+    // Real media playback & editing sheets
+    @State private var playingVideoURL: URL?
+    @State private var viewingPhotoURL: URL?
+    @State private var showingEditSheet: Bool = false
+    @State private var showingDeleteAlert: Bool = false
 
     public init() {}
 
@@ -153,156 +161,60 @@ public struct SpatialTrailViewerView: View {
                 Color(hex: "#1C1C16")
                     .ignoresSafeArea()
 
-                SpatialMeshView(
-                    is3D: is3DMode,
-                    currentMomentIndex: currentMomentIndex,
-                    moments: trail.moments,
-                    cameraAngle: cameraAngle,
-                    cameraRotation: cameraRotation
-                )
-                .ignoresSafeArea()
-                .gesture(
-                    DragGesture(minimumDistance: 4)
-                        .onChanged { value in
-                            // Responsive delta rotation & pitch calculation
-                            cameraRotation = dragStartRotation + Double(value.translation.width) * 0.28
-                            cameraAngle = max(12, min(75, dragStartAngle - Double(value.translation.height) * 0.22))
-                        }
-                        .onEnded { _ in
-                            dragStartRotation = cameraRotation
-                            dragStartAngle = cameraAngle
-                        }
-                )
+                if is3DMode {
+                    SpatialMeshView(
+                        is3D: true,
+                        currentMomentIndex: currentMomentIndex,
+                        moments: trail.moments,
+                        footsteps: footsteps,
+                        cameraAngle: cameraAngle,
+                        cameraRotation: cameraRotation
+                    )
+                    .ignoresSafeArea()
+                    .gesture(
+                        DragGesture(minimumDistance: 4)
+                            .onChanged { value in
+                                // Responsive delta rotation & pitch calculation
+                                cameraRotation = dragStartRotation + Double(value.translation.width) * 0.28
+                                cameraAngle = max(12, min(75, dragStartAngle - Double(value.translation.height) * 0.22))
+                            }
+                            .onEnded { _ in
+                                dragStartRotation = cameraRotation
+                                dragStartAngle = cameraAngle
+                            }
+                    )
+                } else {
+                    // Plan Mode: 2D Architectural RoomPlan Layout & Route
+                    RoomLayoutView(
+                        capturedRoom: nil,
+                        footsteps: footsteps,
+                        moments: trail.moments
+                    )
+                    .ignoresSafeArea()
+                }
 
-                // Canvas Overlays: Non-Live Badge & Scrubber
-                VStack {
-                    HStack {
-                        // Non-Live Badge
-                        HStack(spacing: 6) {
-                            Image(systemName: "clock.arrow.circlepath")
-                                .font(.system(size: 11))
-                                .foregroundColor(AppColors.mutedBrass)
-                            Text("Replay · Not live navigation")
-                                .font(AppFonts.labelSpatial)
-                                .foregroundColor(AppColors.pureWhite.opacity(0.85))
+                // Canvas Overlays: Floating Time-Lapse indicator if active
+                if isTimelapsePlaying {
+                    VStack {
+                        HStack {
+                            Spacer()
+                            HStack(spacing: 6) {
+                                Image(systemName: "play.circle.fill")
+                                    .font(.system(size: 14))
+                                    .foregroundColor(AppColors.terracotta)
+                                Text("Time-Lapse Active (\(String(format: "%.1fx", timelapseSpeed)))")
+                                    .font(AppFonts.labelSpatial)
+                                    .foregroundColor(.white)
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(Color.black.opacity(0.65))
+                            .clipShape(Capsule())
                         }
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 5)
-                        .background(Color.black.opacity(0.55))
-                        .clipShape(Capsule())
-
+                        .padding(.horizontal, 16)
+                        .padding(.top, 100)
                         Spacer()
-
-                        // Time-Lapse Floating Control
-                        HStack(spacing: 6) {
-                            Button {
-                                Haptics.selection()
-                                toggleTimelapse()
-                            } label: {
-                                HStack(spacing: 4) {
-                                    Image(systemName: isTimelapsePlaying ? "pause.circle.fill" : "play.circle.fill")
-                                        .font(.system(size: 14))
-                                        .foregroundColor(AppColors.terracotta)
-                                    Text("Time-Lapse")
-                                        .font(AppFonts.labelSpatial)
-                                        .foregroundColor(AppColors.pureWhite)
-                                }
-                            }
-
-                            Text("|")
-                                .font(.system(size: 11))
-                                .foregroundColor(Color.white.opacity(0.3))
-
-                            Button {
-                                Haptics.light()
-                                timelapseSpeed = timelapseSpeed == 1.0 ? 2.0 : 1.0
-                            } label: {
-                                Text(String(format: "%.1fx", timelapseSpeed))
-                                    .font(AppFonts.labelSpatial)
-                                    .foregroundColor(AppColors.mutedBrass)
-                            }
-                        }
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 5)
-                        .background(Color.black.opacity(0.55))
-                        .clipShape(Capsule())
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.top, isPresentationMode ? 56 : 116)
-
-                    Spacer()
-
-                    // Canvas Bottom Scrubber Bar & Compass
-                    HStack(spacing: 8) {
-                        // Timeline Scrubber
-                        VStack(spacing: 4) {
-                            HStack {
-                                HStack(spacing: 4) {
-                                    Circle()
-                                        .fill(AppColors.terracotta)
-                                        .frame(width: 6, height: 6)
-                                    Text("17:42 IST")
-                                        .font(AppFonts.labelSpatial)
-                                        .foregroundColor(AppColors.pureWhite)
-                                }
-                                Spacer()
-                                Text("Node \(currentMoment.index) of \(trail.moments.count) · +\(currentMoment.distanceAlongPathMeters)m")
-                                    .font(AppFonts.labelSpatial)
-                                    .foregroundColor(AppColors.mutedBrass)
-                                Spacer()
-                                Text("17:55 IST")
-                                    .font(AppFonts.labelSpatial)
-                                    .foregroundColor(Color.white.opacity(0.6))
-                            }
-
-                            // Interactive Progress Track
-                            GeometryReader { geo in
-                                ZStack(alignment: .leading) {
-                                    Capsule()
-                                        .fill(Color.white.opacity(0.15))
-                                        .frame(height: 5)
-
-                                    let fraction = trail.moments.isEmpty ? 0.0 : CGFloat(currentMomentIndex) / CGFloat(max(1, trail.moments.count - 1))
-                                    Capsule()
-                                        .fill(AppColors.terracotta)
-                                        .frame(width: max(14, geo.size.width * fraction), height: 5)
-                                }
-                                .contentShape(Rectangle())
-                                .gesture(
-                                    DragGesture(minimumDistance: 0)
-                                        .onChanged { gesture in
-                                            let pct = max(0, min(1, gesture.location.x / geo.size.width))
-                                            let newIdx = Int(round(pct * Double(max(1, trail.moments.count - 1))))
-                                            if newIdx != currentMomentIndex {
-                                                Haptics.selection()
-                                                currentMomentIndex = newIdx
-                                            }
-                                        }
-                                )
-                            }
-                            .frame(height: 5)
-                        }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                        .background(Color.black.opacity(0.6))
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
-
-                        // Compass orientation pill
-                        HStack(spacing: 4) {
-                            Image(systemName: "safari.fill")
-                                .font(.system(size: 11))
-                                .foregroundColor(AppColors.mutedBrass)
-                            Text("N 26°55'")
-                                .font(AppFonts.labelSpatial)
-                                .foregroundColor(AppColors.pureWhite.opacity(0.8))
-                        }
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 8)
-                        .background(Color.black.opacity(0.6))
-                        .clipShape(Capsule())
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.bottom, isPresentationMode ? 240 : 255)
                 }
             }
 
@@ -317,25 +229,25 @@ public struct SpatialTrailViewerView: View {
                         Image(systemName: "arrow.left")
                             .font(.system(size: 15, weight: .bold))
                             .foregroundColor(AppColors.pureWhite)
-                            .frame(width: 38, height: 38)
-                            .background(Color.black.opacity(0.45))
+                            .frame(width: 42, height: 42)
+                            .background(Color.black.opacity(0.55))
                             .clipShape(Circle())
                     }
 
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(isPresentationMode ? "PRESENTATION" : "SPATIAL MEMOIR")
-                            .font(AppFonts.labelSpatial)
-                            .foregroundColor(AppColors.mutedBrass)
-
                         Text(trail.title)
                             .font(AppFonts.headlineSmall)
                             .foregroundColor(AppColors.pureWhite)
                             .lineLimit(1)
+
+                        Text("\(trail.placeName) · \(trail.floorTitle)")
+                            .font(AppFonts.caption)
+                            .foregroundColor(AppColors.mutedBrass)
                     }
 
                     Spacer()
 
-                    // 3D / Plan Toggle
+                    // Conditional 3D / Plan Toggle
                     HStack(spacing: 2) {
                         Button {
                             Haptics.light()
@@ -343,8 +255,9 @@ public struct SpatialTrailViewerView: View {
                         } label: {
                             Text("3D")
                                 .font(AppFonts.labelSpatial)
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 6)
+                                .fontWeight(.bold)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 7)
                                 .background(is3DMode ? AppColors.terracotta : Color.clear)
                                 .foregroundColor(AppColors.pureWhite)
                                 .clipShape(Capsule())
@@ -356,107 +269,65 @@ public struct SpatialTrailViewerView: View {
                         } label: {
                             Text("PLAN")
                                 .font(AppFonts.labelSpatial)
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 6)
+                                .fontWeight(.bold)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 7)
                                 .background(!is3DMode ? AppColors.terracotta : Color.clear)
                                 .foregroundColor(AppColors.pureWhite)
                                 .clipShape(Capsule())
                         }
                     }
                     .padding(3)
-                    .background(Color.black.opacity(0.45))
+                    .background(Color.black.opacity(0.55))
                     .clipShape(Capsule())
 
-                    // Presentation Mode Toggle (PRD §11 & docs/stitch revisit_spatial_memory_replay_2)
-                    Button {
-                        Haptics.selection()
-                        withAnimation(.easeInOut(duration: 0.25)) {
-                            isPresentationMode.toggle()
+                    // Options Menu (Presentation, Recenter, Timelapse, Edit, Delete)
+                    Menu {
+                        Button {
+                            withAnimation { isPresentationMode.toggle() }
+                        } label: {
+                            Label(isPresentationMode ? "Exit Presentation" : "Presentation Mode", systemImage: "rectangle.expand.vertical")
                         }
-                    } label: {
-                        Image(systemName: isPresentationMode ? "rectangle.compress.vertical" : "rectangle.expand.vertical")
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundColor(isPresentationMode ? AppColors.mutedBrass : AppColors.pureWhite)
-                            .frame(width: 38, height: 38)
-                            .background(Color.black.opacity(0.45))
-                            .clipShape(Circle())
-                    }
 
-                    // Recenter button
-                    Button {
-                        Haptics.light()
-                        withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                            cameraAngle = 35.0
-                            cameraRotation = 0.0
-                            dragStartAngle = 35.0
-                            dragStartRotation = 0.0
+                        Button {
+                            withAnimation {
+                                cameraAngle = 35.0
+                                cameraRotation = 0.0
+                            }
+                        } label: {
+                            Label("Recenter View", systemImage: "viewfinder")
+                        }
+
+                        Button {
+                            toggleTimelapse()
+                        } label: {
+                            Label(isTimelapsePlaying ? "Pause Time-Lapse" : "Play Time-Lapse", systemImage: "clock.arrow.circlepath")
+                        }
+
+                        Divider()
+
+                        Button {
+                            showingEditSheet = true
+                        } label: {
+                            Label("Edit Details", systemImage: "pencil")
+                        }
+
+                        Button(role: .destructive) {
+                            showingDeleteAlert = true
+                        } label: {
+                            Label("Delete Trail", systemImage: "trash")
                         }
                     } label: {
-                        Image(systemName: "viewfinder")
-                            .font(.system(size: 15, weight: .semibold))
+                        Image(systemName: "ellipsis")
+                            .font(.system(size: 15, weight: .bold))
                             .foregroundColor(AppColors.pureWhite)
-                            .frame(width: 38, height: 38)
-                            .background(Color.black.opacity(0.45))
+                            .frame(width: 42, height: 42)
+                            .background(Color.black.opacity(0.55))
                             .clipShape(Circle())
                     }
                 }
                 .padding(.horizontal, 16)
                 .padding(.top, 48)
-
-                // Mode Selector Strip [ Moments | Explore ] (Hidden in presentation mode)
-                if !isPresentationMode {
-                    HStack {
-                        HStack(spacing: 2) {
-                            Button {
-                                Haptics.light()
-                                withAnimation(.spring(response: 0.25)) { explorationMode = .moments }
-                            } label: {
-                                Text("Moments")
-                                    .font(AppFonts.labelUI)
-                                    .fontWeight(.medium)
-                                    .padding(.horizontal, 14)
-                                    .padding(.vertical, 6)
-                                    .background(explorationMode == .moments ? AppColors.primary : Color.clear)
-                                    .foregroundColor(explorationMode == .moments ? AppColors.onPrimary : AppColors.pureWhite.opacity(0.75))
-                                    .clipShape(Capsule())
-                            }
-
-                            Button {
-                                Haptics.light()
-                                withAnimation(.spring(response: 0.25)) { explorationMode = .explore }
-                            } label: {
-                                Text("Explore")
-                                    .font(AppFonts.labelUI)
-                                    .fontWeight(.medium)
-                                    .padding(.horizontal, 14)
-                                    .padding(.vertical, 6)
-                                    .background(explorationMode == .explore ? AppColors.primary : Color.clear)
-                                    .foregroundColor(explorationMode == .explore ? AppColors.onPrimary : AppColors.pureWhite.opacity(0.75))
-                                    .clipShape(Capsule())
-                            }
-                        }
-                        .padding(3)
-                        .background(Color.black.opacity(0.45))
-                        .clipShape(Capsule())
-
-                        Spacer()
-
-                        // Local on-device status
-                        HStack(spacing: 5) {
-                            Circle()
-                                .fill(AppColors.forestGreen)
-                                .frame(width: 6, height: 6)
-                            Text("Saved on this iPhone")
-                                .font(AppFonts.labelSpatial)
-                                .foregroundColor(AppColors.pureWhite.opacity(0.85))
-                        }
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
-                        .background(Color.black.opacity(0.45))
-                        .clipShape(Capsule())
-                    }
-                    .padding(.horizontal, 16)
-                }
 
                 Spacer()
             }
@@ -518,6 +389,16 @@ public struct SpatialTrailViewerView: View {
             }
         }
         .navigationBarHidden(true)
+        .onAppear {
+            let loaded = TrailPackageStore.shared.loadFootsteps(for: trail.id)
+            if !loaded.isEmpty {
+                footsteps = loaded
+            } else {
+                footsteps = trail.moments.map { m in
+                    SIMD3<Float>(Float(m.positionX / 24.0), Float((m.positionZ ?? 0) / 24.0), Float(m.positionY / 24.0))
+                }
+            }
+        }
         .onDisappear {
             timelapseTimer?.invalidate()
             timelapseTimer = nil
@@ -525,115 +406,206 @@ public struct SpatialTrailViewerView: View {
             videoTimer = nil
             audioManager.stopPlayback()
         }
+        .sheet(isPresented: Binding(
+            get: { playingVideoURL != nil },
+            set: { if !$0 { playingVideoURL = nil } }
+        )) {
+            if let url = playingVideoURL {
+                FullScreenVideoPlayerSheet(videoURL: url)
+            }
+        }
+        .sheet(isPresented: Binding(
+            get: { viewingPhotoURL != nil },
+            set: { if !$0 { viewingPhotoURL = nil } }
+        )) {
+            if let url = viewingPhotoURL {
+                FullScreenPhotoViewerSheet(photoURL: url, title: currentMoment.title)
+            }
+        }
+        .sheet(isPresented: $showingEditSheet) {
+            EditTrailMetadataSheet(trail: trail) { updated in
+                dataStore.updateTrail(trail: updated)
+            }
+        }
+        .alert("Delete Trail?", isPresented: $showingDeleteAlert) {
+            Button("Delete", role: .destructive) {
+                dataStore.deleteTrail(id: trail.id)
+                dismiss()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Are you sure you want to delete “\(trail.title)”? All recorded moments, media files, and paths will be permanently removed from this device.")
+        }
     }
 
     // MARK: - Bottom Tactile Sheet (docs/stitch/v0.2.0/revisit_spatial_memory_replay_1 & 2)
 
     private var bottomTactileSheet: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            // Drag handle
-            Capsule()
-                .fill(AppColors.onSurfaceVariant.opacity(0.2))
-                .frame(width: 36, height: 4)
-                .frame(maxWidth: .infinity)
-                .padding(.top, 4)
-
-            // Header Meta & Title
-            HStack(alignment: .firstTextBaseline) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Moment \(currentMoment.index) of \(trail.moments.count) · +\(currentMoment.distanceAlongPathMeters)m along path")
-                        .font(AppFonts.labelSpatial)
-                        .foregroundColor(AppColors.terracotta)
-                        .fontWeight(.semibold)
-
-                    Text(currentMoment.title)
-                        .font(AppFonts.headlineLarge)
-                        .foregroundColor(AppColors.primary)
+        VStack(alignment: .leading, spacing: 14) {
+            // Drag handle & Collapse Toggle
+            Button {
+                Haptics.light()
+                withAnimation(.spring(response: 0.32, dampingFraction: 0.82)) {
+                    isSheetCollapsed.toggle()
                 }
-
-                Spacer()
-
-                Text("17:42 IST")
-                    .font(AppFonts.labelSpatial)
-                    .foregroundColor(AppColors.onSurfaceVariant)
-            }
-
-            // Moment Content: Video Card vs Photo Card vs Note Card
-            if currentMoment.hasVideo || currentMoment.mediaType == "video" {
-                // Video Moment Card matching Stitch specs (revisit_spatial_memory_replay_1 lines 364-403)
-                videoMomentCard
-            } else if currentMoment.hasPhoto {
-                // Photo Moment Card
-                photoMomentCard
-            } else {
-                // Text-only note card
-                textMomentCard
-            }
-
-            // Explicit Audio Player Card (PRD §10.1 & Stitch Replay 1)
-            if currentMoment.hasAudio {
-                audioPlayerCard
-            }
-
-            // Stepper Dots Indicator (Matching Stitch lines 408-413)
-            HStack(spacing: 6) {
-                Spacer()
-                ForEach(Array(trail.moments.enumerated()), id: \.element.id) { idx, _ in
+            } label: {
+                HStack {
+                    Spacer()
                     Capsule()
-                        .fill(idx == currentMomentIndex ? AppColors.terracotta : AppColors.surfaceContainerHighest)
-                        .frame(width: idx == currentMomentIndex ? 22 : 6, height: 5)
-                        .animation(.spring(response: 0.28), value: currentMomentIndex)
+                        .fill(AppColors.onSurfaceVariant.opacity(0.3))
+                        .frame(width: 42, height: 5)
+                    Spacer()
                 }
-                Spacer()
+                .padding(.top, 6)
+                .contentShape(Rectangle())
             }
-            .padding(.vertical, 2)
+            .buttonStyle(.plain)
 
-            // Stepping navigation buttons
-            HStack(spacing: 12) {
-                Button {
-                    stepPrevious()
-                } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: "arrow.left")
-                            .font(.system(size: 12, weight: .bold))
-                        Text("Prev (\(prevTitle))")
-                            .font(AppFonts.labelUI)
+            if isSheetCollapsed {
+                // Collapsed Minimal Bar: Allows unobstructed view of 3D / Plan space
+                HStack(spacing: 12) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Stop \(currentMoment.index) of \(trail.moments.count) · +\(currentMoment.distanceAlongPathMeters)m")
+                            .font(AppFonts.labelSpatial)
+                            .foregroundColor(AppColors.terracotta)
+                            .fontWeight(.semibold)
+
+                        Text(currentMoment.title)
+                            .font(AppFonts.headlineSmall)
+                            .foregroundColor(AppColors.primary)
                             .lineLimit(1)
                     }
-                    .foregroundColor(AppColors.primary)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 46)
-                    .background(AppColors.surfaceContainer)
-                    .clipShape(Capsule())
-                }
-                .disabled(currentMomentIndex <= 0)
-                .opacity(currentMomentIndex <= 0 ? 0.35 : 1.0)
 
-                Button {
-                    stepNext()
-                } label: {
-                    HStack(spacing: 4) {
-                        Text("Next: \(nextTitle)")
-                            .font(AppFonts.labelUI)
-                            .lineLimit(1)
-                        Image(systemName: "arrow.right")
-                            .font(.system(size: 12, weight: .bold))
+                    Spacer()
+
+                    // Quick Stepper
+                    HStack(spacing: 8) {
+                        Button {
+                            stepPrevious()
+                        } label: {
+                            Image(systemName: "arrow.left")
+                                .font(.system(size: 13, weight: .bold))
+                                .foregroundColor(AppColors.primary)
+                                .frame(width: 36, height: 36)
+                                .background(AppColors.surfaceContainer)
+                                .clipShape(Circle())
+                        }
+                        .disabled(currentMomentIndex <= 0)
+                        .opacity(currentMomentIndex <= 0 ? 0.35 : 1.0)
+
+                        Button {
+                            stepNext()
+                        } label: {
+                            Image(systemName: "arrow.right")
+                                .font(.system(size: 13, weight: .bold))
+                                .foregroundColor(AppColors.onPrimary)
+                                .frame(width: 36, height: 36)
+                                .background(AppColors.primary)
+                                .clipShape(Circle())
+                        }
+                        .disabled(currentMomentIndex >= trail.moments.count - 1)
+                        .opacity(currentMomentIndex >= trail.moments.count - 1 ? 0.35 : 1.0)
                     }
-                    .foregroundColor(AppColors.onPrimary)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 46)
-                    .background(AppColors.primary)
-                    .clipShape(Capsule())
                 }
-                .disabled(currentMomentIndex >= trail.moments.count - 1)
-                .opacity(currentMomentIndex >= trail.moments.count - 1 ? 0.35 : 1.0)
+                .padding(.bottom, 12)
+            } else {
+                // Expanded Rich Inspection Sheet
+                // Header Meta & Title
+                HStack(alignment: .firstTextBaseline) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("CHECKPOINT \(currentMoment.index) OF \(trail.moments.count) · +\(currentMoment.distanceAlongPathMeters)m ALONG TRAIL")
+                            .font(AppFonts.labelSpatial)
+                            .foregroundColor(AppColors.terracotta)
+                            .fontWeight(.semibold)
+
+                        Text(currentMoment.title)
+                            .font(AppFonts.headlineLarge)
+                            .foregroundColor(AppColors.primary)
+                    }
+
+                    Spacer()
+
+                    Text(currentMoment.createdAt.formatted(date: .omitted, time: .shortened))
+                        .font(AppFonts.labelSpatial)
+                        .foregroundColor(AppColors.onSurfaceVariant)
+                }
+
+                // Moment Content: Video Card vs Photo Card vs Note Card
+                if currentMoment.hasVideo || currentMoment.mediaType == "video" {
+                    videoMomentCard
+                } else if currentMoment.hasPhoto {
+                    photoMomentCard
+                } else {
+                    textMomentCard
+                }
+
+                // Audio Player Card
+                if currentMoment.hasAudio {
+                    audioPlayerCard
+                }
+
+                // Stepper Dots Indicator
+                HStack(spacing: 6) {
+                    Spacer()
+                    ForEach(Array(trail.moments.enumerated()), id: \.element.id) { idx, _ in
+                        Capsule()
+                            .fill(idx == currentMomentIndex ? AppColors.terracotta : AppColors.surfaceContainerHighest)
+                            .frame(width: idx == currentMomentIndex ? 22 : 6, height: 5)
+                            .animation(.spring(response: 0.28), value: currentMomentIndex)
+                    }
+                    Spacer()
+                }
+                .padding(.vertical, 4)
+
+                // Stepping navigation buttons
+                HStack(spacing: 12) {
+                    Button {
+                        stepPrevious()
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "arrow.left")
+                                .font(.system(size: 13, weight: .bold))
+                            Text("Prev: \(prevTitle)")
+                                .font(AppFonts.labelUI)
+                                .lineLimit(1)
+                        }
+                        .foregroundColor(AppColors.primary)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 50)
+                        .background(AppColors.surfaceContainer)
+                        .clipShape(Capsule())
+                    }
+                    .disabled(currentMomentIndex <= 0)
+                    .opacity(currentMomentIndex <= 0 ? 0.35 : 1.0)
+
+                    Button {
+                        stepNext()
+                    } label: {
+                        HStack(spacing: 6) {
+                            Text("Next: \(nextTitle)")
+                                .font(AppFonts.labelUI)
+                                .lineLimit(1)
+                            Image(systemName: "arrow.right")
+                                .font(.system(size: 13, weight: .bold))
+                        }
+                        .foregroundColor(AppColors.onPrimary)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 50)
+                        .background(AppColors.primary)
+                        .clipShape(Capsule())
+                    }
+                    .disabled(currentMomentIndex >= trail.moments.count - 1)
+                    .opacity(currentMomentIndex >= trail.moments.count - 1 ? 0.35 : 1.0)
+                }
+                .padding(.bottom, 6)
             }
         }
-        .padding(18)
+        .padding(.horizontal, 20)
+        .padding(.vertical, 12)
         .background(
             AppColors.surfaceContainerLowest
                 .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
-                .shadow(color: AppColors.primary.opacity(0.08), radius: 20, x: 0, y: -6)
+                .shadow(color: AppColors.primary.opacity(0.12), radius: 24, x: 0, y: -6)
         )
     }
 
@@ -644,17 +616,38 @@ public struct SpatialTrailViewerView: View {
             HStack(alignment: .top, spacing: 12) {
                 // Video thumbnail with animated play/pause button
                 ZStack {
-                    Image(currentMoment.videoThumbnailAssetName ?? "DhunHaveliEvening")
-                        .resizable()
-                        .scaledToFill()
-                        .frame(width: 88, height: 88)
-                        .clipped()
-                        .cornerRadius(14)
+                    if let thumbURL = currentMoment.resolvedVideoThumbnailURL(trailId: trail.id),
+                       let uiImage = UIImage(contentsOfFile: thumbURL.path) {
+                        Image(uiImage: uiImage)
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: 88, height: 88)
+                            .clipped()
+                            .cornerRadius(14)
+                    } else if let assetName = currentMoment.videoThumbnailAssetName {
+                        Image(assetName)
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: 88, height: 88)
+                            .clipped()
+                            .cornerRadius(14)
+                    } else {
+                        Image("DhunHaveliEvening")
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: 88, height: 88)
+                            .clipped()
+                            .cornerRadius(14)
+                    }
 
                     // Translucent dark overlay with play/pause button
                     Button {
                         Haptics.selection()
-                        toggleVideoPlayback()
+                        if let videoURL = currentMoment.resolvedVideoURL(trailId: trail.id) {
+                            playingVideoURL = videoURL
+                        } else {
+                            toggleVideoPlayback()
+                        }
                     } label: {
                         Circle()
                             .fill(AppColors.pureWhite.opacity(0.85))
@@ -747,27 +740,51 @@ public struct SpatialTrailViewerView: View {
 
     private var photoMomentCard: some View {
         HStack(alignment: .top, spacing: 12) {
-            Image(currentMoment.photoAssetName ?? "SandstoneArchway")
-                .resizable()
-                .scaledToFill()
-                .frame(width: 80, height: 80)
-                .clipped()
-                .cornerRadius(12)
-                .overlay(
-                    VStack {
+            Group {
+                if let photoURL = currentMoment.resolvedPhotoURL(trailId: trail.id),
+                   let uiImage = UIImage(contentsOfFile: photoURL.path) {
+                    Image(uiImage: uiImage)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: 80, height: 80)
+                        .clipped()
+                        .cornerRadius(12)
+                } else if let assetName = currentMoment.photoAssetName {
+                    Image(assetName)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: 80, height: 80)
+                        .clipped()
+                        .cornerRadius(12)
+                } else {
+                    Image("SandstoneArchway")
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: 80, height: 80)
+                        .clipped()
+                        .cornerRadius(12)
+                }
+            }
+            .onTapGesture {
+                if let photoURL = currentMoment.resolvedPhotoURL(trailId: trail.id) {
+                    viewingPhotoURL = photoURL
+                }
+            }
+            .overlay(
+                VStack {
+                    Spacer()
+                    HStack {
                         Spacer()
-                        HStack {
-                            Spacer()
-                            Image(systemName: "camera.fill")
-                                .font(.system(size: 9))
-                                .foregroundColor(.white)
-                                .padding(4)
-                                .background(Color.black.opacity(0.6))
-                                .clipShape(RoundedRectangle(cornerRadius: 4))
-                        }
-                        .padding(4)
+                        Image(systemName: "camera.fill")
+                            .font(.system(size: 9))
+                            .foregroundColor(.white)
+                            .padding(4)
+                            .background(Color.black.opacity(0.6))
+                            .clipShape(RoundedRectangle(cornerRadius: 4))
                     }
-                )
+                    .padding(4)
+                }
+            )
 
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 4) {
@@ -911,10 +928,18 @@ public struct SpatialTrailViewerView: View {
     }
 
     private func toggleAudioPlayback() {
-        if audioManager.isPlaying {
-            audioManager.pausePlayback()
+        if let audioURL = currentMoment.resolvedAudioURL(trailId: trail.id) {
+            if audioManager.isPlaying {
+                audioManager.pausePlayback()
+            } else {
+                audioManager.playAudio(url: audioURL)
+            }
         } else {
-            audioManager.isPlaying = true
+            if audioManager.isPlaying {
+                audioManager.pausePlayback()
+            } else {
+                audioManager.isPlaying = true
+            }
         }
     }
 
@@ -965,6 +990,7 @@ struct SpatialMeshView: View {
     let is3D: Bool
     let currentMomentIndex: Int
     let moments: [SpatialMoment]
+    let footsteps: [SIMD3<Float>]
     let cameraAngle: Double
     let cameraRotation: Double
 
@@ -990,7 +1016,7 @@ struct SpatialMeshView: View {
             // RoomPlan Wall Wireframes (3D Perspective Projection Simulation)
             let pitch = cameraAngle * .pi / 180.0
             let yaw = cameraRotation * .pi / 180.0
-            let cy = h * 0.42
+            let cy = h * 0.44
             let cx = w * 0.5
 
             // Perspective transform helper
@@ -1004,12 +1030,12 @@ struct SpatialMeshView: View {
                 return CGPoint(x: screenX, y: screenY)
             }
 
-            // Draw architectural footprint (Courtyard walls)
+            // Draw architectural footprint (Detected perimeter)
             let boxPoints = [
-                (-120.0, -140.0, 0.0),
-                (120.0, -140.0, 0.0),
-                (120.0, 140.0, 0.0),
-                (-120.0, 140.0, 0.0)
+                (-130.0, -150.0, 0.0),
+                (130.0, -150.0, 0.0),
+                (130.0, 150.0, 0.0),
+                (-130.0, 150.0, 0.0)
             ]
 
             var floorPath = Path()
@@ -1022,12 +1048,12 @@ struct SpatialMeshView: View {
             context.stroke(floorPath, with: .color(Color(hex: "#173E35").opacity(0.8)), lineWidth: 2)
             context.fill(floorPath, with: .color(Color(hex: "#173E35").opacity(0.12)))
 
-            // Inner light well bounds
+            // Inner architectural feature bounds
             let wellPoints = [
-                (-40.0, -50.0, 0.0),
-                (40.0, -50.0, 0.0),
-                (40.0, 50.0, 0.0),
-                (-40.0, 50.0, 0.0)
+                (-45.0, -55.0, 0.0),
+                (45.0, -55.0, 0.0),
+                (45.0, 55.0, 0.0),
+                (-45.0, 55.0, 0.0)
             ]
             var wellPath = Path()
             wellPath.move(to: project(wellPoints[0].0, wellPoints[0].1, wellPoints[0].2))
@@ -1041,7 +1067,7 @@ struct SpatialMeshView: View {
             if is3D {
                 for pt in boxPoints {
                     let base = project(pt.0, pt.1, 0.0)
-                    let top = project(pt.0, pt.1, 60.0)
+                    let top = project(pt.0, pt.1, 65.0)
                     var wallEdge = Path()
                     wallEdge.move(to: base)
                     wallEdge.addLine(to: top)
@@ -1049,13 +1075,27 @@ struct SpatialMeshView: View {
                 }
             }
 
-            // Terracotta Trail Vector Path
-            let pathNodes = [
-                (-90.0, 100.0, 0.0),
-                (-30.0, 30.0, 0.0),
-                (10.0, -20.0, 5.0),
-                (70.0, -80.0, 12.0)
-            ]
+            // Real Continuous Walking Route from footsteps or moments
+            let pathNodes: [(Double, Double, Double)] = {
+                if !footsteps.isEmpty {
+                    let strideBy = max(1, footsteps.count / 80)
+                    return stride(from: 0, to: footsteps.count, by: strideBy).map { i in
+                        let s = footsteps[i]
+                        return (Double(s.x) * 26.0, Double(s.z) * 26.0, Double(s.y) * 26.0)
+                    }
+                } else if !moments.isEmpty {
+                    return moments.map { m in
+                        (m.positionX, m.positionY, Double(m.positionZ ?? 0))
+                    }
+                } else {
+                    return [
+                        (-90.0, 100.0, 0.0),
+                        (-30.0, 30.0, 0.0),
+                        (10.0, -20.0, 5.0),
+                        (70.0, -80.0, 12.0)
+                    ]
+                }
+            }()
 
             var vectorPath = Path()
             if let first = pathNodes.first {
@@ -1063,14 +1103,25 @@ struct SpatialMeshView: View {
                 for pt in pathNodes.dropFirst() {
                     vectorPath.addLine(to: project(pt.0, pt.1, pt.2))
                 }
-                // Glowing stroke
+                // Glowing outer stroke
                 context.stroke(vectorPath, with: .color(AppColors.terracotta.opacity(0.35)), lineWidth: 7)
-                context.stroke(vectorPath, with: .color(AppColors.terracotta), lineWidth: 3.5)
+                // Solid core vector stroke
+                context.stroke(vectorPath, with: .color(AppColors.terracotta), style: StrokeStyle(lineWidth: 3.5, lineCap: .round, lineJoin: .round))
             }
 
-            // Spatial Waypoint Nodes
-            for (idx, pt) in pathNodes.enumerated() {
-                let screenPt = project(pt.0, pt.1, pt.2)
+            // Spatial Waypoint Nodes for moments
+            for (idx, moment) in moments.enumerated() {
+                let coords: (Double, Double, Double) = {
+                    if moment.positionX != 0 || moment.positionY != 0 {
+                        return (moment.positionX, moment.positionY, Double(moment.positionZ ?? 0))
+                    } else if pathNodes.indices.contains(idx) {
+                        return pathNodes[idx]
+                    } else {
+                        return (0, 0, 0)
+                    }
+                }()
+
+                let screenPt = project(coords.0, coords.1, coords.2)
                 let isCurrent = idx == currentMomentIndex
 
                 // Pin concentric halo
@@ -1082,6 +1133,118 @@ struct SpatialMeshView: View {
                 let pinRadius: CGFloat = isCurrent ? 7 : 4.5
                 let pinRect = CGRect(x: screenPt.x - pinRadius, y: screenPt.y - pinRadius, width: pinRadius * 2, height: pinRadius * 2)
                 context.fill(Path(ellipseIn: pinRect), with: .color(isCurrent ? AppColors.terracotta : AppColors.mutedBrass))
+            }
+        }
+    }
+}
+
+// MARK: - FullScreen Video Player Sheet (PRD §20)
+
+struct FullScreenVideoPlayerSheet: View {
+    let videoURL: URL
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                Color.black.ignoresSafeArea()
+                VideoPlayer(player: AVPlayer(url: videoURL))
+                    .ignoresSafeArea()
+            }
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                    .foregroundColor(.white)
+                }
+            }
+        }
+    }
+}
+
+// MARK: - FullScreen Photo Viewer Sheet (PRD §20)
+
+struct FullScreenPhotoViewerSheet: View {
+    let photoURL: URL
+    let title: String
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                Color.black.ignoresSafeArea()
+                if let uiImage = UIImage(contentsOfFile: photoURL.path) {
+                    Image(uiImage: uiImage)
+                        .resizable()
+                        .scaledToFit()
+                        .ignoresSafeArea()
+                }
+            }
+            .navigationTitle(title)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                    .foregroundColor(.white)
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Edit Trail Metadata Sheet (PRD §19)
+
+private struct EditTrailMetadataSheet: View {
+    @State var trail: TrailDetail
+    let onSave: (TrailDetail) -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 18) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("TRAIL TITLE")
+                        .font(AppFonts.labelSpatial)
+                        .foregroundColor(AppColors.outline)
+                    TextField("Title", text: $trail.title)
+                        .font(AppFonts.headlineSmall)
+                        .padding(12)
+                        .background(AppColors.surfaceContainerLow)
+                        .cornerRadius(12)
+                }
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("PERSONAL NOTES / INTRODUCTION")
+                        .font(AppFonts.labelSpatial)
+                        .foregroundColor(AppColors.outline)
+                    TextEditor(text: $trail.personalNotes)
+                        .font(AppFonts.bodyMedium)
+                        .frame(height: 120)
+                        .padding(8)
+                        .background(AppColors.surfaceContainerLow)
+                        .cornerRadius(12)
+                }
+
+                Spacer()
+            }
+            .padding(20)
+            .background(AppColors.canvas.ignoresSafeArea())
+            .navigationTitle("Edit Trail Details")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Save") {
+                        onSave(trail)
+                        dismiss()
+                    }
+                    .fontWeight(.semibold)
+                }
             }
         }
     }

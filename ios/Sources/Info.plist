@@ -3,7 +3,9 @@
 <plist version="1.0">
 <dict>
 	<key>NSCameraUsageDescription</key>
-	<string>Trails uses the camera and LiDAR sensor for RoomPlan scanning and path mapping.</string>
+	<string>Trails uses the camera to capture photos, record video, and perform spatial indoor scanning.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Trails records voice notes and video audio during your trail journey.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Trails tags each scan with its capture location.</string>
 	<key>UIApplicationSceneManifest</key>

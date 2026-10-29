@@ -40,18 +40,49 @@ class RoomScannerEngine: NSObject, ObservableObject, RoomCaptureSessionDelegate,
         view.captureSession.arSession.delegate = self
     }
 
+    func resetAndStartScanning() {
+        footsteps.removeAll()
+        recordedMoments.removeAll()
+        lastRecordedPosition = nil
+        startScanning()
+    }
+
     func startScanning() {
         if isSupported {
             let config = RoomCaptureSession.Configuration()
             captureView?.captureSession.run(configuration: config)
             isSimulated = false
             isScanning = true
-            footsteps.removeAll()
-            recordedMoments.removeAll()
-            lastRecordedPosition = nil
         } else {
             // Auto-start simulation on non-LiDAR/simulator so developer/user isn't stuck
             startSimulation()
+        }
+    }
+
+    func pauseScanning() {
+        simulationTimer?.invalidate()
+        simulationTimer = nil
+        if isSupported {
+            captureView?.captureSession.stop()
+        }
+        isScanning = false
+    }
+
+    func resumeScanning() {
+        guard !isScanning else { return }
+        if isSupported {
+            let config = RoomCaptureSession.Configuration()
+            captureView?.captureSession.run(configuration: config)
+            isScanning = true
+        } else {
+            isScanning = true
+            simulationTimer?.invalidate()
+            simulationTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
+                Task { @MainActor [weak self] in
+                    guard let self = self, self.isScanning else { return }
+                    self.advanceSimulation()
+                }
+            }
         }
     }
 

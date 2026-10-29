@@ -42,7 +42,7 @@ public struct Place: Identifiable, Hashable, Codable {
         district: String,
         locality: String = "Dhun, Jaipur",
         description: String,
-        coverImageName: String? = "DhunHaveliEvening",
+        coverImageName: String? = nil,
         trailsCount: Int,
         contributorsCount: Int,
         latitude: Double,
@@ -77,7 +77,6 @@ public enum PlaceCategory: String, CaseIterable, Identifiable, Codable {
     case all = "All Places"
     case dhunSurrounds = "Dhun & Surrounds"
     case courtyards = "Indoor Courtyards"
-    case pavilions = "Historic Pavilions"
     case studios = "Artisan Studios"
 
     public var id: String { rawValue }
@@ -204,6 +203,14 @@ public struct TrailDetail: Identifiable, Hashable, Codable {
         return parts.isEmpty ? "\(moments.count)M" : parts.joined(separator: " · ")
     }
 
+    public var hasIndoorScan: Bool {
+        meshDensity.contains("wall") || meshDensity.contains("LiDAR") || moments.contains { $0.placementStatus == "placed" && $0.positionZ != nil }
+    }
+
+    public var hasGeographicTrack: Bool {
+        latitude != nil && longitude != nil
+    }
+
     public init(
         id: String,
         title: String,
@@ -224,9 +231,9 @@ public struct TrailDetail: Identifiable, Hashable, Codable {
         moments: [SpatialMoment] = [],
         visibility: TrailVisibility = .privateDraft,
         isDraft: Bool = false,
-        coverImageName: String? = "DhunHaveliEvening",
-        latitude: Double? = 26.9124,
-        longitude: Double? = 75.7873,
+        coverImageName: String? = nil,
+        latitude: Double? = nil,
+        longitude: Double? = nil,
         inspiredByTrailId: String? = nil,
         inspiredByNote: String? = nil,
         createdAt: Date = Date(),
@@ -277,6 +284,7 @@ public struct SpatialMoment: Identifiable, Hashable, Codable {
     public var hasVideo: Bool
     public var mediaType: String // "note" | "photo" | "voice" | "video"
     public var photoAssetName: String?
+    public var photoFileName: String?
     public var audioFileName: String?
     public var videoFileName: String?
     public var videoThumbnailAssetName: String?
@@ -302,6 +310,7 @@ public struct SpatialMoment: Identifiable, Hashable, Codable {
         hasVideo: Bool = false,
         mediaType: String = "note",
         photoAssetName: String? = nil,
+        photoFileName: String? = nil,
         audioFileName: String? = nil,
         videoFileName: String? = nil,
         videoThumbnailAssetName: String? = nil,
@@ -326,6 +335,7 @@ public struct SpatialMoment: Identifiable, Hashable, Codable {
         self.hasVideo = hasVideo
         self.mediaType = mediaType
         self.photoAssetName = photoAssetName
+        self.photoFileName = photoFileName
         self.audioFileName = audioFileName
         self.videoFileName = videoFileName
         self.videoThumbnailAssetName = videoThumbnailAssetName
@@ -334,6 +344,46 @@ public struct SpatialMoment: Identifiable, Hashable, Codable {
         self.positionZ = positionZ
         self.placementStatus = placementStatus
         self.createdAt = createdAt
+    }
+
+    public func resolvedPhotoURL(trailId: String) -> URL? {
+        if let fileName = photoFileName {
+            let fileURL = TrailPackageStore.shared.mediaDirectory(for: trailId).appendingPathComponent(fileName)
+            if FileManager.default.fileExists(atPath: fileURL.path) {
+                return fileURL
+            }
+        }
+        return nil
+    }
+
+    public func resolvedVideoURL(trailId: String) -> URL? {
+        if let fileName = videoFileName {
+            let fileURL = TrailPackageStore.shared.mediaDirectory(for: trailId).appendingPathComponent(fileName)
+            if FileManager.default.fileExists(atPath: fileURL.path) {
+                return fileURL
+            }
+        }
+        return nil
+    }
+
+    public func resolvedVideoThumbnailURL(trailId: String) -> URL? {
+        if let fileName = videoThumbnailAssetName {
+            let fileURL = TrailPackageStore.shared.mediaDirectory(for: trailId).appendingPathComponent(fileName)
+            if FileManager.default.fileExists(atPath: fileURL.path) {
+                return fileURL
+            }
+        }
+        return nil
+    }
+
+    public func resolvedAudioURL(trailId: String) -> URL? {
+        if let fileName = audioFileName {
+            let fileURL = TrailPackageStore.shared.mediaDirectory(for: trailId).appendingPathComponent(fileName)
+            if FileManager.default.fileExists(atPath: fileURL.path) {
+                return fileURL
+            }
+        }
+        return nil
     }
 }
 

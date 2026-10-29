@@ -58,10 +58,14 @@ public final class TrailsDataStore: ObservableObject {
         }
     }
 
-    // MARK: - Filtered Queries (PRD §11.3)
+    // MARK: - Filtered Queries (PRD §11.3 & v0.2.1 §7, §21, §26)
 
     public var allDisplayTrails: [TrailDetail] {
-        return savedTrails + sampleTrails
+        return savedTrails
+    }
+
+    public var sampleMonograph: TrailDetail? {
+        return sampleTrails.first
     }
 
     public var filteredTrails: [TrailDetail] {
@@ -185,9 +189,8 @@ public final class TrailsDataStore: ObservableObject {
             distanceAlongPathMeters: 4,
             relativeElevation: "+0.00m",
             hasAudio: false,
-            hasPhoto: true,
-            mediaType: "photo",
-            photoAssetName: "SandstoneArchway",
+            hasPhoto: false,
+            mediaType: "note",
             positionX: 0.18,
             positionY: 0.65
         )
@@ -229,18 +232,15 @@ public final class TrailsDataStore: ObservableObject {
             id: "m4",
             index: 4,
             title: "Iron Pivot Hinge",
-            subtitle: "1.5x Spatial Video clip · Captured at 60fps",
+            subtitle: "Silent rotation on bearing stone",
             narrative: "Heavy hand-forged iron pivot bearing supporting the teakwood lattice screen. Silent rotation without modern hinges.",
             architecturalNote: "Forged 1892; zero mechanical wear on bearing stone after 130 years of daily rotation.",
             distanceAlongPathMeters: 92,
             relativeElevation: "+1.80m",
-            videoDuration: "0:24",
             hasAudio: false,
-            hasPhoto: true,
-            hasVideo: true,
-            mediaType: "video",
-            photoAssetName: "DhunHaveliEvening",
-            videoThumbnailAssetName: "DhunHaveliEvening",
+            hasPhoto: false,
+            hasVideo: false,
+            mediaType: "note",
             positionX: 0.78,
             positionY: 0.22
         )
@@ -265,7 +265,7 @@ public final class TrailsDataStore: ObservableObject {
             moments: [moment1, moment2, moment3, moment4],
             visibility: .privateDraft,
             isDraft: false,
-            coverImageName: "DhunHaveliEvening",
+            coverImageName: nil,
             latitude: 26.9124,
             longitude: 75.7873
         )
@@ -290,7 +290,7 @@ public final class TrailsDataStore: ObservableObject {
             moments: [moment1, moment3, moment4],
             visibility: .privateDraft,
             isDraft: false,
-            coverImageName: "SandstoneArchway",
+            coverImageName: nil,
             latitude: 26.9118,
             longitude: 75.7865
         )
@@ -315,7 +315,7 @@ public final class TrailsDataStore: ObservableObject {
             moments: [moment2, moment3, moment4],
             visibility: .privateDraft,
             isDraft: false,
-            coverImageName: "DhunHaveliEvening",
+            coverImageName: nil,
             latitude: 26.9126,
             longitude: 75.7876,
             inspiredByTrailId: "evening-through-haveli",
@@ -342,7 +342,7 @@ public final class TrailsDataStore: ObservableObject {
             moments: [moment1, moment2],
             visibility: .privateDraft,
             isDraft: false,
-            coverImageName: "SandstoneArchway",
+            coverImageName: nil,
             latitude: 26.9142,
             longitude: 75.7891
         )
@@ -358,7 +358,7 @@ public final class TrailsDataStore: ObservableObject {
             district: "Jaipur / Dhun district",
             locality: "Dhun, Jaipur",
             description: "A 19th-century courtyard dwelling oriented around passive ventilation and shared light wells. Authors have traced movements from morning light to evening gathering.",
-            coverImageName: "DhunHaveliEvening",
+            coverImageName: nil,
             trailsCount: 4,
             contributorsCount: 3,
             latitude: 26.9124,
@@ -384,7 +384,7 @@ public final class TrailsDataStore: ObservableObject {
                     momentsCount: 4,
                     floorCode: "LVL 00",
                     floorTitle: "Ground Floor",
-                    coverImageName: "DhunHaveliEvening"
+                    coverImageName: nil
                 ),
                 TrailSummary(
                     id: "upper-terrace-dawn",
@@ -396,7 +396,7 @@ public final class TrailsDataStore: ObservableObject {
                     momentsCount: 5,
                     floorCode: "LVL 02",
                     floorTitle: "Roof Overlook",
-                    coverImageName: "DhunHaveliEvening"
+                    coverImageName: nil
                 )
             ]
         )
@@ -409,7 +409,7 @@ public final class TrailsDataStore: ObservableObject {
             district: "Dhun Artisan Lane",
             locality: "Artisan Lane, Dhun",
             description: "Woodblock print archives, timber dry-racks, and hand-chiseled masonry shops situated along cool shaded alleys.",
-            coverImageName: "SandstoneArchway",
+            coverImageName: nil,
             trailsCount: 2,
             contributorsCount: 2,
             latitude: 26.9142,
@@ -431,34 +431,12 @@ public final class TrailsDataStore: ObservableObject {
                     authorName: "Hiro",
                     distanceMeters: 62,
                     momentsCount: 2,
-                    coverImageName: "SandstoneArchway"
+                    coverImageName: nil
                 )
             ]
         )
 
-        let steppedPavilion = Place(
-            id: "stepped-pavilion",
-            name: "Stepped Pavilion",
-            tagline: "Water-facing public pavilion",
-            surveyYear: "Surv. 1820",
-            district: "East Cistern Bank",
-            locality: "Reservoir Bank, Jaipur",
-            description: "Tiered sandstone steps descending to the seasonal reservoir with carved stone brackets.",
-            coverImageName: "DhunHaveliEvening",
-            trailsCount: 1,
-            contributorsCount: 1,
-            latitude: 26.9160,
-            longitude: 75.7845,
-            category: .pavilions,
-            meshVersion: "LiDAR Mesh v2",
-            floorLevels: [
-                FloorLevel(id: "sp-00", shortCode: "LVL 00", name: "Water Margin")
-            ],
-            authors: [],
-            trails: []
-        )
-
-        self.places = [dhunHaveli, craftQuarter, steppedPavilion]
+        self.places = [dhunHaveli, craftQuarter]
         self.selectedPlace = dhunHaveli
     }
 }

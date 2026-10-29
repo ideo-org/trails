@@ -285,14 +285,6 @@ struct ArchitecturalMapCard: View {
             // Map Pins Overlay
             VStack {
                 HStack {
-                    // Stepped Pavilion Pin
-                    MapPinBadge(title: "Stepped Pavilion", count: "3", isSelected: selectedPlaceId == "stepped-pavilion") {
-                        if let p = places.first(where: { $0.id == "stepped-pavilion" }) {
-                            onSelectPlace(p)
-                        }
-                    }
-                    .offset(x: 20, y: 40)
-
                     Spacer()
 
                     // Print Workshop Pin
