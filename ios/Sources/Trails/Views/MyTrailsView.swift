@@ -133,7 +133,8 @@ public struct MyTrailsView: View {
             HStack(spacing: 4) {
                 ForEach(CollectionMode.allCases) { mode in
                     Button {
-                        withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                        Haptics.selection()
+                        withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) {
                             dataStore.collectionMode = mode
                         }
                     } label: {
@@ -331,10 +332,18 @@ public struct MyTrailsView: View {
                                     .foregroundColor(AppColors.primary)
 
                                 HStack(spacing: 4) {
-                                    Image(systemName: "camera")
-                                        .font(.system(size: 11))
-                                    Image(systemName: "mic")
-                                        .font(.system(size: 11))
+                                    if hero.photoCount > 0 {
+                                        Image(systemName: "camera")
+                                            .font(.system(size: 11))
+                                    }
+                                    if hero.videoCount > 0 {
+                                        Image(systemName: "video.fill")
+                                            .font(.system(size: 11))
+                                    }
+                                    if hero.audioCount > 0 {
+                                        Image(systemName: "mic")
+                                            .font(.system(size: 11))
+                                    }
                                     Text(hero.mediaSummary)
                                         .font(AppFonts.labelSpatial)
                                 }
@@ -697,7 +706,7 @@ public struct MyTrailsView: View {
 
     private var noResultsView: some View {
         VStack(spacing: 14) {
-            Image(systemName: "travel_explore")
+            Image(systemName: "mappin.slash")
                 .font(.system(size: 42))
                 .foregroundColor(AppColors.outline.opacity(0.6))
                 .padding(.top, 40)

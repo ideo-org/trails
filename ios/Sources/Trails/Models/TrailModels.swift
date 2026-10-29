@@ -188,17 +188,20 @@ public struct TrailDetail: Identifiable, Hashable, Codable {
         moments.filter { $0.hasPhoto || $0.mediaType == "photo" }.count
     }
 
+    public var videoCount: Int {
+        moments.filter { $0.hasVideo || $0.mediaType == "video" }.count
+    }
+
     public var audioCount: Int {
         moments.filter { $0.hasAudio || $0.mediaType == "voice" }.count
     }
 
     public var mediaSummary: String {
-        let p = photoCount
-        let a = audioCount
-        if p > 0 && a > 0 { return "\(p)P · \(a)A" }
-        if p > 0 { return "\(p)P" }
-        if a > 0 { return "\(a)A" }
-        return "\(moments.count)M"
+        var parts: [String] = []
+        if photoCount > 0 { parts.append("\(photoCount)P") }
+        if videoCount > 0 { parts.append("\(videoCount)V") }
+        if audioCount > 0 { parts.append("\(audioCount)A") }
+        return parts.isEmpty ? "\(moments.count)M" : parts.joined(separator: " · ")
     }
 
     public init(
@@ -268,11 +271,15 @@ public struct SpatialMoment: Identifiable, Hashable, Codable {
     public var distanceAlongPathMeters: Int
     public var relativeElevation: String
     public var audioDuration: String?
+    public var videoDuration: String?
     public var hasAudio: Bool
     public var hasPhoto: Bool
+    public var hasVideo: Bool
     public var mediaType: String // "note" | "photo" | "voice" | "video"
     public var photoAssetName: String?
     public var audioFileName: String?
+    public var videoFileName: String?
+    public var videoThumbnailAssetName: String?
     public var positionX: Double // Local survey coordinate X
     public var positionY: Double // Local survey coordinate Y (or Z in 3D frame)
     public var positionZ: Double?
@@ -289,11 +296,15 @@ public struct SpatialMoment: Identifiable, Hashable, Codable {
         distanceAlongPathMeters: Int,
         relativeElevation: String = "+0.00m",
         audioDuration: String? = nil,
+        videoDuration: String? = nil,
         hasAudio: Bool = false,
         hasPhoto: Bool = false,
+        hasVideo: Bool = false,
         mediaType: String = "note",
         photoAssetName: String? = nil,
         audioFileName: String? = nil,
+        videoFileName: String? = nil,
+        videoThumbnailAssetName: String? = nil,
         positionX: Double = 0.5,
         positionY: Double = 0.5,
         positionZ: Double? = 0.0,
@@ -309,11 +320,15 @@ public struct SpatialMoment: Identifiable, Hashable, Codable {
         self.distanceAlongPathMeters = distanceAlongPathMeters
         self.relativeElevation = relativeElevation
         self.audioDuration = audioDuration
+        self.videoDuration = videoDuration
         self.hasAudio = hasAudio
         self.hasPhoto = hasPhoto
+        self.hasVideo = hasVideo
         self.mediaType = mediaType
         self.photoAssetName = photoAssetName
         self.audioFileName = audioFileName
+        self.videoFileName = videoFileName
+        self.videoThumbnailAssetName = videoThumbnailAssetName
         self.positionX = positionX
         self.positionY = positionY
         self.positionZ = positionZ

@@ -264,9 +264,37 @@ public struct ReviewPublishTrailView: View {
                                                 .frame(width: 8, height: 8)
 
                                             VStack(alignment: .leading, spacing: 2) {
-                                                Text("\(moment.index). \(moment.title)")
-                                                    .font(AppFonts.headlineSmall)
-                                                    .foregroundColor(AppColors.deepInk)
+                                                HStack(spacing: 6) {
+                                                    Text("\(moment.index). \(moment.title)")
+                                                        .font(AppFonts.headlineSmall)
+                                                        .foregroundColor(AppColors.deepInk)
+
+                                                    if moment.hasVideo || moment.mediaType == "video" {
+                                                        Label("Video", systemImage: "video.fill")
+                                                            .font(AppFonts.labelSpatial)
+                                                            .foregroundColor(AppColors.terracotta)
+                                                            .padding(.horizontal, 6)
+                                                            .padding(.vertical, 2)
+                                                            .background(AppColors.terracotta.opacity(0.12))
+                                                            .clipShape(Capsule())
+                                                    } else if moment.hasPhoto {
+                                                        Label("Photo", systemImage: "camera.fill")
+                                                            .font(AppFonts.labelSpatial)
+                                                            .foregroundColor(AppColors.primary)
+                                                            .padding(.horizontal, 6)
+                                                            .padding(.vertical, 2)
+                                                            .background(AppColors.surfaceContainerHigh)
+                                                            .clipShape(Capsule())
+                                                    } else if moment.hasAudio {
+                                                        Label("Voice", systemImage: "mic.fill")
+                                                            .font(AppFonts.labelSpatial)
+                                                            .foregroundColor(AppColors.mutedBrass)
+                                                            .padding(.horizontal, 6)
+                                                            .padding(.vertical, 2)
+                                                            .background(AppColors.surfaceContainerHigh)
+                                                            .clipShape(Capsule())
+                                                    }
+                                                }
 
                                                 Text(moment.narrative.isEmpty ? moment.subtitle : moment.narrative)
                                                     .font(AppFonts.bodySmall)

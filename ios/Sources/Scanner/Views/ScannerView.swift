@@ -4,7 +4,7 @@
 //
 //  Screen 4: Active Capture & Tracking (PRD v0.2.0 §7.3, §8.1-8.3 & docs/stitch/v0.2.0/leave_a_moment_active_capture).
 //  Combines camera feed with live 2D minimap, real-time footstep vectors,
-//  spatial moment tagging (Photo, Voice, Note), and curatorial provocation prompts.
+//  multi-media spatial moment tagging (Photo, Video, Voice, Note), and curatorial prompts.
 //
 
 import SwiftUI
@@ -34,6 +34,7 @@ struct ScannerView: View {
 
     enum MomentMode: Identifiable {
         case photo
+        case video
         case voice
         case note
 
@@ -65,7 +66,7 @@ struct ScannerView: View {
                     // Top Navigation Chrome Overlay
                     topNavigationOverlay
                 }
-                .frame(height: UIScreen.main.bounds.height * 0.38)
+                .frame(height: UIScreen.main.bounds.height * 0.36)
                 .ignoresSafeArea(edges: .top)
 
                 // Middle: Architectural Minimap (Top-down 2D layout)
@@ -88,7 +89,7 @@ struct ScannerView: View {
                     }
                     .padding(.horizontal, 10)
                     .padding(.vertical, 4)
-                    .background(AppColors.surfaceContainerLowest.opacity(0.9))
+                    .background(AppColors.surfaceContainerLowest.opacity(0.92))
                     .clipShape(Capsule())
                     .padding(12)
                 }
@@ -123,7 +124,7 @@ struct ScannerView: View {
                     .padding(.bottom, 240)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
-                .animation(.easeInOut(duration: 0.25), value: toastMessage)
+                .animation(.easeInOut(duration: 0.22), value: toastMessage)
             }
         }
         .navigationBarHidden(true)
@@ -133,7 +134,7 @@ struct ScannerView: View {
         .onDisappear {
             stopCaptureSession()
         }
-        // Sub-sheets for Photo, Voice, and Note
+        // Sub-sheets for Photo, Video, Voice, and Note
         .sheet(item: $activeMomentMode) { mode in
             switch mode {
             case .photo:
@@ -149,6 +150,18 @@ struct ScannerView: View {
                     }
                 )
                 .presentationDetents([.fraction(0.55), .large])
+
+            case .video:
+                VideoMomentSheet(
+                    onSave: { dur, caption in
+                        saveVideoMoment(duration: dur, note: caption)
+                        activeMomentMode = nil
+                    },
+                    onCancel: {
+                        activeMomentMode = nil
+                    }
+                )
+                .presentationDetents([.fraction(0.62), .large])
 
             case .voice:
                 VoiceMomentSheet(
@@ -204,6 +217,7 @@ struct ScannerView: View {
             HStack {
                 // Close / Cancel Button
                 Button {
+                    Haptics.light()
                     handleClose()
                 } label: {
                     Image(systemName: "xmark")
@@ -272,7 +286,7 @@ struct ScannerView: View {
     // MARK: - Tactile Bottom Capture Sheet (docs/stitch/v0.2.0/leave_a_moment_active_capture)
 
     private var tactileCaptureSheet: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 10) {
             // Drag Handle Bar
             Capsule()
                 .fill(AppColors.onSurfaceVariant.opacity(0.25))
@@ -297,7 +311,7 @@ struct ScannerView: View {
                     }
 
                     Text("Something you noticed. Something worth keeping.")
-                        .font(AppFonts.bodyMedium)
+                        .font(AppFonts.bodySmall)
                         .foregroundColor(AppColors.onSurfaceVariant)
                 }
 
@@ -309,7 +323,7 @@ struct ScannerView: View {
             if showCuratorialPrompt {
                 HStack(alignment: .top, spacing: 10) {
                     Image(systemName: "lightbulb.fill")
-                        .font(.system(size: 18))
+                        .font(.system(size: 16))
                         .foregroundColor(AppColors.mutedBrass)
                         .padding(.top, 2)
 
@@ -319,7 +333,7 @@ struct ScannerView: View {
                             .foregroundColor(AppColors.mutedBrass)
 
                         Text("“What would you show someone who wasn’t here?”")
-                            .font(.custom("Newsreader", size: 15))
+                            .font(.custom("Newsreader", size: 14))
                             .italic()
                             .foregroundColor(AppColors.primary)
                     }
@@ -327,120 +341,80 @@ struct ScannerView: View {
                     Spacer()
 
                     Button {
+                        Haptics.light()
                         withAnimation(.easeInOut(duration: 0.2)) {
                             showCuratorialPrompt = false
                         }
                     } label: {
                         Image(systemName: "xmark")
-                            .font(.system(size: 12, weight: .bold))
+                            .font(.system(size: 11, weight: .bold))
                             .foregroundColor(AppColors.onSurfaceVariant)
                             .padding(4)
                     }
                 }
-                .padding(12)
+                .padding(10)
                 .background(AppColors.surfaceContainerLow)
                 .clipShape(RoundedRectangle(cornerRadius: 14))
                 .padding(.horizontal, 20)
                 .transition(.opacity.combined(with: .scale(scale: 0.98)))
             }
 
-            // Tactile Capture Action Triptych (Photo, Voice, Note)
-            HStack(spacing: 12) {
+            // Tactile Capture Action Bar (Photo, Video, Voice, Note)
+            HStack(spacing: 8) {
                 // 1. Photo Capture Button
-                Button {
-                    Haptics.selection()
+                momentActionButton(
+                    icon: "camera.fill",
+                    title: "Photo",
+                    subtitle: "FRAME",
+                    iconColor: AppColors.onPrimary,
+                    bgColor: AppColors.primary
+                ) {
+                    Haptics.light()
                     momentNote = ""
                     activeMomentMode = .photo
-                } label: {
-                    VStack(spacing: 6) {
-                        Circle()
-                            .fill(AppColors.primary)
-                            .frame(width: 48, height: 48)
-                            .overlay(
-                                Image(systemName: "camera.fill")
-                                    .font(.system(size: 20))
-                                    .foregroundColor(AppColors.onPrimary)
-                            )
-
-                        Text("Photo")
-                            .font(AppFonts.headlineSmall)
-                            .foregroundColor(AppColors.primary)
-
-                        Text("VISUAL FRAME")
-                            .font(AppFonts.labelSpatial)
-                            .foregroundColor(AppColors.onSurfaceVariant)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
-                    .background(AppColors.surfaceContainer)
-                    .clipShape(RoundedRectangle(cornerRadius: 16))
                 }
-                .buttonStyle(ScaleButtonStyle())
 
-                // 2. Voice Capture Button
-                Button {
-                    Haptics.selection()
+                // 2. Video Capture Button (v0.2.0 Video Support)
+                momentActionButton(
+                    icon: "video.fill",
+                    title: "Video",
+                    subtitle: "SPATIAL",
+                    iconColor: AppColors.pureWhite,
+                    bgColor: AppColors.terracotta
+                ) {
+                    Haptics.light()
+                    momentNote = ""
+                    activeMomentMode = .video
+                }
+
+                // 3. Voice Capture Button
+                momentActionButton(
+                    icon: "mic.fill",
+                    title: "Voice",
+                    subtitle: "AUDIO",
+                    iconColor: AppColors.primary,
+                    bgColor: AppColors.mutedBrass
+                ) {
+                    Haptics.light()
                     momentNote = ""
                     activeMomentMode = .voice
-                } label: {
-                    VStack(spacing: 6) {
-                        Circle()
-                            .fill(AppColors.mutedBrass)
-                            .frame(width: 48, height: 48)
-                            .overlay(
-                                Image(systemName: "mic.fill")
-                                    .font(.system(size: 20))
-                                    .foregroundColor(AppColors.primary)
-                            )
-
-                        Text("Voice")
-                            .font(AppFonts.headlineSmall)
-                            .foregroundColor(AppColors.primary)
-
-                        Text("AUDIO CLIP")
-                            .font(AppFonts.labelSpatial)
-                            .foregroundColor(AppColors.onSurfaceVariant)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
-                    .background(AppColors.surfaceContainer)
-                    .clipShape(RoundedRectangle(cornerRadius: 16))
                 }
-                .buttonStyle(ScaleButtonStyle())
 
-                // 3. Note Capture Button
-                Button {
-                    Haptics.selection()
+                // 4. Note Capture Button
+                momentActionButton(
+                    icon: "note.text",
+                    title: "Note",
+                    subtitle: "ESSAY",
+                    iconColor: AppColors.primary,
+                    bgColor: AppColors.surfaceContainerHighest
+                ) {
+                    Haptics.light()
                     momentLabel = ""
                     momentNote = ""
                     activeMomentMode = .note
-                } label: {
-                    VStack(spacing: 6) {
-                        Circle()
-                            .fill(AppColors.surfaceContainerHighest)
-                            .frame(width: 48, height: 48)
-                            .overlay(
-                                Image(systemName: "note.text")
-                                    .font(.system(size: 20))
-                                    .foregroundColor(AppColors.primary)
-                            )
-
-                        Text("Note")
-                            .font(AppFonts.headlineSmall)
-                            .foregroundColor(AppColors.primary)
-
-                        Text("IMPRESSION")
-                            .font(AppFonts.labelSpatial)
-                            .foregroundColor(AppColors.onSurfaceVariant)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
-                    .background(AppColors.surfaceContainer)
-                    .clipShape(RoundedRectangle(cornerRadius: 16))
                 }
-                .buttonStyle(ScaleButtonStyle())
             }
-            .padding(.horizontal, 20)
+            .padding(.horizontal, 16)
 
             // Dynamic Status Drawer
             HStack {
@@ -464,13 +438,48 @@ struct ScannerView: View {
                 .foregroundColor(AppColors.onSurfaceVariant)
             }
             .padding(.horizontal, 20)
-            .padding(.bottom, 12)
+            .padding(.bottom, 10)
         }
         .background(
             AppColors.surfaceContainerLowest
                 .clipShape(RoundedRectangle(cornerRadius: 32, style: .continuous))
                 .shadow(color: AppColors.primary.opacity(0.08), radius: 24, x: 0, y: -8)
         )
+    }
+
+    private func momentActionButton(
+        icon: String,
+        title: String,
+        subtitle: String,
+        iconColor: Color,
+        bgColor: Color,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            VStack(spacing: 4) {
+                Circle()
+                    .fill(bgColor)
+                    .frame(width: 42, height: 42)
+                    .overlay(
+                        Image(systemName: icon)
+                            .font(.system(size: 17))
+                            .foregroundColor(iconColor)
+                    )
+
+                Text(title)
+                    .font(AppFonts.headlineSmall)
+                    .foregroundColor(AppColors.primary)
+
+                Text(subtitle)
+                    .font(AppFonts.labelSpatial)
+                    .foregroundColor(AppColors.onSurfaceVariant)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 10)
+            .background(AppColors.surfaceContainer)
+            .clipShape(RoundedRectangle(cornerRadius: 14))
+        }
+        .buttonStyle(ScaleButtonStyle())
     }
 
     // MARK: - Save Moment Helpers
@@ -485,6 +494,21 @@ struct ScannerView: View {
             photoAssetName: assetName
         )
         triggerToast(message: "Photo frame anchored in place")
+    }
+
+    private func saveVideoMoment(duration: String, note: String) {
+        let label = note.isEmpty ? "Spatial Video \(scannerEngine.recordedMoments.count + 1)" : note
+        scannerEngine.addMoment(
+            label: label,
+            note: note.isEmpty ? "1.5x Spatial Video clip recorded at 60fps." : note,
+            mediaType: "video",
+            hasPhoto: true,
+            photoAssetName: "DhunHaveliEvening",
+            hasVideo: true,
+            videoDuration: duration,
+            videoThumbnailAssetName: "DhunHaveliEvening"
+        )
+        triggerToast(message: "Video clip anchored in place")
     }
 
     private func saveVoiceMoment(duration: String, note: String) {
@@ -579,6 +603,160 @@ struct ScannerView: View {
 
         TrailsDataStore.shared.saveDraft(trail: trail, footsteps: scannerEngine.footsteps)
         showingReviewSheet = true
+    }
+}
+
+// MARK: - Video Moment Sheet (PRD v0.2.0 Video Moment Support)
+
+private struct VideoMomentSheet: View {
+    @State private var isRecording = false
+    @State private var recordedSeconds = 0
+    @State private var timer: Timer?
+    @State private var caption: String = ""
+
+    let onSave: (String, String) -> Void
+    let onCancel: () -> Void
+
+    private var durationString: String {
+        let m = recordedSeconds / 60
+        let s = recordedSeconds % 60
+        return String(format: "%d:%02d", m, s)
+    }
+
+    var body: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 16) {
+                HStack {
+                    HStack(spacing: 8) {
+                        Image(systemName: "video.fill")
+                            .foregroundColor(AppColors.terracotta)
+                        Text("Capture Spatial Video")
+                            .font(AppFonts.headlineMedium)
+                            .foregroundColor(AppColors.primary)
+                    }
+                    Spacer()
+                    Button("Cancel", action: onCancel)
+                        .font(AppFonts.bodyMedium)
+                        .foregroundColor(AppColors.onSurfaceVariant)
+                }
+
+                // Video Viewport / Recorder Card
+                ZStack {
+                    Image("DhunHaveliEvening")
+                        .resizable()
+                        .scaledToFill()
+                        .frame(height: 160)
+                        .frame(maxWidth: .infinity)
+                        .clipped()
+                        .cornerRadius(16)
+                        .overlay(Color.black.opacity(isRecording ? 0.25 : 0.45))
+
+                    VStack {
+                        // Top specs badge
+                        HStack {
+                            HStack(spacing: 6) {
+                                Circle()
+                                    .fill(isRecording ? AppColors.terracotta : AppColors.mutedBrass)
+                                    .frame(width: 7, height: 7)
+                                Text(isRecording ? "RECORDING · 60 FPS" : "1.5x SPATIAL VIDEO")
+                                    .font(AppFonts.labelSpatial)
+                                    .foregroundColor(.white)
+                            }
+                            .padding(.horizontal, 9)
+                            .padding(.vertical, 4)
+                            .background(Color.black.opacity(0.65))
+                            .clipShape(Capsule())
+
+                            Spacer()
+
+                            Text(durationString)
+                                .font(AppFonts.labelMetric)
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 9)
+                                .padding(.vertical, 4)
+                                .background(Color.black.opacity(0.65))
+                                .clipShape(Capsule())
+                        }
+                        .padding(12)
+
+                        Spacer()
+
+                        // Record / Stop Button
+                        Button {
+                            toggleRecording()
+                        } label: {
+                            ZStack {
+                                Circle()
+                                    .fill(Color.white)
+                                    .frame(width: 58, height: 58)
+
+                                if isRecording {
+                                    RoundedRectangle(cornerRadius: 5)
+                                        .fill(AppColors.terracotta)
+                                        .frame(width: 24, height: 24)
+                                } else {
+                                    Circle()
+                                        .fill(AppColors.terracotta)
+                                        .frame(width: 46, height: 46)
+                                }
+                            }
+                            .shadow(color: Color.black.opacity(0.3), radius: 6)
+                        }
+                        .padding(.bottom, 12)
+                    }
+                }
+                .frame(height: 160)
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("SPATIAL OBSERVATION / NOTE")
+                        .font(AppFonts.labelSpatial)
+                        .foregroundColor(AppColors.outline)
+
+                    TextField("e.g. Iron pivot hinge rotation & dusk courtyard breeze", text: $caption)
+                        .font(AppFonts.bodyMedium)
+                        .padding(14)
+                        .background(AppColors.surfaceContainerLow)
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(AppColors.border, lineWidth: 1)
+                        )
+                }
+
+                Spacer()
+
+                Button {
+                    let dur = recordedSeconds > 0 ? durationString : "0:24"
+                    onSave(dur, caption)
+                } label: {
+                    Text("Save Video Moment")
+                        .font(AppFonts.labelUI)
+                        .fontWeight(.semibold)
+                        .foregroundColor(AppColors.onPrimary)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 50)
+                        .background(AppColors.primary)
+                        .clipShape(Capsule())
+                }
+            }
+            .padding(20)
+            .background(AppColors.canvas.ignoresSafeArea())
+        }
+    }
+
+    private func toggleRecording() {
+        Haptics.selection()
+        if isRecording {
+            isRecording = false
+            timer?.invalidate()
+            timer = nil
+        } else {
+            isRecording = true
+            recordedSeconds = 0
+            timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
+                recordedSeconds += 1
+            }
+        }
     }
 }
 
@@ -879,7 +1057,7 @@ private struct SimulatedViewportView: View {
 private struct ScaleButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .scaleEffect(configuration.isPressed ? 0.96 : 1.0)
-            .animation(.easeInOut(duration: 0.15), value: configuration.isPressed)
+            .scaleEffect(configuration.isPressed ? 0.94 : 1.0)
+            .animation(.easeInOut(duration: 0.12), value: configuration.isPressed)
     }
 }

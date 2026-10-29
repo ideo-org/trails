@@ -103,7 +103,11 @@ class RoomScannerEngine: NSObject, ObservableObject, RoomCaptureSessionDelegate,
         photoAssetName: String? = nil,
         hasAudio: Bool = false,
         audioDuration: String? = nil,
-        audioFileName: String? = nil
+        audioFileName: String? = nil,
+        hasVideo: Bool = false,
+        videoDuration: String? = nil,
+        videoFileName: String? = nil,
+        videoThumbnailAssetName: String? = nil
     ) {
         let index = recordedMoments.count + 1
         let pos = lastRecordedPosition ?? SIMD3<Float>(0, 0, 0)
@@ -117,11 +121,15 @@ class RoomScannerEngine: NSObject, ObservableObject, RoomCaptureSessionDelegate,
             architecturalNote: "Local survey coordinate: X=\(String(format: "%.2f", pos.x)), Z=\(String(format: "%.2f", pos.z))",
             distanceAlongPathMeters: walkedMeters,
             audioDuration: audioDuration,
+            videoDuration: videoDuration,
             hasAudio: hasAudio,
             hasPhoto: hasPhoto,
+            hasVideo: hasVideo,
             mediaType: mediaType,
             photoAssetName: photoAssetName,
             audioFileName: audioFileName,
+            videoFileName: videoFileName,
+            videoThumbnailAssetName: videoThumbnailAssetName,
             positionX: Double(pos.x),
             positionY: Double(pos.z)
         )

@@ -56,6 +56,21 @@ enum Haptics: String, CaseIterable, Identifiable {
         triggerNotificationHaptic(type: .error)
     }
 
+    /// Trigger light impact haptic
+    static func light() {
+        triggerHapticFeedback(impactLevel: .light)
+    }
+
+    /// Trigger medium impact haptic
+    static func medium() {
+        triggerHapticFeedback(impactLevel: .medium)
+    }
+
+    /// Trigger heavy impact haptic
+    static func heavy() {
+        triggerHapticFeedback(impactLevel: .heavy)
+    }
+
     /// Trigger selection changed haptic (light tap)
     static func selection() {
         let generator = UISelectionFeedbackGenerator()
