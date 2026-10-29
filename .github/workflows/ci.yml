@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  ios-build:
+    name: Build iOS App
+    runs-on: macos-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          lfs: true
+
+      - name: Cache Swift Package Manager
+        uses: actions/cache@v5
+        with:
+          path: ios/DerivedData/SourcePackages
+          key: ${{ runner.os }}-spm-${{ hashFiles('ios/Trails.xcodeproj/project.pbxproj') }}
+          restore-keys: |
+            ${{ runner.os }}-spm-
+
+      - name: Resolve Swift packages
+        working-directory: ios
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild -resolvePackageDependencies \
+            -project Trails.xcodeproj \
+            -scheme Trails \
+            -clonedSourcePackagesDirPath DerivedData/SourcePackages
+
+      - name: Build iOS app
+        working-directory: ios
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild build \
+            -project Trails.xcodeproj \
+            -scheme Trails \
+            -configuration Debug \
+            -destination 'generic/platform=iOS Simulator' \
+            -clonedSourcePackagesDirPath DerivedData/SourcePackages \
+            COMPILER_INDEX_STORE_ENABLE=NO \
+            DEBUG_INFORMATION_FORMAT=dwarf \
+            CODE_SIGNING_ALLOWED=NO \
+            2>&1 | tee /tmp/xcodebuild.log | tail -40
+          echo "✅ Xcode build succeeded"
+
+      - name: Show Xcode build errors on failure
+        if: failure()
+        shell: bash
+        run: |
+          if [ -f /tmp/xcodebuild.log ]; then
+            echo "::group::Xcode build errors"
+            grep -A 2 'error:' /tmp/xcodebuild.log || echo "No 'error:' lines found in log"
+            echo "::endgroup::"
+          fi
+
+      - name: Upload Xcode build log
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: xcodebuild-log
+          path: /tmp/xcodebuild.log
+          retention-days: 7
+          if-no-files-found: ignore

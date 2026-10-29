@@ -1,0 +1,8 @@
+// Local.xcconfig
+// This file is NOT committed to Git.
+// Copy to Local.xcconfig for developer-specific overrides.
+
+// APP_BUNDLE_IDENTIFIER = com.app.2020.dev
+// APP_WIDGET_BUNDLE_IDENTIFIER = $(APP_BUNDLE_IDENTIFIER).widget
+// APP_GROUP_IDENTIFIER = group.$(APP_BUNDLE_IDENTIFIER).widgets
+// DEVELOPMENT_TEAM = YOUR_TEAM_ID

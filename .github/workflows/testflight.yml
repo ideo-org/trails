@@ -1,0 +1,250 @@
+name: TestFlight
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Semver release tag to upload, for example v0.4.2'
+        required: true
+        type: string
+
+concurrency:
+  group: testflight-${{ github.workflow }}-${{ inputs.release_tag || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  testflight:
+    runs-on: macos-26
+    timeout-minutes: 45
+
+    env:
+      SCHEME: Trails
+      XCODE_PROJECT: ios/Trails.xcodeproj
+      ARCHIVE_PATH: /tmp/Trails.xcarchive
+      EXPORT_PATH: /tmp/TrailsExport
+      EXPORT_OPTIONS: /tmp/ExportOptions.plist
+      API_KEY_DIR: /tmp/private_keys
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.release_tag || github.ref }}
+          lfs: true
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Validate release prerequisites
+        env:
+          APPSTORE_API_PRIVATE_KEY: ${{ secrets.APPSTORE_API_PRIVATE_KEY }}
+          APPSTORE_API_KEY_ID: ${{ secrets.APPSTORE_API_KEY_ID }}
+          APPSTORE_API_ISSUER_ID: ${{ secrets.APPSTORE_API_ISSUER_ID }}
+          DISTRIBUTION_CERTIFICATE_BASE64: ${{ secrets.DISTRIBUTION_CERTIFICATE_BASE64 }}
+          DISTRIBUTION_CERTIFICATE_PASSWORD: ${{ secrets.DISTRIBUTION_CERTIFICATE_PASSWORD }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          missing=0
+
+          for secret_name in \
+            APPSTORE_API_PRIVATE_KEY \
+            APPSTORE_API_KEY_ID \
+            APPSTORE_API_ISSUER_ID \
+            DISTRIBUTION_CERTIFICATE_BASE64 \
+            DISTRIBUTION_CERTIFICATE_PASSWORD
+          do
+            if [ -z "${!secret_name}" ]; then
+              echo "::error::Missing required secret: ${secret_name}"
+              missing=1
+            fi
+          done
+
+          if grep -q 'DEVELOPMENT_TEAM = "";' ios/Trails.xcodeproj/project.pbxproj; then
+            echo "::error::Set a real DEVELOPMENT_TEAM in ios/Trails.xcodeproj before running TestFlight releases."
+            missing=1
+          fi
+
+          if grep -q 'com.example.myapp' ios/Trails.xcodeproj/project.pbxproj; then
+            echo "::error::Replace placeholder bundle identifiers in ios/Trails.xcodeproj before running TestFlight releases."
+            missing=1
+          fi
+
+          if [ "$missing" -ne 0 ]; then
+            exit 1
+          fi
+
+      - name: Determine version
+        id: version
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
+        run: |
+          set -euo pipefail
+          if [[ ! "${RELEASE_TAG}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::TestFlight releases must run from a semver tag like v1.2.3."
+            exit 1
+          fi
+
+          if ! git rev-parse -q --verify "refs/tags/${RELEASE_TAG}" >/dev/null; then
+            echo "::error::Release tag ${RELEASE_TAG} was not fetched."
+            exit 1
+          fi
+
+          TAG_COMMIT="$(git rev-parse "refs/tags/${RELEASE_TAG}^{commit}")"
+          HEAD_COMMIT="$(git rev-parse HEAD)"
+          if [[ "${TAG_COMMIT}" != "${HEAD_COMMIT}" ]]; then
+            echo "::error::Checked out ${HEAD_COMMIT}, expected ${TAG_COMMIT} for ${RELEASE_TAG}."
+            exit 1
+          fi
+
+          VERSION="${RELEASE_TAG#v}"
+          BUILD_NUM="$(git rev-list --count HEAD)"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "build=${BUILD_NUM}" >> "$GITHUB_OUTPUT"
+          echo "describe=$(git describe --tags --always)" >> "$GITHUB_OUTPUT"
+          echo "→ Version: ${VERSION} (${BUILD_NUM})"
+
+      - name: Resolve Swift packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild -resolvePackageDependencies \
+            -project "$XCODE_PROJECT" \
+            -scheme "$SCHEME"
+
+      - name: Install App Store Connect API key
+        env:
+          API_KEY: ${{ secrets.APPSTORE_API_PRIVATE_KEY }}
+          API_KEY_ID: ${{ secrets.APPSTORE_API_KEY_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$API_KEY_DIR"
+          printenv API_KEY > "$API_KEY_DIR/AuthKey_${API_KEY_ID}.p8"
+          chmod 600 "$API_KEY_DIR/AuthKey_${API_KEY_ID}.p8"
+
+      - name: Install signing certificate
+        env:
+          DISTRIBUTION_CERTIFICATE_BASE64: ${{ secrets.DISTRIBUTION_CERTIFICATE_BASE64 }}
+          DISTRIBUTION_CERTIFICATE_PASSWORD: ${{ secrets.DISTRIBUTION_CERTIFICATE_PASSWORD }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          KEYCHAIN_PATH="$RUNNER_TEMP/app-signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(openssl rand -hex 16)"
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          CERT_PATH="$RUNNER_TEMP/certificate.p12"
+          echo -n "$DISTRIBUTION_CERTIFICATE_BASE64" | base64 -D -o "$CERT_PATH"
+          security import "$CERT_PATH" \
+            -P "$DISTRIBUTION_CERTIFICATE_PASSWORD" \
+            -A \
+            -t cert \
+            -f pkcs12 \
+            -k "$KEYCHAIN_PATH"
+
+          security list-keychains -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | tr -d '"')
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+      - name: Write ExportOptions plist
+        shell: bash
+        run: |
+          set -euo pipefail
+          /usr/libexec/PlistBuddy -c "Add :method string app-store-connect" "$EXPORT_OPTIONS"
+          /usr/libexec/PlistBuddy -c "Add :signingStyle string automatic" "$EXPORT_OPTIONS"
+          /usr/libexec/PlistBuddy -c "Add :uploadSymbols bool true" "$EXPORT_OPTIONS"
+          /usr/libexec/PlistBuddy -c "Add :destination string upload" "$EXPORT_OPTIONS"
+
+      - name: Archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild archive \
+            -scheme "$SCHEME" \
+            -project "$XCODE_PROJECT" \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$ARCHIVE_PATH" \
+            MARKETING_VERSION="${{ steps.version.outputs.version }}" \
+            CURRENT_PROJECT_VERSION="${{ steps.version.outputs.build }}" \
+            -authenticationKeyPath "$API_KEY_DIR/AuthKey_${{ secrets.APPSTORE_API_KEY_ID }}.p8" \
+            -authenticationKeyID "${{ secrets.APPSTORE_API_KEY_ID }}" \
+            -authenticationKeyIssuerID "${{ secrets.APPSTORE_API_ISSUER_ID }}" \
+            -allowProvisioningUpdates
+
+      - name: Verify archived bundle versions
+        shell: bash
+        env:
+          EXPECTED_VERSION: ${{ steps.version.outputs.version }}
+          EXPECTED_BUILD: ${{ steps.version.outputs.build }}
+        run: |
+          set -euo pipefail
+
+          APP_DIR="${ARCHIVE_PATH}/Products/Applications/Trails.app"
+          APP_INFO="${APP_DIR}/Info.plist"
+
+          verify_plist() {
+            local label="$1"
+            local plist="$2"
+            local actual_version
+            local actual_build
+
+            actual_version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$plist")"
+            actual_build="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$plist")"
+
+            if [[ "$actual_version" != "$EXPECTED_VERSION" ]]; then
+              echo "::error::${label} has version ${actual_version}, expected ${EXPECTED_VERSION} from the release tag."
+              exit 1
+            fi
+
+            if [[ "$actual_build" != "$EXPECTED_BUILD" ]]; then
+              echo "::error::${label} has build ${actual_build}, expected ${EXPECTED_BUILD}."
+              exit 1
+            fi
+
+            echo "Verified ${label}: ${actual_version} (${actual_build})"
+          }
+
+          verify_plist "Trails.app" "$APP_INFO"
+
+          PLUGINS_DIR="${APP_DIR}/PlugIns"
+          if [[ -d "$PLUGINS_DIR" ]]; then
+            while IFS= read -r -d '' plist; do
+              verify_plist "${plist#${APP_DIR}/}" "$plist"
+            done < <(find "$PLUGINS_DIR" -name Info.plist -print0)
+          fi
+
+      - name: Export and upload to TestFlight
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild -exportArchive \
+            -archivePath "$ARCHIVE_PATH" \
+            -exportOptionsPlist "$EXPORT_OPTIONS" \
+            -exportPath "$EXPORT_PATH" \
+            -authenticationKeyPath "$API_KEY_DIR/AuthKey_${{ secrets.APPSTORE_API_KEY_ID }}.p8" \
+            -authenticationKeyID "${{ secrets.APPSTORE_API_KEY_ID }}" \
+            -authenticationKeyIssuerID "${{ secrets.APPSTORE_API_ISSUER_ID }}" \
+            -allowProvisioningUpdates
+
+      - name: Cleanup signing and API key
+        if: always()
+        shell: bash
+        run: |
+          security delete-keychain "$RUNNER_TEMP/app-signing.keychain-db" 2>/dev/null || true
+          rm -rf "$API_KEY_DIR"
+
+      - name: Summary
+        run: |
+          echo "### TestFlight Upload" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Version:** ${{ steps.version.outputs.version }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Build:** ${{ steps.version.outputs.build }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Git:** ${{ steps.version.outputs.describe }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Ref:** \`${{ github.ref }}\`" >> "$GITHUB_STEP_SUMMARY"
