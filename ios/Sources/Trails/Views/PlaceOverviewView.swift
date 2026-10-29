@@ -300,7 +300,9 @@ public struct PlaceOverviewView: View {
             SpatialTrailViewerView()
         }
         .fullScreenCover(isPresented: $showingScanner) {
-            TrailsScanView()
+            NavigationStack {
+                ScannerView()
+            }
         }
     }
 }

@@ -457,6 +457,12 @@ struct OnboardingView: View {
         localDisplayName = trimmedName
         localIntroduction = trimmedIntro
 
+        // Persist to the TrailsDataStore local profile so You tab and trail authorship pick it up
+        TrailsDataStore.shared.updateProfile(
+            displayName: trimmedName.isEmpty ? "A trail by you" : trimmedName,
+            introduction: trimmedIntro.isEmpty ? "Spatial explorer documenting living spaces." : trimmedIntro
+        )
+
         completeOnboarding()
     }
 

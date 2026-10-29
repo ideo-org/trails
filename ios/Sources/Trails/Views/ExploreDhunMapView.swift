@@ -182,9 +182,9 @@ public struct ExploreDhunMapView: View {
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     HStack(spacing: 8) {
-                        Image(systemName: "point.topleft.down.to.point.bottomright.curvepath")
-                            .font(.system(size: 18, weight: .semibold))
-                            .foregroundColor(AppColors.primary)
+                        Circle()
+                            .fill(AppColors.terracotta)
+                            .frame(width: 8, height: 8)
 
                         Text("TRAILS")
                             .font(AppFonts.headlineSmall)
@@ -193,22 +193,10 @@ public struct ExploreDhunMapView: View {
                     }
                 }
 
-                ToolbarItem(placement: .principal) {
-                    Text("Explore")
-                        .font(AppFonts.headlineSmall)
-                        .foregroundColor(AppColors.deepInk)
-                }
-
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Circle()
-                        .fill(AppColors.surfaceContainerHigh)
-                        .frame(width: 32, height: 32)
-                        .overlay(
-                            Image(systemName: "person.crop.circle.fill")
-                                .resizable()
-                                .scaledToFit()
-                                .foregroundColor(AppColors.terracotta)
-                        )
+                    Text("Dhun Quarter")
+                        .font(AppFonts.labelSpatial)
+                        .foregroundColor(AppColors.outline)
                 }
             }
             .navigationDestination(isPresented: $showingPlaceDetail) {
@@ -217,7 +205,9 @@ public struct ExploreDhunMapView: View {
                 }
             }
             .fullScreenCover(isPresented: $showingScanner) {
-                TrailsScanView()
+                NavigationStack {
+                    ScannerView()
+                }
             }
         }
     }

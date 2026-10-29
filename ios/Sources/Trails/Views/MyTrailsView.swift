@@ -187,7 +187,9 @@ public struct MyTrailsView: View {
                     }
             }
             .fullScreenCover(isPresented: $showingScanner) {
-                ScannerView()
+                NavigationStack {
+                    ScannerView()
+                }
             }
             .alert("Delete Trail?", isPresented: $showingDeleteAlert) {
                 Button("Delete", role: .destructive) {
