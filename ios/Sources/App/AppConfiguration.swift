@@ -37,6 +37,18 @@ enum AppConfiguration {
         enableAuth || enableScanCloudSync || enableStreaks
     }
 
+    /// Enable Logos Decentralized Spatial Registry & Storage (port 8095)
+    static let enableLogosNetwork = true
+
+    /// Base URL for the Logos node / trails.logos REST API
+    static var logosBaseURL: URL {
+        if let custom = ProcessInfo.processInfo.environment["TRAILS_LOGOS_URL"],
+           let url = URL(string: custom) {
+            return url
+        }
+        return URL(string: "http://vm.ideomind.org:8095")!
+    }
+
     /// Enable RevenueCat for subscriptions.
     ///
     /// Keep disabled until a production API key and entitlement model are configured.

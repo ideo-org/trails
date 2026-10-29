@@ -76,3 +76,15 @@ ship:
 
 # Alias for pushing to TestFlight.
 testflight: ship
+
+# Run the trails.logos backend dev server (port 8095)
+dev *ARGS:
+    cd trails.logos; just dev {{ARGS}}
+
+# Run trails.logos tests
+test-backend:
+    cd trails.logos; just test
+
+# Run trails.logos acceptance demonstration
+demo-backend:
+    cd trails.logos; just demo

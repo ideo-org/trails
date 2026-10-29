@@ -1,0 +1,26 @@
+# yaml-language-server: $schema=https://taskfile.dev/schema.json
+version: '3'
+
+tasks:
+  default:
+    desc: List available tasks
+    cmds:
+      - task --list
+
+  dev:
+    desc: Run the trails.logos REST API server on port 8095
+    dir: trails.logos
+    cmds:
+      - task dev -- {{.CLI_ARGS}}
+
+  test:
+    desc: Run all tests across trails.logos
+    dir: trails.logos
+    cmds:
+      - task test
+
+  demo:
+    desc: Run trails.logos acceptance demonstration
+    dir: trails.logos
+    cmds:
+      - task demo

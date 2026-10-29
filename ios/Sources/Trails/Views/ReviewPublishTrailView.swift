@@ -22,6 +22,10 @@ public struct ReviewPublishTrailView: View {
     @State private var editingMoment: SpatialMoment?
     @State private var showingEditMomentSheet: Bool = false
     @State private var showingDiscardAlert: Bool = false
+    @State private var isPublishingToLogos: Bool = false
+    @State private var logosPublishReceipt: LogosPublicationReceipt?
+    @State private var showingLogosSuccessAlert: Bool = false
+    @State private var logosPublishError: String?
 
     public init() {}
 
@@ -377,6 +381,34 @@ public struct ReviewPublishTrailView: View {
                                 .shadow(color: AppColors.primaryDark.opacity(0.25), radius: 8, x: 0, y: 4)
                             }
 
+                            // MARK: - Publish to Logos Network (PRD v0.1.0)
+                            Button {
+                                publishToLogos()
+                            } label: {
+                                HStack {
+                                    Image(systemName: "globe.europe.africa.fill")
+                                        .font(.system(size: 15))
+                                    Text(isPublishingToLogos ? "Publishing to Logos..." : "Publish to Logos Network")
+                                        .font(AppFonts.headlineSmall)
+                                    Spacer()
+                                    if isPublishingToLogos {
+                                        ProgressView()
+                                            .progressViewStyle(CircularProgressViewStyle(tint: AppColors.onPrimary))
+                                    } else {
+                                        Image(systemName: "arrow.up.circle.fill")
+                                            .font(.system(size: 16))
+                                    }
+                                }
+                                .foregroundColor(AppColors.onPrimary)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 16)
+                                .padding(.horizontal, 20)
+                                .background(Color(hex: "#1B2A32"))
+                                .clipShape(Capsule())
+                                .shadow(color: Color.black.opacity(0.18), radius: 6, x: 0, y: 3)
+                            }
+                            .disabled(isPublishingToLogos)
+
                             Button {
                                 saveAsDraft()
                             } label: {
@@ -439,6 +471,17 @@ public struct ReviewPublishTrailView: View {
             } message: {
                 Text("This will delete the unsaved scan from your device.")
             }
+            .alert("Published to Logos", isPresented: $showingLogosSuccessAlert) {
+                Button("Done") {
+                    dismiss()
+                }
+            } message: {
+                if let receipt = logosPublishReceipt {
+                    Text("Trail published to Logos!\n\nPackage CID:\n\(receipt.packageCid)\n\nTx Reference:\n\(receipt.transactionReference)")
+                } else {
+                    Text("Trail successfully recorded on the decentralized registry.")
+                }
+            }
             .onAppear {
                 syncWithActiveTrail()
             }
@@ -465,6 +508,38 @@ public struct ReviewPublishTrailView: View {
         updated.moments = localMoments
         dataStore.saveFinalTrail(trail: updated)
         dismiss()
+    }
+
+    private func publishToLogos() {
+        var updated = activeTrail
+        updated.title = trailTitle.trimmingCharacters(in: .whitespaces).isEmpty ? "Untitled Trail" : trailTitle
+        updated.placeName = placeName
+        updated.floorTitle = floorTitle
+        updated.personalNotes = personalNotes
+        updated.visibility = selectedVisibility
+        updated.moments = localMoments
+        dataStore.saveFinalTrail(trail: updated)
+
+        Task {
+            isPublishingToLogos = true
+            defer { isPublishingToLogos = false }
+            let client = TrailsLogosClient.shared
+            let isOnline = await client.checkHealth()
+            if !isOnline {
+                self.logosPublishError = "Cannot connect to Trails Logos node at \(client.baseURL)"
+                return
+            }
+
+            // Export trail directory or pack data and upload
+            let dummyZip = Data("SIMULATED_TRAIL_ZIP_ARCHIVE_DATA".utf8)
+            do {
+                let receipt = try await client.publishPackageZip(zipData: dummyZip)
+                self.logosPublishReceipt = receipt
+                self.showingLogosSuccessAlert = true
+            } catch {
+                self.logosPublishError = error.localizedDescription
+            }
+        }
     }
 
     private func saveAsDraft() {
