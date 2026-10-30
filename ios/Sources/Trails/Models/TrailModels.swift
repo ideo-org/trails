@@ -3,7 +3,7 @@
 //  Trails
 //
 //  Domain data models matching the Stitch design system (docs/stitch/trails/DESIGN.md)
-//  and screens (explore_dhun_map, place_overview_dhun_haveli, spatial_viewer_through_the_courtyard, review_publish_trail).
+//  and primary exploration views (spatial viewer, review publish trail).
 //
 
 import Foundation
@@ -41,7 +41,7 @@ public struct Place: Identifiable, Hashable, Codable {
         tagline: String,
         surveyYear: String,
         district: String,
-        locality: String = "Dhun, Jaipur",
+        locality: String = "Local Area",
         description: String,
         coverImageName: String? = nil,
         trailsCount: Int,
@@ -76,11 +76,23 @@ public struct Place: Identifiable, Hashable, Codable {
 
 public enum PlaceCategory: String, CaseIterable, Identifiable, Codable {
     case all = "All Places"
-    case dhunSurrounds = "Dhun & Surrounds"
+    case surrounds = "Surrounds & Landscapes"
     case courtyards = "Indoor Courtyards"
     case studios = "Artisan Studios"
 
     public var id: String { rawValue }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        let raw = try container.decode(String.self)
+        if raw == "Dhun & Surrounds" || raw == "Surrounds & Landscapes" {
+            self = .surrounds
+        } else if let match = PlaceCategory(rawValue: raw) {
+            self = match
+        } else {
+            self = .all
+        }
+    }
 }
 
 public struct FloorLevel: Identifiable, Hashable, Codable {
@@ -179,6 +191,12 @@ public struct TrailDetail: Identifiable, Hashable, Codable {
     public var coverImageName: String?
     public var latitude: Double?
     public var longitude: Double?
+
+    public var coordinate: CLLocationCoordinate2D? {
+        guard let lat = latitude, let lon = longitude, lat != 0 || lon != 0 else { return nil }
+        return CLLocationCoordinate2D(latitude: lat, longitude: lon)
+    }
+
     public var inspiredByTrailId: String?
     public var inspiredByNote: String?
     public var isRetrace: Bool
@@ -192,6 +210,16 @@ public struct TrailDetail: Identifiable, Hashable, Codable {
     public var createdAt: Date
     public var updatedAt: Date
 
+    // PRD v0.4.0 Provenance & Download Metadata (PRD §14)
+    public var isDownloaded: Bool
+    public var sourceTrailId: String?
+    public var sourceRevision: Int?
+    public var sourcePackageCid: String?
+    public var creatorId: String?
+    public var creatorUsername: String?
+    public var publisherReference: String?
+    public var downloadedAt: Date?
+
     enum CodingKeys: String, CodingKey {
         case id, title, subtitle, placeId, placeName, locality, wing
         case authorName, authorRole, distanceMeters, floorCode, floorTitle
@@ -201,6 +229,8 @@ public struct TrailDetail: Identifiable, Hashable, Codable {
         case isRetrace, retraceSimilarityIndex, retraceReferenceTrailTitle, retraceDate
         case startFramePhotoName, startHeadingDegrees, startVantageDescription, isStartingFramePano
         case createdAt, updatedAt
+        case isDownloaded, sourceTrailId, sourceRevision, sourcePackageCid
+        case creatorId, creatorUsername, publisherReference, downloadedAt
     }
 
     public var photoCount: Int {
@@ -237,7 +267,7 @@ public struct TrailDetail: Identifiable, Hashable, Codable {
         subtitle: String,
         placeId: String,
         placeName: String,
-        locality: String = "Dhun, Jaipur",
+        locality: String = "Local Area",
         wing: String,
         authorName: String,
         authorRole: String,
@@ -265,7 +295,15 @@ public struct TrailDetail: Identifiable, Hashable, Codable {
         startVantageDescription: String? = nil,
         isStartingFramePano: Bool? = nil,
         createdAt: Date = Date(),
-        updatedAt: Date = Date()
+        updatedAt: Date = Date(),
+        isDownloaded: Bool = false,
+        sourceTrailId: String? = nil,
+        sourceRevision: Int? = nil,
+        sourcePackageCid: String? = nil,
+        creatorId: String? = nil,
+        creatorUsername: String? = nil,
+        publisherReference: String? = nil,
+        downloadedAt: Date? = nil
     ) {
         self.id = id
         self.title = title
@@ -301,6 +339,14 @@ public struct TrailDetail: Identifiable, Hashable, Codable {
         self.isStartingFramePano = isStartingFramePano
         self.createdAt = createdAt
         self.updatedAt = updatedAt
+        self.isDownloaded = isDownloaded
+        self.sourceTrailId = sourceTrailId
+        self.sourceRevision = sourceRevision
+        self.sourcePackageCid = sourcePackageCid
+        self.creatorId = creatorId
+        self.creatorUsername = creatorUsername
+        self.publisherReference = publisherReference
+        self.downloadedAt = downloadedAt
     }
 
     public func resolvedStartFrameURL(fallbackTrailId: String? = nil) -> URL? {
@@ -333,7 +379,7 @@ public struct TrailDetail: Identifiable, Hashable, Codable {
         self.subtitle = try container.decode(String.self, forKey: .subtitle)
         self.placeId = try container.decode(String.self, forKey: .placeId)
         self.placeName = try container.decode(String.self, forKey: .placeName)
-        self.locality = try container.decodeIfPresent(String.self, forKey: .locality) ?? "Dhun, Jaipur"
+        self.locality = try container.decodeIfPresent(String.self, forKey: .locality) ?? "Local Area"
         self.wing = try container.decodeIfPresent(String.self, forKey: .wing) ?? "Main"
         self.authorName = try container.decodeIfPresent(String.self, forKey: .authorName) ?? "A trail by you"
         self.authorRole = try container.decodeIfPresent(String.self, forKey: .authorRole) ?? "Explorer"
@@ -362,7 +408,138 @@ public struct TrailDetail: Identifiable, Hashable, Codable {
         self.isStartingFramePano = try container.decodeIfPresent(Bool.self, forKey: .isStartingFramePano)
         self.createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
         self.updatedAt = try container.decodeIfPresent(Date.self, forKey: .updatedAt) ?? Date()
+        self.isDownloaded = try container.decodeIfPresent(Bool.self, forKey: .isDownloaded) ?? false
+        self.sourceTrailId = try container.decodeIfPresent(String.self, forKey: .sourceTrailId)
+        self.sourceRevision = try container.decodeIfPresent(Int.self, forKey: .sourceRevision)
+        self.sourcePackageCid = try container.decodeIfPresent(String.self, forKey: .sourcePackageCid)
+        self.creatorId = try container.decodeIfPresent(String.self, forKey: .creatorId)
+        self.creatorUsername = try container.decodeIfPresent(String.self, forKey: .creatorUsername)
+        self.publisherReference = try container.decodeIfPresent(String.self, forKey: .publisherReference)
+        self.downloadedAt = try container.decodeIfPresent(Date.self, forKey: .downloadedAt)
     }
+}
+
+// MARK: - PRD v0.4.0 Discovery & Community Models (§6, §7, §11, §13, §14, §18)
+
+public struct DiscoveryAnchor: Hashable, Codable, Sendable {
+    public let latitude: Double
+    public let longitude: Double
+    public let altitude: Double?
+
+    public init(latitude: Double, longitude: Double, altitude: Double? = nil) {
+        self.latitude = latitude
+        self.longitude = longitude
+        self.altitude = altitude
+    }
+}
+
+public struct DiscoveryRecord: Identifiable, Hashable, Codable, Sendable {
+    public var id: String { trailId }
+    public let trailId: String
+    public let revision: Int
+    public let title: String
+    public let shortDescription: String?
+    public let creatorId: String
+    public let username: String
+    public let displayName: String
+    public let publisherReference: String
+    public let recordedAt: String
+    public let publishedAt: String
+    public let placeLabel: String?
+    public let discoveryAnchor: DiscoveryAnchor?
+    public let coverReference: String?
+    public let capabilities: LogosCapabilities
+    public let packageCid: String
+    public let packageSizeBytes: Int
+    public let listed: Bool
+
+    public init(
+        trailId: String,
+        revision: Int,
+        title: String,
+        shortDescription: String? = nil,
+        creatorId: String,
+        username: String,
+        displayName: String,
+        publisherReference: String,
+        recordedAt: String,
+        publishedAt: String,
+        placeLabel: String? = nil,
+        discoveryAnchor: DiscoveryAnchor? = nil,
+        coverReference: String? = nil,
+        capabilities: LogosCapabilities,
+        packageCid: String,
+        packageSizeBytes: Int,
+        listed: Bool = true
+    ) {
+        self.trailId = trailId
+        self.revision = revision
+        self.title = title
+        self.shortDescription = shortDescription
+        self.creatorId = creatorId
+        self.username = username
+        self.displayName = displayName
+        self.publisherReference = publisherReference
+        self.recordedAt = recordedAt
+        self.publishedAt = publishedAt
+        self.placeLabel = placeLabel
+        self.discoveryAnchor = discoveryAnchor
+        self.coverReference = coverReference
+        self.capabilities = capabilities
+        self.packageCid = packageCid
+        self.packageSizeBytes = packageSizeBytes
+        self.listed = listed
+    }
+}
+
+public struct CreatorRecord: Identifiable, Hashable, Codable, Sendable {
+    public var id: String { creatorId }
+    public let creatorId: String
+    public let username: String
+    public let displayName: String
+    public let publisherReference: String
+    public let trailCount: Int
+
+    public init(
+        creatorId: String,
+        username: String,
+        displayName: String,
+        publisherReference: String,
+        trailCount: Int
+    ) {
+        self.creatorId = creatorId
+        self.username = username
+        self.displayName = displayName
+        self.publisherReference = publisherReference
+        self.trailCount = trailCount
+    }
+}
+
+public enum DiscoveryAreaFilter: Equatable, Hashable {
+    case all
+    case nearMe(latitude: Double, longitude: Double, radiusKm: Double)
+    case boundingBox(minLat: Double, minLon: Double, maxLat: Double, maxLon: Double)
+    case chosenPlace(Place)
+
+    public var title: String {
+        switch self {
+        case .all:
+            return "All areas"
+        case .nearMe:
+            return "Near me"
+        case .boundingBox:
+            return "This map area"
+        case .chosenPlace(let place):
+            return place.name
+        }
+    }
+}
+
+public enum DiscoverySort: String, CaseIterable, Identifiable {
+    case recentlyPublished = "Recently Published"
+    case nearest = "Nearest"
+
+    public var id: String { rawValue }
 }
 
 public struct SpatialMoment: Identifiable, Hashable, Codable {

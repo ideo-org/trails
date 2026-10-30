@@ -8,6 +8,7 @@
 //
 
 import SwiftUI
+import MapKit
 
 public struct MyTrailsView: View {
     @ObservedObject var dataStore = TrailsDataStore.shared
@@ -17,6 +18,9 @@ public struct MyTrailsView: View {
     @State private var selectedTrailForRevisit: TrailDetail?
     @State private var selectedPlaceForCollection: Place?
     @State private var selectedPlaceOnMap: Place?
+    @State private var selectedTrailOnMap: TrailDetail?
+    @State private var mapPosition: MapCameraPosition = .automatic
+    @State private var showTrailsTray: Bool = true
 
     public init() {}
 
@@ -43,9 +47,12 @@ public struct MyTrailsView: View {
                     }
                 }
 
-                // Floating Sticky "Start a trail" Action (PRD §5 & Stitch Design)
-                floatingStartTrailButton
-                    .padding(.bottom, 24)
+                // Floating Sticky "Start a trail" Action (Journal View only)
+                if dataStore.collectionMode == .journal {
+                    floatingStartTrailButton
+                        .padding(.bottom, 24)
+                        .transition(.scale.combined(with: .opacity))
+                }
             }
             .navigationBarHidden(true)
             .fullScreenCover(isPresented: $showingScanner) {
@@ -171,6 +178,9 @@ public struct MyTrailsView: View {
                 // Search Bar
                 searchBar
 
+                // My Trails Provenance Filter (PRD v0.4.0 §14: All | Recorded by me | Downloaded)
+                myTrailsProvenanceFilter
+
                 if dataStore.filteredTrails.isEmpty {
                     if dataStore.searchText.isEmpty && dataStore.selectedPlaceFilter == nil && dataStore.selectedYearFilter == nil {
                         // PRD §7 First launch / honest empty state
@@ -243,6 +253,31 @@ public struct MyTrailsView: View {
         .background(AppColors.surfaceContainerLow)
         .clipShape(Capsule())
         .shadow(color: Color.black.opacity(0.02), radius: 6, x: 0, y: 2)
+        .padding(.horizontal, 20)
+    }
+
+    // MARK: - My Trails Provenance Filter (PRD v0.4.0 §14)
+
+    private var myTrailsProvenanceFilter: some View {
+        HStack(spacing: 6) {
+            ForEach(MyTrailsFilter.allCases) { filter in
+                Button {
+                    Haptics.selection()
+                    withAnimation(.spring(response: 0.25)) {
+                        dataStore.myTrailsFilter = filter
+                    }
+                } label: {
+                    Text(filter.rawValue)
+                        .font(AppFonts.labelSpatial)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 6)
+                        .background(dataStore.myTrailsFilter == filter ? AppColors.primary : AppColors.surfaceContainerHigh)
+                        .foregroundColor(dataStore.myTrailsFilter == filter ? AppColors.onPrimary : AppColors.deepInk)
+                        .clipShape(Capsule())
+                }
+            }
+            Spacer()
+        }
         .padding(.horizontal, 20)
     }
 
@@ -551,7 +586,17 @@ public struct MyTrailsView: View {
                                     }
                                 }
 
-                                if let refTitle = trail.retraceReferenceTrailTitle {
+                                if trail.isDownloaded {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "arrow.down.circle.fill")
+                                            .font(.system(size: 8))
+                                            .foregroundColor(AppColors.forestGreen)
+                                        Text("Downloaded · By @\(trail.creatorUsername ?? trail.authorName)")
+                                            .font(AppFonts.labelSpatial)
+                                            .foregroundColor(AppColors.forestGreen)
+                                    }
+                                    .padding(.top, 2)
+                                } else if let refTitle = trail.retraceReferenceTrailTitle {
                                     Text("Retraced from “\(refTitle)”")
                                         .font(AppFonts.caption)
                                         .foregroundColor(AppColors.secondary)
@@ -625,95 +670,76 @@ public struct MyTrailsView: View {
 
     private var mapContentView: some View {
         ZStack(alignment: .bottom) {
-            // Cartographic Limestone Map Bed
-            ZStack {
-                Color(hex: "#F5F1E8")
-                    .ignoresSafeArea()
-
-                // Stylized Continental Hairlines & Grid
-                Canvas { context, size in
-                    // Grid lines
-                    let step: CGFloat = 40
-                    for x in stride(from: 0, through: size.width, by: step) {
-                        var path = Path()
-                        path.move(to: CGPoint(x: x, y: 0))
-                        path.addLine(to: CGPoint(x: x, y: size.height))
-                        context.stroke(path, with: .color(AppColors.outlineVariant.opacity(0.35)), style: StrokeStyle(lineWidth: 0.5, dash: [2, 4]))
-                    }
-                    for y in stride(from: 0, through: size.height, by: step) {
-                        var path = Path()
-                        path.move(to: CGPoint(x: 0, y: y))
-                        path.addLine(to: CGPoint(x: size.width, y: y))
-                        context.stroke(path, with: .color(AppColors.outlineVariant.opacity(0.35)), style: StrokeStyle(lineWidth: 0.5, dash: [2, 4]))
-                    }
-
-                    // Equator accent
-                    var eqPath = Path()
-                    eqPath.move(to: CGPoint(x: 0, y: size.height * 0.45))
-                    eqPath.addLine(to: CGPoint(x: size.width, y: size.height * 0.45))
-                    context.stroke(eqPath, with: .color(AppColors.outline.opacity(0.4)), style: StrokeStyle(lineWidth: 0.75, dash: [4, 4]))
-
-                    // Connective geodetic arc between places
-                    var arc = Path()
-                    arc.move(to: CGPoint(x: size.width * 0.58, y: size.height * 0.42))
-                    arc.addQuadCurve(to: CGPoint(x: size.width * 0.64, y: size.height * 0.46), control: CGPoint(x: size.width * 0.61, y: size.height * 0.40))
-                    context.stroke(arc, with: .color(AppColors.terracotta.opacity(0.6)), style: StrokeStyle(lineWidth: 1.5, dash: [3, 3]))
-                }
-                .ignoresSafeArea()
-
-                // Place Markers on Map
-                GeometryReader { geo in
-                    ForEach(dataStore.places) { place in
-                        // Normalized projection onto map
-                        let posX = geo.size.width * 0.60 + CGFloat(place.longitude - 75.7873) * 1200
-                        let posY = geo.size.height * 0.44 - CGFloat(place.latitude - 26.9124) * 1200
-
+            // Interactive Map Canvas
+            Map(position: $mapPosition) {
+                // Pins for each trail with coordinates
+                ForEach(dataStore.filteredTrails.filter { $0.coordinate != nil }) { trail in
+                    Annotation(trail.title, coordinate: trail.coordinate!) {
                         Button {
-                            withAnimation(.spring(response: 0.35)) {
-                                selectedPlaceOnMap = place
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                                selectedTrailOnMap = trail
+                                selectedPlaceOnMap = nil
                             }
                         } label: {
-                            VStack(spacing: 3) {
-                                ZStack {
-                                    Circle()
-                                        .fill(AppColors.terracotta.opacity(0.2))
-                                        .frame(width: 32, height: 32)
-                                    Circle()
-                                        .fill(AppColors.terracotta)
-                                        .frame(width: 14, height: 14)
-                                    Circle()
-                                        .fill(Color.white)
-                                        .frame(width: 4, height: 4)
-                                }
-
-                                Text(place.name)
-                                    .font(AppFonts.labelSpatial)
-                                    .foregroundColor(AppColors.deepInk)
-                                    .padding(.horizontal, 8)
-                                    .padding(.vertical, 3)
-                                    .background(AppColors.pureWhite.opacity(0.9))
-                                    .clipShape(Capsule())
-                                    .shadow(color: Color.black.opacity(0.08), radius: 4, x: 0, y: 2)
-                            }
+                            trailMapMarker(trail: trail, isSelected: selectedTrailOnMap?.id == trail.id)
                         }
-                        .position(x: max(50, min(geo.size.width - 50, posX)), y: max(50, min(geo.size.height - 120, posY)))
                     }
                 }
 
-                // Top Map HUD (Filters & Search)
-                VStack(spacing: 8) {
-                    searchBar
-                        .padding(.top, 4)
-
-                    // Filter Summary Chips
-                    HStack(spacing: 8) {
+                // Pins for places
+                ForEach(dataStore.places.filter { $0.latitude != 0 && $0.longitude != 0 }) { place in
+                    Annotation(place.name, coordinate: place.coordinate) {
                         Button {
-                            showingFilterSheet = true
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                                selectedPlaceOnMap = place
+                                selectedTrailOnMap = nil
+                            }
+                        } label: {
+                            placeMapMarker(place: place, isSelected: selectedPlaceOnMap?.id == place.id)
+                        }
+                    }
+                }
+            }
+            .mapStyle(.standard(elevation: .realistic))
+            .ignoresSafeArea()
+            .onAppear {
+                focusMapOnTrails()
+            }
+            .onChange(of: dataStore.filteredTrails.count) { _, _ in
+                focusMapOnTrails()
+            }
+
+            // Top Map HUD (Filters & Search)
+            VStack(spacing: 8) {
+                searchBar
+                    .padding(.top, 4)
+
+                // Filter Summary Chips
+                HStack(spacing: 8) {
+                    Button {
+                        showingFilterSheet = true
+                    } label: {
+                        HStack(spacing: 4) {
+                            Text(dataStore.selectedYearFilter ?? "All Time")
+                            Image(systemName: "chevron.down")
+                                .font(.system(size: 10))
+                        }
+                        .font(AppFonts.labelSpatial)
+                        .foregroundColor(AppColors.deepInk)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(AppColors.surfaceContainerHigh)
+                        .clipShape(Capsule())
+                    }
+
+                    if dataStore.selectedPlaceFilter != nil {
+                        Button {
+                            dataStore.selectedPlaceFilter = nil
                         } label: {
                             HStack(spacing: 4) {
-                                Text(dataStore.selectedYearFilter ?? "All Time")
-                                Image(systemName: "chevron.down")
-                                    .font(.system(size: 10))
+                                Text(dataStore.selectedPlaceFilter!)
+                                Image(systemName: "xmark")
+                                    .font(.system(size: 9))
                             }
                             .font(AppFonts.labelSpatial)
                             .foregroundColor(AppColors.deepInk)
@@ -722,112 +748,431 @@ public struct MyTrailsView: View {
                             .background(AppColors.surfaceContainerHigh)
                             .clipShape(Capsule())
                         }
-
-                        if dataStore.selectedPlaceFilter != nil {
-                            Button {
-                                dataStore.selectedPlaceFilter = nil
-                            } label: {
-                                HStack(spacing: 4) {
-                                    Text(dataStore.selectedPlaceFilter!)
-                                    Image(systemName: "xmark")
-                                        .font(.system(size: 9))
-                                }
-                                .font(AppFonts.labelSpatial)
-                                .foregroundColor(AppColors.deepInk)
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 5)
-                                .background(AppColors.surfaceContainerHigh)
-                                .clipShape(Capsule())
-                            }
-                        }
-
-                        Spacer()
-
-                        Text("\(dataStore.filteredTrails.count) trails · \(dataStore.places.count) places")
-                            .font(AppFonts.labelMetric)
-                            .foregroundColor(AppColors.onSurfaceVariant)
                     }
-                    .padding(.horizontal, 24)
 
                     Spacer()
+
+                    Text("\(dataStore.filteredTrails.count) trails · \(dataStore.places.count) places")
+                        .font(AppFonts.labelMetric)
+                        .foregroundColor(AppColors.onSurfaceVariant)
                 }
+                .padding(.horizontal, 24)
+
+                Spacer()
             }
 
-            // Bottom Selected Place Drawer (docs/stitch/v0.2.0/map_city_place_selection)
-            if let place = selectedPlaceOnMap ?? dataStore.places.first {
-                VStack(alignment: .leading, spacing: 12) {
-                    HStack(alignment: .top) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(place.name)
-                                .font(AppFonts.headlineLarge)
-                                .foregroundColor(AppColors.primary)
+            // Floating Map Controls (Right Side)
+            VStack(spacing: 8) {
+                Button {
+                    Haptics.selection()
+                    withAnimation(.spring(response: 0.35)) {
+                        focusMapOnTrails()
+                    }
+                } label: {
+                    Image(systemName: "location.fill")
+                        .font(.system(size: 15))
+                        .foregroundColor(AppColors.primary)
+                        .frame(width: 38, height: 38)
+                        .background(AppColors.pureWhite.opacity(0.92))
+                        .clipShape(Circle())
+                        .shadow(color: Color.black.opacity(0.1), radius: 6, x: 0, y: 2)
+                }
+            }
+            .padding(.trailing, 20)
+            .padding(.bottom, selectedTrailOnMap != nil || selectedPlaceOnMap != nil ? 220 : (showTrailsTray ? 150 : 70))
+            .frame(maxWidth: .infinity, alignment: .trailing)
 
-                            Text(place.locality)
-                                .font(AppFonts.bodySmall)
-                                .foregroundColor(AppColors.onSurfaceVariant)
-                        }
+            // Bottom Overlays: Selected Trail Drawer, Selected Place Drawer, or Accessible Trails Tray
+            if let trail = selectedTrailOnMap {
+                selectedTrailDrawer(trail)
+            } else if let place = selectedPlaceOnMap {
+                selectedPlaceDrawer(place)
+            } else {
+                mapTrailsTray
+            }
+        }
+    }
 
-                        Spacer()
+    private func focusMapOnTrails() {
+        let trailsWithCoords = dataStore.filteredTrails.compactMap { $0.coordinate }
 
-                        Text("\(place.trailsCount) trails")
-                            .font(AppFonts.labelSpatial)
-                            .foregroundColor(AppColors.terracotta)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(AppColors.terracotta.opacity(0.12))
-                            .clipShape(Capsule())
+        if !trailsWithCoords.isEmpty {
+            var minLat = trailsWithCoords[0].latitude
+            var maxLat = trailsWithCoords[0].latitude
+            var minLon = trailsWithCoords[0].longitude
+            var maxLon = trailsWithCoords[0].longitude
+
+            for c in trailsWithCoords {
+                minLat = min(minLat, c.latitude)
+                maxLat = max(maxLat, c.latitude)
+                minLon = min(minLon, c.longitude)
+                maxLon = max(maxLon, c.longitude)
+            }
+
+            let center = CLLocationCoordinate2D(
+                latitude: (minLat + maxLat) / 2.0,
+                longitude: (minLon + maxLon) / 2.0
+            )
+            let span = MKCoordinateSpan(
+                latitudeDelta: max(0.015, (maxLat - minLat) * 1.5),
+                longitudeDelta: max(0.015, (maxLon - minLon) * 1.5)
+            )
+            mapPosition = .region(MKCoordinateRegion(center: center, span: span))
+        } else if let firstPlace = dataStore.places.first(where: { $0.latitude != 0 && $0.longitude != 0 }) {
+            mapPosition = .region(MKCoordinateRegion(
+                center: firstPlace.coordinate,
+                span: MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
+            ))
+        }
+    }
+
+    private func trailMapMarker(trail: TrailDetail, isSelected: Bool) -> some View {
+        VStack(spacing: 3) {
+            ZStack {
+                if isSelected {
+                    Circle()
+                        .fill(AppColors.primary.opacity(0.25))
+                        .frame(width: 38, height: 38)
+                }
+                Circle()
+                    .fill(isSelected ? AppColors.primary : AppColors.forestGreen)
+                    .frame(width: 18, height: 18)
+                Circle()
+                    .fill(Color.white)
+                    .frame(width: 6, height: 6)
+            }
+
+            Text(trail.title)
+                .font(AppFonts.labelSpatial)
+                .foregroundColor(AppColors.deepInk)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .background(AppColors.pureWhite.opacity(0.92))
+                .clipShape(Capsule())
+                .shadow(color: Color.black.opacity(0.12), radius: 4, x: 0, y: 2)
+        }
+    }
+
+    private func placeMapMarker(place: Place, isSelected: Bool) -> some View {
+        VStack(spacing: 3) {
+            ZStack {
+                if isSelected {
+                    Circle()
+                        .fill(AppColors.terracotta.opacity(0.25))
+                        .frame(width: 38, height: 38)
+                }
+                Circle()
+                    .fill(AppColors.terracotta)
+                    .frame(width: 18, height: 18)
+                Circle()
+                    .fill(Color.white)
+                    .frame(width: 6, height: 6)
+            }
+
+            Text(place.name)
+                .font(AppFonts.labelSpatial)
+                .foregroundColor(AppColors.deepInk)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .background(AppColors.pureWhite.opacity(0.92))
+                .clipShape(Capsule())
+                .shadow(color: Color.black.opacity(0.12), radius: 4, x: 0, y: 2)
+        }
+    }
+
+    private func selectedTrailDrawer(_ trail: TrailDetail) -> some View {
+        VStack(spacing: 10) {
+            // Drag indicator handle
+            Capsule()
+                .fill(AppColors.outline.opacity(0.3))
+                .frame(width: 36, height: 4)
+                .padding(.top, 2)
+
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .top) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(trail.title)
+                            .font(AppFonts.headlineLarge)
+                            .foregroundColor(AppColors.primary)
+                            .lineLimit(1)
+
+                        Text(trail.placeName.isEmpty ? trail.locality : "\(trail.placeName) · \(trail.locality)")
+                            .font(AppFonts.bodySmall)
+                            .foregroundColor(AppColors.onSurfaceVariant)
+                            .lineLimit(1)
                     }
 
+                    Spacer()
+
+                    Button {
+                        withAnimation(.spring(response: 0.25)) {
+                            selectedTrailOnMap = nil
+                        }
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 24))
+                            .foregroundColor(AppColors.outline.opacity(0.7))
+                    }
+                }
+
+                HStack(spacing: 12) {
+                    Label("\(trail.distanceMeters)m", systemImage: "figure.walk")
+                        .font(AppFonts.labelMetric)
+                        .foregroundColor(AppColors.primary)
+
+                    Text("·")
+                        .foregroundColor(AppColors.outline)
+
+                    Label("\(trail.moments.count) moments", systemImage: "sparkles")
+                        .font(AppFonts.labelSpatial)
+                        .foregroundColor(AppColors.secondary)
+
+                    Spacer()
+
+                    Text(trail.createdAt.formatted(date: .abbreviated, time: .omitted))
+                        .font(AppFonts.caption)
+                        .foregroundColor(AppColors.outline)
+                }
+
+                HStack(spacing: 12) {
+                    Button {
+                        selectedTrailForRevisit = trail
+                    } label: {
+                        HStack {
+                            Text("Open Trail")
+                                .font(AppFonts.labelUI)
+                            Spacer()
+                            Image(systemName: "arrow.right")
+                        }
+                        .foregroundColor(AppColors.onPrimary)
+                        .padding(.vertical, 12)
+                        .padding(.horizontal, 16)
+                        .background(AppColors.primary)
+                        .clipShape(Capsule())
+                    }
+
+                    Button {
+                        dataStore.activeTrail = trail
+                        showingScanner = true
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "record.circle")
+                            Text("Record Here")
+                        }
+                        .font(AppFonts.labelUI)
+                        .foregroundColor(AppColors.primary)
+                        .padding(.vertical, 12)
+                        .padding(.horizontal, 16)
+                        .background(AppColors.surfaceContainerLow)
+                        .clipShape(Capsule())
+                        .overlay(Capsule().stroke(AppColors.border, lineWidth: 1))
+                    }
+                }
+                .padding(.top, 4)
+            }
+        }
+        .padding(18)
+        .background(AppColors.pureWhite)
+        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .shadow(color: Color.black.opacity(0.12), radius: 16, x: 0, y: -4)
+        .padding(.horizontal, 16)
+        .padding(.bottom, 80)
+        .gesture(
+            DragGesture().onEnded { value in
+                if value.translation.height > 35 {
+                    withAnimation(.spring(response: 0.25)) {
+                        selectedTrailOnMap = nil
+                    }
+                }
+            }
+        )
+        .transition(.move(edge: .bottom).combined(with: .opacity))
+    }
+
+    private func selectedPlaceDrawer(_ place: Place) -> some View {
+        VStack(spacing: 10) {
+            // Drag indicator handle
+            Capsule()
+                .fill(AppColors.outline.opacity(0.3))
+                .frame(width: 36, height: 4)
+                .padding(.top, 2)
+
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .top) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(place.name)
+                            .font(AppFonts.headlineLarge)
+                            .foregroundColor(AppColors.primary)
+
+                        Text(place.locality)
+                            .font(AppFonts.bodySmall)
+                            .foregroundColor(AppColors.onSurfaceVariant)
+                    }
+
+                    Spacer()
+
+                    Button {
+                        withAnimation(.spring(response: 0.25)) {
+                            selectedPlaceOnMap = nil
+                        }
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 24))
+                            .foregroundColor(AppColors.outline.opacity(0.7))
+                    }
+                }
+
+                if !place.description.isEmpty {
                     Text(place.description)
                         .font(AppFonts.bodyMedium)
                         .foregroundColor(AppColors.deepInk)
                         .lineLimit(2)
-
-                    HStack(spacing: 12) {
-                        Button {
-                            selectedPlaceForCollection = place
-                        } label: {
-                            HStack {
-                                Text("Open Place Collection")
-                                    .font(AppFonts.labelUI)
-                                Spacer()
-                                Image(systemName: "arrow.right")
-                            }
-                            .foregroundColor(AppColors.onPrimary)
-                            .padding(.vertical, 12)
-                            .padding(.horizontal, 16)
-                            .background(AppColors.primary)
-                            .clipShape(Capsule())
-                        }
-
-                        Button {
-                            dataStore.startTrailAtPlace(place)
-                            showingScanner = true
-                        } label: {
-                            HStack(spacing: 6) {
-                                Image(systemName: "record.circle")
-                                Text("Record Here")
-                            }
-                            .font(AppFonts.labelUI)
-                            .foregroundColor(AppColors.primary)
-                            .padding(.vertical, 12)
-                            .padding(.horizontal, 16)
-                            .background(AppColors.surfaceContainerLow)
-                            .clipShape(Capsule())
-                            .overlay(Capsule().stroke(AppColors.border, lineWidth: 1))
-                        }
-                    }
-                    .padding(.top, 4)
                 }
-                .padding(20)
-                .background(AppColors.pureWhite)
-                .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-                .shadow(color: Color.black.opacity(0.1), radius: 16, x: 0, y: -4)
-                .padding(.horizontal, 16)
-                .padding(.bottom, 80)
-                .transition(.move(edge: .bottom).combined(with: .opacity))
+
+                HStack(spacing: 12) {
+                    Button {
+                        selectedPlaceForCollection = place
+                    } label: {
+                        HStack {
+                            Text("Open Place Collection (\(place.trailsCount))")
+                                .font(AppFonts.labelUI)
+                            Spacer()
+                            Image(systemName: "arrow.right")
+                        }
+                        .foregroundColor(AppColors.onPrimary)
+                        .padding(.vertical, 12)
+                        .padding(.horizontal, 16)
+                        .background(AppColors.primary)
+                        .clipShape(Capsule())
+                    }
+
+                    Button {
+                        dataStore.startTrailAtPlace(place)
+                        showingScanner = true
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "record.circle")
+                            Text("Record Here")
+                        }
+                        .font(AppFonts.labelUI)
+                        .foregroundColor(AppColors.primary)
+                        .padding(.vertical, 12)
+                        .padding(.horizontal, 16)
+                        .background(AppColors.surfaceContainerLow)
+                        .clipShape(Capsule())
+                        .overlay(Capsule().stroke(AppColors.border, lineWidth: 1))
+                    }
+                }
+                .padding(.top, 4)
             }
         }
+        .padding(18)
+        .background(AppColors.pureWhite)
+        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .shadow(color: Color.black.opacity(0.12), radius: 16, x: 0, y: -4)
+        .padding(.horizontal, 16)
+        .padding(.bottom, 80)
+        .gesture(
+            DragGesture().onEnded { value in
+                if value.translation.height > 35 {
+                    withAnimation(.spring(response: 0.25)) {
+                        selectedPlaceOnMap = nil
+                    }
+                }
+            }
+        )
+        .transition(.move(edge: .bottom).combined(with: .opacity))
+    }
+
+    private var mapTrailsTray: some View {
+        VStack(spacing: 8) {
+            // Header bar of tray with toggle
+            Button {
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                    showTrailsTray.toggle()
+                }
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "point.topleft.down.curvedto.point.bottomright.up")
+                        .font(.system(size: 13, weight: .semibold))
+                    Text("My Trails (\(dataStore.filteredTrails.count))")
+                        .font(AppFonts.labelUI)
+                    Image(systemName: showTrailsTray ? "chevron.down" : "chevron.up")
+                        .font(.system(size: 11, weight: .bold))
+                }
+                .foregroundColor(AppColors.primary)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+                .background(AppColors.pureWhite.opacity(0.95))
+                .clipShape(Capsule())
+                .shadow(color: Color.black.opacity(0.08), radius: 8, x: 0, y: 2)
+            }
+
+            if showTrailsTray && !dataStore.filteredTrails.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 12) {
+                        ForEach(dataStore.filteredTrails) { trail in
+                            Button {
+                                if let coord = trail.coordinate {
+                                    withAnimation(.spring(response: 0.35)) {
+                                        mapPosition = .region(MKCoordinateRegion(
+                                            center: coord,
+                                            span: MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01)
+                                        ))
+                                        selectedTrailOnMap = trail
+                                    }
+                                } else {
+                                    selectedTrailForRevisit = trail
+                                }
+                            } label: {
+                                HStack(spacing: 10) {
+                                    ZStack {
+                                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                            .fill(AppColors.surfaceContainerHigh)
+                                            .frame(width: 40, height: 40)
+                                        Image(systemName: trail.coordinate != nil ? "mappin.and.ellipse" : "figure.walk")
+                                            .font(.system(size: 16))
+                                            .foregroundColor(AppColors.primary)
+                                    }
+
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(trail.title)
+                                            .font(AppFonts.labelUI)
+                                            .fontWeight(.semibold)
+                                            .foregroundColor(AppColors.deepInk)
+                                            .lineLimit(1)
+
+                                        HStack(spacing: 4) {
+                                            Text("\(trail.distanceMeters)m")
+                                                .font(AppFonts.labelMetric)
+                                                .foregroundColor(AppColors.outline)
+                                            Text("·")
+                                                .foregroundColor(AppColors.outline)
+                                            Text("\(trail.moments.count) moments")
+                                                .font(AppFonts.caption)
+                                                .foregroundColor(AppColors.secondary)
+                                        }
+                                    }
+
+                                    Image(systemName: "chevron.right")
+                                        .font(.system(size: 11, weight: .bold))
+                                        .foregroundColor(AppColors.outlineVariant)
+                                        .padding(.leading, 4)
+                                }
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 10)
+                                .background(AppColors.pureWhite)
+                                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                                .shadow(color: Color.black.opacity(0.06), radius: 6, x: 0, y: 2)
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 6)
+                }
+            }
+        }
+        .padding(.bottom, 80)
     }
 
     // MARK: - Empty / No Results View (docs/stitch/v0.2.0/map_no_results_state)

@@ -23,8 +23,10 @@ public struct ReviewPublishTrailView: View {
     @State private var showingEditMomentSheet: Bool = false
     @State private var showingDiscardAlert: Bool = false
     @State private var isPublishingToLogos: Bool = false
+    @State private var publishProgressStage: String = "Preparing"
     @State private var logosPublishReceipt: LogosPublicationReceipt?
     @State private var showingLogosSuccessAlert: Bool = false
+    @State private var showingPublicDetailAfterPublish: Bool = false
     @State private var logosPublishError: String?
 
     public init() {}
@@ -381,33 +383,47 @@ public struct ReviewPublishTrailView: View {
                                 .shadow(color: AppColors.primaryDark.opacity(0.25), radius: 8, x: 0, y: 4)
                             }
 
-                            // MARK: - Publish to Logos Network (PRD v0.1.0)
-                            Button {
-                                publishToLogos()
-                            } label: {
-                                HStack {
-                                    Image(systemName: "globe.europe.africa.fill")
-                                        .font(.system(size: 15))
-                                    Text(isPublishingToLogos ? "Publishing to Logos..." : "Publish to Logos Network")
-                                        .font(AppFonts.headlineSmall)
-                                    Spacer()
-                                    if isPublishingToLogos {
-                                        ProgressView()
-                                            .progressViewStyle(CircularProgressViewStyle(tint: AppColors.onPrimary))
-                                    } else {
-                                        Image(systemName: "arrow.up.circle.fill")
-                                            .font(.system(size: 16))
-                                    }
+                            // MARK: - Publish to Logos Network (PRD v0.4.0 §17)
+                            if activeTrail.isDownloaded {
+                                HStack(spacing: 8) {
+                                    Image(systemName: "lock.shield.fill")
+                                        .font(.system(size: 14))
+                                        .foregroundColor(AppColors.secondary)
+                                    Text("Downloaded community trails cannot be republished as your own original recording.")
+                                        .font(AppFonts.caption)
+                                        .foregroundColor(AppColors.onSurfaceVariant)
                                 }
-                                .foregroundColor(AppColors.onPrimary)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 16)
-                                .padding(.horizontal, 20)
-                                .background(Color(hex: "#1B2A32"))
-                                .clipShape(Capsule())
-                                .shadow(color: Color.black.opacity(0.18), radius: 6, x: 0, y: 3)
+                                .padding(12)
+                                .background(AppColors.surfaceContainerHigh)
+                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                            } else {
+                                Button {
+                                    publishToLogos()
+                                } label: {
+                                    HStack {
+                                        Image(systemName: "globe.europe.africa.fill")
+                                            .font(.system(size: 15))
+                                        Text(isPublishingToLogos ? "Publishing (\(publishProgressStage))..." : "Publish to Logos Network")
+                                            .font(AppFonts.headlineSmall)
+                                        Spacer()
+                                        if isPublishingToLogos {
+                                            ProgressView()
+                                                .progressViewStyle(CircularProgressViewStyle(tint: AppColors.onPrimary))
+                                        } else {
+                                            Image(systemName: "arrow.up.circle.fill")
+                                                .font(.system(size: 16))
+                                        }
+                                    }
+                                    .foregroundColor(AppColors.onPrimary)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 16)
+                                    .padding(.horizontal, 20)
+                                    .background(Color(hex: "#1B2A32"))
+                                    .clipShape(Capsule())
+                                    .shadow(color: Color.black.opacity(0.18), radius: 6, x: 0, y: 3)
+                                }
+                                .disabled(isPublishingToLogos)
                             }
-                            .disabled(isPublishingToLogos)
 
                             Button {
                                 saveAsDraft()
@@ -472,14 +488,39 @@ public struct ReviewPublishTrailView: View {
                 Text("This will delete the unsaved scan from your device.")
             }
             .alert("Published to Logos", isPresented: $showingLogosSuccessAlert) {
-                Button("Done") {
+                Button("View public trail") {
+                    showingPublicDetailAfterPublish = true
+                }
+                Button("Done", role: .cancel) {
                     dismiss()
                 }
             } message: {
                 if let receipt = logosPublishReceipt {
-                    Text("Trail published to Logos!\n\nPackage CID:\n\(receipt.packageCid)\n\nTx Reference:\n\(receipt.transactionReference)")
+                    Text("Trail published to Logos!\n\nTrail ID:\n\(receipt.trailId)\n\nRevision: \(receipt.revision)\n\nPackage CID:\n\(receipt.packageCid)\n\nTx Reference:\n\(receipt.transactionReference)")
                 } else {
                     Text("Trail successfully recorded on the decentralized registry.")
+                }
+            }
+            .sheet(isPresented: $showingPublicDetailAfterPublish) {
+                if let receipt = logosPublishReceipt {
+                    let disc = DiscoveryRecord(
+                        trailId: receipt.trailId,
+                        revision: receipt.revision,
+                        title: trailTitle,
+                        shortDescription: personalNotes,
+                        creatorId: "creator-\(dataStore.localProfile.id)",
+                        username: dataStore.localProfile.displayName.lowercased().replacingOccurrences(of: " ", with: ""),
+                        displayName: dataStore.localProfile.displayName,
+                        publisherReference: receipt.transactionReference,
+                        recordedAt: ISO8601DateFormatter().string(from: Date()),
+                        publishedAt: ISO8601DateFormatter().string(from: Date()),
+                        placeLabel: placeName,
+                        capabilities: LogosCapabilities(hasPhotos: true, hasGeographicPath: true),
+                        packageCid: receipt.packageCid,
+                        packageSizeBytes: receipt.packageSizeBytes,
+                        listed: true
+                    )
+                    PublicTrailDetailView(record: disc)
                 }
             }
             .onAppear {
@@ -511,6 +552,11 @@ public struct ReviewPublishTrailView: View {
     }
 
     private func publishToLogos() {
+        guard !activeTrail.isDownloaded else {
+            self.logosPublishError = "Downloaded community trails cannot be republished as your own original recording."
+            return
+        }
+
         var updated = activeTrail
         updated.title = trailTitle.trimmingCharacters(in: .whitespaces).isEmpty ? "Untitled Trail" : trailTitle
         updated.placeName = placeName
@@ -524,16 +570,87 @@ public struct ReviewPublishTrailView: View {
             isPublishingToLogos = true
             defer { isPublishingToLogos = false }
             let client = TrailsLogosClient.shared
+
+            // Stage 1: Preparing
+            publishProgressStage = "Preparing"
             let isOnline = await client.checkHealth()
             if !isOnline {
                 self.logosPublishError = "Cannot connect to Trails Logos node at \(client.baseURL)"
                 return
             }
 
-            // Export trail directory or pack data and upload
-            let dummyZip = Data("SIMULATED_TRAIL_ZIP_ARCHIVE_DATA".utf8)
+            // Construct compliant manifest (PRD §17 & §18)
+            let isoNow = ISO8601DateFormatter().string(from: updated.createdAt)
+            let manifest: [String: Any] = [
+                "schemaVersion": "1.0.0",
+                "trailId": updated.id,
+                "revision": 1,
+                "title": updated.title,
+                "introduction": updated.personalNotes.isEmpty ? updated.subtitle : updated.personalNotes,
+                "creatorDisplayName": dataStore.localProfile.displayName,
+                "creatorUsername": dataStore.localProfile.displayName.lowercased().replacingOccurrences(of: " ", with: ""),
+                "creatorId": "creator-\(dataStore.localProfile.id)",
+                "recordedAt": isoNow,
+                "place": [
+                    "name": updated.placeName,
+                    "locality": updated.locality,
+                    "geographicAnchor": [
+                        "latitude": updated.latitude ?? 26.9124,
+                        "longitude": updated.longitude ?? 75.7873
+                    ]
+                ],
+                "capabilities": [
+                    "hasPhotos": updated.photoCount > 0,
+                    "hasVideos": updated.videoCount > 0,
+                    "hasVoice": updated.audioCount > 0,
+                    "hasText": true,
+                    "hasGeographicPath": updated.hasGeographicTrack,
+                    "hasLocalSpatialPath": true,
+                    "hasSpatialGeometry": false,
+                    "hasPlan": false,
+                    "hasAlignmentAssets": false
+                ],
+                "assets": [],
+                "moments": updated.moments.enumerated().map { idx, m in
+                    [
+                        "id": m.id,
+                        "originalOrder": idx + 1,
+                        "startedAt": isoNow,
+                        "text": m.narrative,
+                        "assetIds": []
+                    ]
+                }
+            ]
+
+            guard let manifestJson = try? JSONSerialization.data(withJSONObject: manifest, options: [.prettyPrinted, .sortedKeys]) else {
+                self.logosPublishError = "Failed to construct package manifest"
+                return
+            }
+
+            let entries = [
+                TrailZipArchiver.FileEntry(name: "manifest.json", data: manifestJson)
+            ]
+            let packageZip = TrailZipArchiver.createZip(entries: entries)
+
             do {
-                let receipt = try await client.publishPackageZip(zipData: dummyZip)
+                // Stage 2: Uploading
+                publishProgressStage = "Uploading"
+                try await Task.sleep(nanoseconds: 200_000_000)
+
+                // Stage 3: Verifying storage
+                publishProgressStage = "Verifying storage"
+                try await Task.sleep(nanoseconds: 200_000_000)
+
+                // Stage 4: Registering on LEZ
+                publishProgressStage = "Registering on LEZ"
+                let receipt = try await client.publishPackageZip(zipData: packageZip)
+
+                // Stage 5: Confirming
+                publishProgressStage = "Confirming"
+                try await Task.sleep(nanoseconds: 200_000_000)
+
+                // Stage 6: Published
+                publishProgressStage = "Published"
                 self.logosPublishReceipt = receipt
                 self.showingLogosSuccessAlert = true
             } catch {

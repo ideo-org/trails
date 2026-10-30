@@ -20,6 +20,7 @@ public struct TrailJournalDetailView: View {
     // Revisit & Presentation Replay
     @State private var showingRevisitReplay: Bool = false
     @State private var showingRetraceView: Bool = false
+    @State private var showingPerspectiveScanner: Bool = false
     @State private var selectedLinkedTrail: TrailDetail? = nil
     @State private var showingStartingPointPanoViewer: Bool = false
 
@@ -65,8 +66,10 @@ public struct TrailJournalDetailView: View {
                         // MARK: - 2. Title & Curatorial Attribution
                         titleAndAttributionSection
 
-                        // MARK: - 2.5 Retrace Provenance Card (if this is a retraced walk)
-                        if trail.isRetrace {
+                        // MARK: - 2.5 Retrace / Download Provenance Card
+                        if trail.isDownloaded {
+                            downloadedProvenanceCard
+                        } else if trail.isRetrace {
                             retraceProvenanceCard
                         }
 
@@ -177,6 +180,10 @@ public struct TrailJournalDetailView: View {
             // Fullscreen Retrace Live Companion
             .fullScreenCover(isPresented: $showingRetraceView) {
                 RetraceTrailView(referenceTrail: trail)
+            }
+            // Fullscreen Perspective Capture (PRD v0.4.0 §16)
+            .fullScreenCover(isPresented: $showingPerspectiveScanner) {
+                ScannerView()
             }
             // Photo Viewer Sheet
             .sheet(item: Binding<IdentifiableURL?>(
@@ -527,6 +534,49 @@ public struct TrailJournalDetailView: View {
         }
     }
 
+    // MARK: - 2.5 Downloaded Provenance Card (PRD v0.4.0 §14)
+
+    private var downloadedProvenanceCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                ZStack {
+                    Circle()
+                        .fill(AppColors.forestGreen.opacity(0.18))
+                        .frame(width: 28, height: 28)
+                    Image(systemName: "arrow.down.circle.fill")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundColor(AppColors.forestGreen)
+                }
+
+                Text("DOWNLOADED COMMUNITY TRAIL")
+                    .font(AppFonts.labelSpatial)
+                    .foregroundColor(AppColors.forestGreen)
+                    .tracking(1.0)
+
+                Spacer()
+
+                Text("OFFLINE")
+                    .font(AppFonts.labelSpatial)
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(AppColors.forestGreen)
+                    .clipShape(Capsule())
+            }
+
+            Text("Shared by @\(trail.creatorUsername ?? trail.authorName)")
+                .font(AppFonts.headlineSmall)
+                .foregroundColor(AppColors.deepInk)
+
+            Text("Imported from trails.logos LEZ registry. Preserved as an independent reference on this iPhone. Local actions and retracing do not modify the public recording.")
+                .font(AppFonts.bodySmall)
+                .foregroundColor(AppColors.onSurfaceVariant)
+        }
+        .padding(16)
+        .background(AppColors.surfaceContainerHigh)
+        .clipShape(RoundedRectangle(cornerRadius: 18))
+    }
+
     // MARK: - 2.5 Retrace Provenance Card
 
     private var retraceProvenanceCard: some View {
@@ -866,7 +916,57 @@ public struct TrailJournalDetailView: View {
                 .background(AppColors.surfaceContainerLow)
                 .clipShape(Capsule())
             }
+
+            // Secondary: Record your perspective (PRD v0.4.0 §16)
+            Button {
+                Haptics.medium()
+                recordPerspective()
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "camera.metering.matrix")
+                        .font(.system(size: 14, weight: .semibold))
+                    Text("Record your perspective")
+                        .font(AppFonts.labelUI)
+                        .fontWeight(.medium)
+                }
+                .foregroundColor(AppColors.primary)
+                .frame(maxWidth: .infinity)
+                .frame(height: 44)
+                .background(AppColors.surfaceContainerHigh)
+                .clipShape(Capsule())
+            }
         }
+    }
+
+    private func recordPerspective() {
+        let perspective = TrailDetail(
+            id: UUID().uuidString,
+            title: "Perspective on \(trail.title)",
+            subtitle: "Inspired by @\(trail.creatorUsername ?? trail.authorName)",
+            placeId: trail.placeId,
+            placeName: trail.placeName,
+            locality: trail.locality,
+            wing: "Perspective Recording",
+            authorName: dataStore.localProfile.displayName,
+            authorRole: "Explorer",
+            distanceMeters: 0,
+            floorCode: trail.floorCode,
+            floorTitle: trail.floorTitle,
+            meshDensity: "LiDAR Route",
+            samplingFrequency: "24.6 kHz",
+            nodeCount: 0,
+            personalNotes: "",
+            moments: [],
+            visibility: .privateDraft,
+            isDraft: true,
+            inspiredByTrailId: trail.id,
+            inspiredByNote: "Perspective recorded from trail “\(trail.title)” by @\(trail.creatorUsername ?? trail.authorName)",
+            createdAt: Date(),
+            updatedAt: Date()
+        )
+        dataStore.saveDraft(trail: perspective)
+        dataStore.activeTrail = perspective
+        showingPerspectiveScanner = true
     }
 
     // MARK: - 5. Narrative Timeline Section

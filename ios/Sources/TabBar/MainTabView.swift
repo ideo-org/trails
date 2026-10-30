@@ -16,34 +16,41 @@ struct MainTabView: View {
 
     var body: some View {
         TabView(selection: $selectedTab) {
-            // Tab 0: My Trails (Primary Home Destination - PRD §7.1 & §8.1)
+            // Tab 0: My Trails (Primary Home Destination - PRD v0.4.0 §3)
             MyTrailsView()
                 .tabItem {
                     Label("My Trails", systemImage: "point.topleft.down.curvedto.point.bottomright.up")
                 }
                 .tag(0)
 
-            // Tab 1: Record Action (PRD §7.1 & §8.2)
+            // Tab 1: Discover (Shared Catalogue - PRD v0.4.0 §3 & §5)
+            DiscoverView()
+                .tabItem {
+                    Label("Discover", systemImage: "globe.americas.fill")
+                }
+                .tag(1)
+
+            // Tab 2: Record Action (PRD §3: Keep existing Start a trail action prominent)
             Color.clear
                 .tabItem {
                     Label("Record", systemImage: "record.circle.fill")
                 }
-                .tag(1)
+                .tag(2)
 
-            // Tab 2: You (Local Contributor Profile - PRD §7.1 & §9.1)
+            // Tab 3: You (Local Contributor Profile & Settings)
             UserProfileView()
                 .tabItem {
                     Label("You", systemImage: "person.crop.circle")
                 }
-                .tag(2)
+                .tag(3)
         }
         .tint(AppColors.forestGreen)
-        .onChange(of: selectedTab) { _, newValue in
-            if newValue == 1 {
+        .onChange(of: selectedTab) { oldTab, newValue in
+            if newValue == 2 {
                 // Tapping Record opens the spatial scanner full screen
                 showingRecordFullScreen = true
-                // Keep the underlying navigation anchored on My Trails
-                selectedTab = 0
+                // Keep the underlying navigation anchored on previous tab
+                selectedTab = (oldTab == 2 ? 0 : oldTab)
             }
         }
         .fullScreenCover(isPresented: $showingRecordFullScreen) {

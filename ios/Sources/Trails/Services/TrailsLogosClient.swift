@@ -4,6 +4,7 @@
 //
 //  Client for trails.logos v0.1.0 Decentralized Trail Registry & Storage REST API
 //  Connects native iOS app to the local or remote Logos node (default port 8095).
+//  PRD v0.4.0 §18 Backend contract implementation.
 //
 
 import Foundation
@@ -32,6 +33,28 @@ public struct LogosCapabilities: Codable, Sendable {
     public let hasSpatialGeometry: Bool
     public let hasPlan: Bool
     public let hasAlignmentAssets: Bool
+
+    public init(
+        hasPhotos: Bool = false,
+        hasVideos: Bool = false,
+        hasVoice: Bool = false,
+        hasText: Bool = false,
+        hasGeographicPath: Bool = false,
+        hasLocalSpatialPath: Bool = false,
+        hasSpatialGeometry: Bool = false,
+        hasPlan: Bool = false,
+        hasAlignmentAssets: Bool = false
+    ) {
+        self.hasPhotos = hasPhotos
+        self.hasVideos = hasVideos
+        self.hasVoice = hasVoice
+        self.hasText = hasText
+        self.hasGeographicPath = hasGeographicPath
+        self.hasLocalSpatialPath = hasLocalSpatialPath
+        self.hasSpatialGeometry = hasSpatialGeometry
+        self.hasPlan = hasPlan
+        self.hasAlignmentAssets = hasAlignmentAssets
+    }
 }
 
 public struct LogosTrailPublication: Codable, Identifiable, Sendable {
@@ -54,6 +77,15 @@ public struct LogosTrailPublication: Codable, Identifiable, Sendable {
 public struct LogosCatalogResponse: Codable, Sendable {
     public let items: [LogosTrailPublication]
     public let nextCursor: String?
+}
+
+public struct LogosDiscoveryResponse: Codable, Sendable {
+    public let items: [DiscoveryRecord]
+    public let nextCursor: String?
+}
+
+public struct LogosCreatorsResponse: Codable, Sendable {
+    public let items: [CreatorRecord]
 }
 
 @MainActor
@@ -101,7 +133,90 @@ public final class TrailsLogosClient: ObservableObject {
         }
     }
 
-    // MARK: - Discovery (List Trails)
+    // MARK: - PRD v0.4.0 Discovery (List Trails & Filtering - §6, §7, §18)
+
+    public func fetchDiscoveryRecords(
+        area: DiscoveryAreaFilter? = nil,
+        creatorId: String? = nil,
+        query: String? = nil,
+        limit: Int = 50,
+        cursor: String? = nil
+    ) async throws -> [DiscoveryRecord] {
+        var components = URLComponents(url: baseURL.appendingPathComponent("discovery"), resolvingAgainstBaseURL: false)!
+        var queryItems: [URLQueryItem] = [URLQueryItem(name: "limit", value: "\(limit)")]
+
+        if let cursor {
+            queryItems.append(URLQueryItem(name: "cursor", value: cursor))
+        }
+        if let creatorId, !creatorId.isEmpty {
+            queryItems.append(URLQueryItem(name: "creatorId", value: creatorId))
+        }
+        if let query, !query.isEmpty {
+            queryItems.append(URLQueryItem(name: "query", value: query))
+        }
+        if let area {
+            switch area {
+            case .all:
+                break
+            case .nearMe(let lat, let lon, let radiusKm):
+                queryItems.append(URLQueryItem(name: "area", value: "near:\(lat),\(lon),\(radiusKm)"))
+            case .boundingBox(let minLat, let minLon, let maxLat, let maxLon):
+                queryItems.append(URLQueryItem(name: "area", value: "bbox:\(minLat),\(minLon),\(maxLat),\(maxLon)"))
+            case .chosenPlace(let place):
+                queryItems.append(URLQueryItem(name: "area", value: "near:\(place.latitude),\(place.longitude),15.0"))
+            }
+        }
+
+        components.queryItems = queryItems
+        guard let url = components.url else { throw URLError(.badURL) }
+
+        let (data, response) = try await session.data(from: url)
+        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+            let msg = String(data: data, encoding: .utf8) ?? "Failed to fetch discovery records"
+            throw NSError(domain: "TrailsLogosClient", code: (response as? HTTPURLResponse)?.statusCode ?? 500, userInfo: [NSLocalizedDescriptionKey: msg])
+        }
+
+        let decoded = try JSONDecoder().decode(LogosDiscoveryResponse.self, from: data)
+        return decoded.items
+    }
+
+    public func fetchDiscoveryRecord(trailId: String) async throws -> DiscoveryRecord {
+        let url = baseURL.appendingPathComponent("discovery").appendingPathComponent(trailId)
+        let (data, response) = try await session.data(from: url)
+        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+            let msg = String(data: data, encoding: .utf8) ?? "Discovery record not found"
+            throw NSError(domain: "TrailsLogosClient", code: (response as? HTTPURLResponse)?.statusCode ?? 500, userInfo: [NSLocalizedDescriptionKey: msg])
+        }
+        return try JSONDecoder().decode(DiscoveryRecord.self, from: data)
+    }
+
+    public func fetchCreators(query: String? = nil) async throws -> [CreatorRecord] {
+        var components = URLComponents(url: baseURL.appendingPathComponent("creators"), resolvingAgainstBaseURL: false)!
+        if let query, !query.isEmpty {
+            components.queryItems = [URLQueryItem(name: "query", value: query)]
+        }
+        guard let url = components.url else { throw URLError(.badURL) }
+
+        let (data, response) = try await session.data(from: url)
+        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+            let msg = String(data: data, encoding: .utf8) ?? "Failed to fetch creators"
+            throw NSError(domain: "TrailsLogosClient", code: (response as? HTTPURLResponse)?.statusCode ?? 500, userInfo: [NSLocalizedDescriptionKey: msg])
+        }
+        let decoded = try JSONDecoder().decode(LogosCreatorsResponse.self, from: data)
+        return decoded.items
+    }
+
+    public func getPublicationStatus(operationId: String) async throws -> LogosPublicationReceipt {
+        let url = baseURL.appendingPathComponent("publications").appendingPathComponent(operationId)
+        let (data, response) = try await session.data(from: url)
+        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+            let msg = String(data: data, encoding: .utf8) ?? "Operation not found"
+            throw NSError(domain: "TrailsLogosClient", code: (response as? HTTPURLResponse)?.statusCode ?? 500, userInfo: [NSLocalizedDescriptionKey: msg])
+        }
+        return try JSONDecoder().decode(LogosPublicationReceipt.self, from: data)
+    }
+
+    // MARK: - Legacy Catalog (List Trails)
 
     public func fetchNetworkTrails(limit: Int = 50, cursor: String? = nil) async throws -> [LogosTrailPublication] {
         var components = URLComponents(url: baseURL.appendingPathComponent("trails"), resolvingAgainstBaseURL: false)!
