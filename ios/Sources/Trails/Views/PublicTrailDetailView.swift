@@ -91,7 +91,19 @@ public struct PublicTrailDetailView: View {
                                 .padding(.vertical, 4)
 
                             // Introduction
-                            if let intro = record.shortDescription, !intro.isEmpty {
+                            let cleanIntro: String? = {
+                                if let intro = record.shortDescription,
+                                   !intro.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                                   !intro.contains("Saved privately on this") {
+                                    return intro
+                                }
+                                if let local = downloadedLocalTrail, !local.subtitle.isEmpty {
+                                    return local.subtitle
+                                }
+                                return nil
+                            }()
+
+                            if let intro = cleanIntro {
                                 Text(intro)
                                     .font(AppFonts.bodyLarge)
                                     .foregroundColor(AppColors.deepInk.opacity(0.88))
@@ -164,12 +176,34 @@ public struct PublicTrailDetailView: View {
 
     private var heroHeaderView: some View {
         ZStack(alignment: .bottomLeading) {
+            if let cover = record.resolvedCoverImage(savedTrails: dataStore.savedTrails) {
+                Image(uiImage: cover)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(height: 240)
+                    .clipped()
+            } else {
+                ZStack {
+                    LinearGradient(
+                        colors: [Color(hex: "#1A222D"), Color(hex: "#0F161E")],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                    Image(systemName: "point.topleft.down.to.point.bottomright.curvepath")
+                        .font(.system(size: 80))
+                        .foregroundColor(Color.white.opacity(0.06))
+                        .offset(x: 60, y: -20)
+                }
+                .frame(height: 240)
+            }
+
+            // Dark gradient scrim for legibility
             LinearGradient(
-                colors: [Color(hex: "#2C3E2D"), Color(hex: "#1E2A20")],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
+                colors: [Color.clear, Color.black.opacity(0.35), Color.black.opacity(0.85)],
+                startPoint: .top,
+                endPoint: .bottom
             )
-            .frame(height: 220)
+            .frame(height: 240)
 
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 6) {
@@ -179,11 +213,21 @@ public struct PublicTrailDetailView: View {
                         .font(AppFonts.labelSpatial)
                         .tracking(1.5)
                 }
-                .foregroundColor(AppColors.pureWhite.opacity(0.8))
+                .foregroundColor(AppColors.pureWhite.opacity(0.9))
 
-                Text("Revision \(record.revision)")
-                    .font(AppFonts.headlineSmall)
-                    .foregroundColor(AppColors.pureWhite)
+                HStack(spacing: 8) {
+                    Text("Revision \(record.revision)")
+                        .font(AppFonts.headlineSmall)
+                        .foregroundColor(AppColors.pureWhite)
+
+                    if let place = record.placeLabel, !place.isEmpty {
+                        Text("·")
+                            .foregroundColor(Color.white.opacity(0.6))
+                        Text(place)
+                            .font(AppFonts.labelSpatial)
+                            .foregroundColor(AppColors.mutedBrass)
+                    }
+                }
             }
             .padding(20)
         }

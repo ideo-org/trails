@@ -334,6 +334,13 @@ public struct MyTrailsView: View {
                             } else {
                                 cartographicHeroHeader(for: hero)
                             }
+                        } else if let coverURL = hero.resolvedCoverImageURL() ?? hero.resolvedStartFrameURL(),
+                                  let uiImage = UIImage(contentsOfFile: coverURL.path) {
+                            Image(uiImage: uiImage)
+                                .resizable()
+                                .scaledToFill()
+                                .frame(height: 240)
+                                .clipped()
                         } else {
                             cartographicHeroHeader(for: hero)
                         }
@@ -366,10 +373,10 @@ public struct MyTrailsView: View {
                                     .clipShape(Capsule())
                                 } else if hero.isPublished {
                                     HStack(spacing: 5) {
-                                        Image(systemName: "checkmark.seal.fill")
+                                        Image(systemName: "globe.americas.fill")
                                             .font(.system(size: 11, weight: .bold))
                                             .foregroundColor(AppColors.forestGreen)
-                                        Text("PUBLISHED")
+                                        Text("PUBLISHED · REV \(hero.publishedRevision ?? 1)")
                                             .font(AppFonts.labelSpatial)
                                             .foregroundColor(AppColors.forestGreen)
                                     }
@@ -507,7 +514,7 @@ public struct MyTrailsView: View {
     private func cartographicHeroHeader(for trail: TrailDetail) -> some View {
         ZStack {
             LinearGradient(
-                colors: [AppColors.primary, AppColors.forestGreen],
+                colors: [Color(hex: "#151C24"), Color(hex: "#0D1318")],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
@@ -616,10 +623,10 @@ public struct MyTrailsView: View {
                                         .lineLimit(1)
                                 } else if trail.isPublished {
                                     HStack(spacing: 4) {
-                                        Image(systemName: "checkmark.circle.fill")
+                                        Image(systemName: "globe.americas.fill")
                                             .font(.system(size: 8))
                                             .foregroundColor(AppColors.forestGreen)
-                                        Text("Published to Network")
+                                        Text("Published · Rev \(trail.publishedRevision ?? 1)")
                                             .font(AppFonts.labelSpatial)
                                             .foregroundColor(AppColors.forestGreen)
                                     }

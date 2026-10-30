@@ -245,7 +245,8 @@ public struct PlaceCollectionView: View {
                                         }
 
                                         HStack {
-                                            Text(trail.personalNotes)
+                                            let noteText = (!trail.personalNotes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !trail.personalNotes.contains("Saved privately on this")) ? trail.personalNotes : trail.subtitle
+                                            Text(noteText)
                                                 .font(AppFonts.bodySmall)
                                                 .foregroundColor(AppColors.outline)
                                                 .lineLimit(2)

@@ -93,6 +93,12 @@ public final class TrailsDataStore: ObservableObject {
                 .replacingOccurrences(of: "Artisan Lane, Dhun", with: "Studio Lane")
                 .replacingOccurrences(of: "Dhun", with: "Local")
         }
+        if t.personalNotes == "Saved privately on this iPhone." || t.personalNotes.contains("Saved privately on this") {
+            t.personalNotes = ""
+        }
+        if t.isPublished && t.visibility == .privateDraft {
+            t.visibility = .publicPlace
+        }
         return t
     }
 

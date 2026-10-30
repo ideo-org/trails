@@ -356,18 +356,23 @@ public struct ReviewPublishTrailView: View {
                         }
 
                         // MARK: - Privacy & Security Notice (PRD §11.3)
+                        let isPublic = activeTrail.isPublished || selectedVisibility == .publicPlace
                         HStack(alignment: .top, spacing: 10) {
-                            Image(systemName: "lock.shield.fill")
+                            Image(systemName: isPublic ? "globe.americas.fill" : "lock.shield.fill")
                                 .font(.system(size: 16))
-                                .foregroundColor(AppColors.primary)
+                                .foregroundColor(isPublic ? AppColors.forestGreen : AppColors.primary)
                                 .padding(.top, 2)
 
                             VStack(alignment: .leading, spacing: 2) {
-                                Text("Private On-Device Storage")
+                                Text(isPublic ? (activeTrail.isPublished ? "Published to Community" : "Public Community Trail") : "Private On-Device Storage")
                                     .font(AppFonts.headlineSmall)
                                     .foregroundColor(AppColors.deepInk)
 
-                                Text("Saved privately on this device. Trails does not upload this capture.")
+                                Text(isPublic
+                                     ? (activeTrail.isPublished
+                                        ? "This trail is published to the community and discoverable on the decentralized network."
+                                        : "Publishing registers this trail on the community discovery feed.")
+                                     : "Saved privately on this device. Trails does not upload private captures.")
                                     .font(AppFonts.bodySmall)
                                     .foregroundColor(AppColors.onSurfaceVariant)
                             }
@@ -599,7 +604,7 @@ public struct ReviewPublishTrailView: View {
                         trailId: receipt.trailId,
                         revision: receipt.revision,
                         title: trailTitle,
-                        shortDescription: personalNotes,
+                        shortDescription: effectiveIntroduction,
                         creatorId: "creator-\(dataStore.localProfile.id)",
                         username: effectiveUsername,
                         displayName: dataStore.localProfile.displayName,
@@ -607,7 +612,9 @@ public struct ReviewPublishTrailView: View {
                         recordedAt: ISO8601DateFormatter().string(from: Date()),
                         publishedAt: ISO8601DateFormatter().string(from: Date()),
                         placeLabel: placeName,
-                        capabilities: LogosCapabilities(hasPhotos: true, hasGeographicPath: true),
+                        discoveryAnchor: (activeTrail.latitude != nil && activeTrail.longitude != nil) ? DiscoveryAnchor(latitude: activeTrail.latitude!, longitude: activeTrail.longitude!) : nil,
+                        coverReference: activeTrail.coverImageName,
+                        capabilities: LogosCapabilities(hasPhotos: activeTrail.photoCount > 0, hasVideos: activeTrail.videoCount > 0, hasVoice: activeTrail.audioCount > 0, hasGeographicPath: activeTrail.hasGeographicTrack),
                         packageCid: receipt.packageCid,
                         packageSizeBytes: receipt.packageSizeBytes,
                         listed: true
@@ -619,6 +626,21 @@ public struct ReviewPublishTrailView: View {
                 syncWithActiveTrail()
             }
         }
+    }
+
+    private var effectiveIntroduction: String {
+        let trimmed = personalNotes.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty && trimmed != "Saved privately on this iPhone." {
+            return trimmed
+        }
+        let tNotes = activeTrail.personalNotes.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !tNotes.isEmpty && tNotes != "Saved privately on this iPhone." {
+            return tNotes
+        }
+        if !activeTrail.subtitle.isEmpty {
+            return activeTrail.subtitle
+        }
+        return "\(activeTrail.distanceMeters)m recorded path · \(activeTrail.moments.count) moments"
     }
 
     private func syncWithActiveTrail() {
@@ -688,7 +710,7 @@ public struct ReviewPublishTrailView: View {
                 "trailId": updated.id,
                 "revision": 1,
                 "title": updated.title,
-                "introduction": updated.personalNotes.isEmpty ? updated.subtitle : updated.personalNotes,
+                "introduction": effectiveIntroduction,
                 "creatorDisplayName": dataStore.localProfile.displayName,
                 "creatorUsername": effectiveUsername,
                 "creatorId": "creator-\(dataStore.localProfile.id)",
@@ -732,6 +754,15 @@ public struct ReviewPublishTrailView: View {
             if let samplesData = try? Data(contentsOf: packageDir.appendingPathComponent("tracking/samples.json")) {
                 entries.append(TrailZipArchiver.FileEntry(name: "tracking/samples.json", data: samplesData))
             }
+            let mediaDir = TrailPackageStore.shared.mediaDirectory(for: updated.id)
+            if let mediaFiles = try? FileManager.default.contentsOfDirectory(atPath: mediaDir.path) {
+                for file in mediaFiles where !file.hasPrefix(".") {
+                    let fileURL = mediaDir.appendingPathComponent(file)
+                    if let data = try? Data(contentsOf: fileURL) {
+                        entries.append(TrailZipArchiver.FileEntry(name: "media/\(file)", data: data))
+                    }
+                }
+            }
             let packageZip = TrailZipArchiver.createZip(entries: entries)
 
             do {
@@ -761,6 +792,10 @@ public struct ReviewPublishTrailView: View {
                 updated.publishedRevision = receipt.revision
                 updated.publishedPackageCid = receipt.packageCid
                 updated.publishedTransactionRef = receipt.transactionReference
+                updated.visibility = .publicPlace
+                if updated.personalNotes == "Saved privately on this iPhone." || updated.personalNotes.contains("Saved privately on this") {
+                    updated.personalNotes = ""
+                }
                 dataStore.saveFinalTrail(trail: updated)
 
                 self.showingLogosSuccessAlert = true

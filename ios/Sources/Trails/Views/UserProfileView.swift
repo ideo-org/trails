@@ -229,7 +229,7 @@ public struct UserProfileView: View {
                                     .foregroundColor(AppColors.deepInk)
                             }
 
-                            Text("Saved privately on this device. Trails does not upload this capture. Captures stay on your device and are not automatically backed up.")
+                            Text("Trails are stored privately on your device by default. Only trails you explicitly choose to publish are shared to the community discovery network.")
                                 .font(AppFonts.bodySmall)
                                 .foregroundColor(AppColors.onSurfaceVariant)
                                 .lineSpacing(2)

@@ -491,6 +491,22 @@ public struct TrailDetail: Identifiable, Hashable, Codable {
         }
         return nil
     }
+
+    public func resolvedCoverImageURL(fallbackTrailId: String? = nil) -> URL? {
+        if let cover = coverImageName {
+            let fileURL = TrailPackageStore.shared.mediaDirectory(for: id).appendingPathComponent(cover)
+            if FileManager.default.fileExists(atPath: fileURL.path) {
+                return fileURL
+            }
+            if let fallback = fallbackTrailId ?? inspiredByTrailId {
+                let fallbackURL = TrailPackageStore.shared.mediaDirectory(for: fallback).appendingPathComponent(cover)
+                if FileManager.default.fileExists(atPath: fallbackURL.path) {
+                    return fallbackURL
+                }
+            }
+        }
+        return resolvedStartFrameURL(fallbackTrailId: fallbackTrailId)
+    }
 }
 
 // MARK: - PRD v0.4.0 Discovery & Community Models (§6, §7, §11, §13, §14, §18)
@@ -563,6 +579,20 @@ public struct DiscoveryRecord: Identifiable, Hashable, Codable, Sendable {
         self.packageCid = packageCid
         self.packageSizeBytes = packageSizeBytes
         self.listed = listed
+    }
+
+    public func resolvedCoverImage(savedTrails: [TrailDetail] = []) -> UIImage? {
+        if let local = savedTrails.first(where: { $0.id == trailId }) {
+            if let url = local.resolvedCoverImageURL() ?? local.resolvedStartFrameURL(),
+               let img = UIImage(contentsOfFile: url.path) {
+                return img
+            }
+        }
+        if let url = TrailPackageStore.shared.resolvedCoverOrFirstFrame(for: trailId),
+           let img = UIImage(contentsOfFile: url.path) {
+            return img
+        }
+        return nil
     }
 }
 
@@ -1221,6 +1251,32 @@ public final class TrailPackageStore {
         let dir = trailDirectory(for: trailId).appendingPathComponent("media", isDirectory: true)
         try? fileManager.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir
+    }
+
+    public func resolvedCoverOrFirstFrame(for trailId: String) -> URL? {
+        let mediaDir = mediaDirectory(for: trailId)
+        if let files = try? fileManager.contentsOfDirectory(atPath: mediaDir.path) {
+            let imageFiles = files.filter {
+                let lower = $0.lowercased()
+                return (lower.hasSuffix(".jpg") || lower.hasSuffix(".jpeg") || lower.hasSuffix(".png")) && !lower.hasPrefix(".")
+            }
+            if let start = imageFiles.first(where: { $0.lowercased().contains("start") }) {
+                return mediaDir.appendingPathComponent(start)
+            }
+            if let cover = imageFiles.first(where: { $0.lowercased().contains("cover") }) {
+                return mediaDir.appendingPathComponent(cover)
+            }
+            if let thumb = imageFiles.first(where: { $0.lowercased().contains("thumb") }) {
+                return mediaDir.appendingPathComponent(thumb)
+            }
+            if let photo = imageFiles.first(where: { $0.lowercased().contains("photo") }) {
+                return mediaDir.appendingPathComponent(photo)
+            }
+            if let first = imageFiles.first {
+                return mediaDir.appendingPathComponent(first)
+            }
+        }
+        return nil
     }
 
     public func saveStartFrameImage(_ image: UIImage, for trailId: String) -> String {

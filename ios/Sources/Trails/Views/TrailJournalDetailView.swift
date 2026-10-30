@@ -81,10 +81,9 @@ public struct TrailJournalDetailView: View {
                         }
 
                         // MARK: - 3. Author's Personal Notes Callout
-                        if !trail.personalNotes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                            authorNotesCallout(trail.personalNotes)
-                        } else {
-                            authorNotesCallout("A few details I didn’t want to forget.")
+                        let cleanNotes = (trail.personalNotes.contains("Saved privately on this") || trail.personalNotes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) ? "" : trail.personalNotes
+                        if !cleanNotes.isEmpty {
+                            authorNotesCallout(cleanNotes)
                         }
 
                         // MARK: - 4. RoomPlan Spatial Route Map Card
@@ -349,11 +348,18 @@ public struct TrailJournalDetailView: View {
                 }
                 .tabViewStyle(PageTabViewStyle(indexDisplayMode: .never))
                 .frame(height: 260)
+            } else if let coverURL = trail.resolvedCoverImageURL() ?? trail.resolvedStartFrameURL(),
+                      let coverImg = UIImage(contentsOfFile: coverURL.path) {
+                Image(uiImage: coverImg)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(height: 260)
+                    .clipped()
             } else {
                 // Authentic Cartographic Spatial Header (Zero fake stock photos)
                 ZStack {
                     LinearGradient(
-                        colors: [AppColors.primary, AppColors.forestGreen],
+                        colors: [Color(hex: "#151C24"), Color(hex: "#0D1318")],
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
                     )

@@ -16,6 +16,7 @@ public struct PublicTrailCardView: View {
 
     @ObservedObject private var bookmarksStore = BookmarksStore.shared
     @ObservedObject private var downloadManager = TrailDownloadManager.shared
+    @ObservedObject private var dataStore = TrailsDataStore.shared
 
     public init(
         record: DiscoveryRecord,
@@ -44,28 +45,43 @@ public struct PublicTrailCardView: View {
             VStack(alignment: .leading, spacing: 0) {
                 // MARK: - Card Header (Cover Image or Neutral Limestone Placeholder)
                 ZStack(alignment: .topTrailing) {
-                    // Neutral limestone placeholder (PRD §9 & §20: Missing cover -> Neutral placeholder)
-                    ZStack {
-                        LinearGradient(
-                            colors: [Color(hex: "#EFECE6"), Color(hex: "#E3DFD5")],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
+                    if let cover = record.resolvedCoverImage(savedTrails: dataStore.savedTrails) {
+                        Image(uiImage: cover)
+                            .resizable()
+                            .scaledToFill()
+                            .frame(height: 160)
+                            .clipped()
+                            .overlay(
+                                LinearGradient(
+                                    colors: [Color.clear, Color.black.opacity(0.55)],
+                                    startPoint: .center,
+                                    endPoint: .bottom
+                                )
+                            )
+                    } else {
+                        // Neutral limestone placeholder (PRD §9 & §20: Missing cover -> Neutral placeholder)
+                        ZStack {
+                            LinearGradient(
+                                colors: [Color(hex: "#EFECE6"), Color(hex: "#E3DFD5")],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
 
-                        VStack(spacing: 8) {
-                            Image(systemName: record.discoveryAnchor != nil ? "point.topleft.down.to.point.bottomright.curvepath" : "waveform.path")
-                                .font(.system(size: 32))
-                                .foregroundColor(AppColors.secondary.opacity(0.85))
+                            VStack(spacing: 8) {
+                                Image(systemName: record.discoveryAnchor != nil ? "point.topleft.down.to.point.bottomright.curvepath" : "waveform.path")
+                                    .font(.system(size: 32))
+                                    .foregroundColor(AppColors.secondary.opacity(0.85))
 
-                            if let place = record.placeLabel {
-                                Text(place.uppercased())
-                                    .font(AppFonts.labelSpatial)
-                                    .foregroundColor(AppColors.primary.opacity(0.7))
-                                    .tracking(1.2)
+                                if let place = record.placeLabel {
+                                    Text(place.uppercased())
+                                        .font(AppFonts.labelSpatial)
+                                        .foregroundColor(AppColors.primary.opacity(0.7))
+                                        .tracking(1.2)
+                                }
                             }
                         }
+                        .frame(height: 160)
                     }
-                    .frame(height: 160)
 
                     // Top Badges & Controls Row
                     HStack {
@@ -150,7 +166,19 @@ public struct PublicTrailCardView: View {
                     .buttonStyle(PlainButtonStyle())
 
                     // Short Description (if present)
-                    if let desc = record.shortDescription, !desc.isEmpty {
+                    let cleanDesc: String? = {
+                        if let desc = record.shortDescription,
+                           !desc.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                           !desc.contains("Saved privately on this") {
+                            return desc
+                        }
+                        if let local = dataStore.savedTrails.first(where: { $0.id == record.trailId }), !local.subtitle.isEmpty {
+                            return local.subtitle
+                        }
+                        return nil
+                    }()
+
+                    if let desc = cleanDesc {
                         Text(desc)
                             .font(AppFonts.bodySmall)
                             .foregroundColor(AppColors.onSurfaceVariant)

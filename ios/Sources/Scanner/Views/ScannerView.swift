@@ -1140,7 +1140,7 @@ struct ScannerView: View {
         }()
 
         let finalTitle = (customTitle?.isEmpty == false) ? customTitle! : trailTitle
-        let finalNotes = (personalNotes?.isEmpty == false) ? personalNotes! : "Saved privately on this iPhone."
+        let finalNotes = (personalNotes?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false) ? personalNotes! : ""
         let chosenStartPhoto = startFramePhotoFileName ?? recordedMoments.first(where: { $0.hasPhoto })?.photoFileName
         let chosenHeading = startFrameHeadingDegrees ?? recordedMoments.first?.headingDegrees ?? scannerEngine.currentYawDegrees
         let chosenDesc = !startFrameVantageDescription.isEmpty ? startFrameVantageDescription : "Starting origin vantage"
