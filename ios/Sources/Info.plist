@@ -2,12 +2,14 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>CFBundleDisplayName</key>
+	<string>Trails Unlimited</string>
 	<key>NSCameraUsageDescription</key>
-	<string>Trails uses the camera to capture photos, record video, and perform spatial indoor scanning.</string>
+	<string>Trails Unlimited uses the camera to capture photos, record video, and perform spatial indoor scanning.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Trails records voice notes and video audio during your trail journey.</string>
+	<string>Trails Unlimited records voice notes and video audio during your trail journey.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Trails tags each scan with its capture location.</string>
+	<string>Trails Unlimited tags each scan with its capture location.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
@@ -15,6 +17,17 @@
 	</dict>
 	<key>UILaunchScreen</key>
 	<dict/>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.792762435488-7nds541nn8q3i0g6s4ia5d9h0i1emecs</string>
+			</array>
+		</dict>
+	</array>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsLocalNetworking</key>

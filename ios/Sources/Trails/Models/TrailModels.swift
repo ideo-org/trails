@@ -892,17 +892,23 @@ public struct PathSampleRecord: Codable, Hashable {
 public struct LocalProfile: Codable, Hashable {
     public var id: String
     public var displayName: String
+    public var username: String?
+    public var avatarURL: String?
     public var introduction: String
     public var interests: [String]
 
     public init(
         id: String = UUID().uuidString,
         displayName: String = "A trail by you",
+        username: String? = nil,
+        avatarURL: String? = nil,
         introduction: String = "Spatial explorer documenting living spaces.",
         interests: [String] = []
     ) {
         self.id = id
         self.displayName = displayName
+        self.username = username
+        self.avatarURL = avatarURL
         self.introduction = introduction
         self.interests = interests
     }

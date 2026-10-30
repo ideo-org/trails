@@ -166,7 +166,7 @@ enum AppConfiguration {
     // MARK: - App Info
 
     /// App name displayed in UI
-    static let appName = "Trails"
+    static let appName = "Trails Unlimited"
 
     /// Short marketing tagline used in onboarding and about surfaces
     static let appTagline = "RoomPlan 3D mapping & trails"

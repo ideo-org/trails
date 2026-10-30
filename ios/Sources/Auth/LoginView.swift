@@ -11,7 +11,7 @@ import AuthenticationServices
 import GoogleSignInSwift
 import SwiftUI
 
-struct LoginView: View {
+public struct LoginView: View {
     @Environment(\.colorScheme) var colorScheme
     @Environment(\.dismiss) var dismiss
 
@@ -19,14 +19,14 @@ struct LoginView: View {
 
     @StateObject private var googleButtonVM: GoogleSignInButtonViewModel
 
-    init() {
+    public init() {
         let viewModel = GoogleSignInButtonViewModel()
         viewModel.style = .wide
         viewModel.scheme = .light
         _googleButtonVM = StateObject(wrappedValue: viewModel)
     }
 
-    var body: some View {
+    public var body: some View {
         VStack {
             // Header Section
             VStack(spacing: 16) {

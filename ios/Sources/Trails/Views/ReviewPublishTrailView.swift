@@ -50,6 +50,13 @@ public struct ReviewPublishTrailView: View {
         )
     }
 
+    private var effectiveUsername: String {
+        if let u = dataStore.localProfile.username?.trimmingCharacters(in: .whitespacesAndNewlines), !u.isEmpty {
+            return u.hasPrefix("@") ? String(u.dropFirst()) : u
+        }
+        return dataStore.localProfile.displayName.lowercased().replacingOccurrences(of: " ", with: "")
+    }
+
     public var body: some View {
         NavigationStack {
             ZStack(alignment: .bottom) {
@@ -513,7 +520,7 @@ public struct ReviewPublishTrailView: View {
                         title: trailTitle,
                         shortDescription: personalNotes,
                         creatorId: "creator-\(dataStore.localProfile.id)",
-                        username: dataStore.localProfile.displayName.lowercased().replacingOccurrences(of: " ", with: ""),
+                        username: effectiveUsername,
                         displayName: dataStore.localProfile.displayName,
                         publisherReference: receipt.transactionReference,
                         recordedAt: ISO8601DateFormatter().string(from: Date()),
@@ -602,7 +609,7 @@ public struct ReviewPublishTrailView: View {
                 "title": updated.title,
                 "introduction": updated.personalNotes.isEmpty ? updated.subtitle : updated.personalNotes,
                 "creatorDisplayName": dataStore.localProfile.displayName,
-                "creatorUsername": dataStore.localProfile.displayName.lowercased().replacingOccurrences(of: " ", with: ""),
+                "creatorUsername": effectiveUsername,
                 "creatorId": "creator-\(dataStore.localProfile.id)",
                 "recordedAt": isoNow,
                 "place": placeDict,
