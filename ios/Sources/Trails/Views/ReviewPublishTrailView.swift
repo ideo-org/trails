@@ -716,6 +716,11 @@ public struct ReviewPublishTrailView: View {
                 "creatorId": "creator-\(dataStore.localProfile.id)",
                 "recordedAt": isoNow,
                 "place": placeDict,
+                "distanceMeters": updated.distanceMeters,
+                "startFramePhotoName": updated.startFramePhotoName as Any,
+                "coverImageName": updated.coverImageName as Any,
+                "startHeadingDegrees": updated.startHeadingDegrees as Any,
+                "startVantageDescription": updated.startVantageDescription,
                 "capabilities": [
                     "hasPhotos": updated.photoCount > 0,
                     "hasVideos": updated.videoCount > 0,
@@ -748,11 +753,23 @@ public struct ReviewPublishTrailView: View {
                 TrailZipArchiver.FileEntry(name: "manifest.json", data: manifestJson)
             ]
             let packageDir = TrailPackageStore.shared.trailDirectory(for: updated.id)
+            if let detailData = try? JSONEncoder().encode(updated) {
+                entries.append(TrailZipArchiver.FileEntry(name: "trail_detail.json", data: detailData))
+            }
             if let momentsData = try? Data(contentsOf: packageDir.appendingPathComponent("moments.json")) {
                 entries.append(TrailZipArchiver.FileEntry(name: "moments.json", data: momentsData))
             }
             if let samplesData = try? Data(contentsOf: packageDir.appendingPathComponent("tracking/samples.json")) {
                 entries.append(TrailZipArchiver.FileEntry(name: "tracking/samples.json", data: samplesData))
+            }
+            let spatialDir = TrailPackageStore.shared.spatialDirectory(for: updated.id)
+            if let spatialFiles = try? FileManager.default.contentsOfDirectory(atPath: spatialDir.path) {
+                for file in spatialFiles where !file.hasPrefix(".") {
+                    let fileURL = spatialDir.appendingPathComponent(file)
+                    if let data = try? Data(contentsOf: fileURL) {
+                        entries.append(TrailZipArchiver.FileEntry(name: "spatial/\(file)", data: data))
+                    }
+                }
             }
             let mediaDir = TrailPackageStore.shared.mediaDirectory(for: updated.id)
             if let mediaFiles = try? FileManager.default.contentsOfDirectory(atPath: mediaDir.path) {

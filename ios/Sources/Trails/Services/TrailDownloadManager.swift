@@ -9,6 +9,7 @@
 import Foundation
 import Combine
 import SwiftUI
+import simd
 
 public enum TrailDownloadStage: Equatable {
     case notDownloaded
@@ -163,43 +164,105 @@ public final class TrailDownloadManager: ObservableObject {
                 }
 
                 // Step 5: Construct TrailDetail with full provenance (PRD §14)
+                let detailURL = finalDir.appendingPathComponent("trail_detail.json")
+                let momentsURL = finalDir.appendingPathComponent("moments.json")
+                let loadedFootsteps = packageStore.loadFootsteps(for: record.trailId)
+
+                var decodedTrail: TrailDetail?
+                if let detailData = try? Data(contentsOf: detailURL),
+                   let t = try? JSONDecoder().decode(TrailDetail.self, from: detailData) {
+                    decodedTrail = t
+                }
+
+                var decodedMoments: [SpatialMoment] = []
+                if let momentsData = try? Data(contentsOf: momentsURL),
+                   let m = try? JSONDecoder().decode([SpatialMoment].self, from: momentsData),
+                   !m.isEmpty {
+                    decodedMoments = m
+                }
+
+                let resolvedCoverOrStart = packageStore.resolvedCoverOrFirstFrame(for: record.trailId)
+                let startPhoto = decodedTrail?.startFramePhotoName ?? resolvedCoverOrStart?.lastPathComponent
+                let coverPhoto = decodedTrail?.coverImageName ?? startPhoto
+
+                if decodedMoments.isEmpty {
+                    let initialMoment = SpatialMoment(
+                        id: "dl-moment-1",
+                        index: 1,
+                        title: "Arrival",
+                        subtitle: "Beginning of shared trail",
+                        narrative: record.shortDescription ?? "Explored and preserved from @\(record.username).",
+                        architecturalNote: "Published on Logos community registry.",
+                        distanceAlongPathMeters: 0,
+                        relativeElevation: "+0.00m",
+                        mediaType: startPhoto != nil ? "photo" : "note",
+                        photoFileName: startPhoto
+                    )
+                    decodedMoments = [initialMoment]
+                } else if var first = decodedMoments.first, !first.hasPhoto && first.photoFileName == nil, let photo = startPhoto {
+                    first.photoFileName = photo
+                    first.mediaType = "photo"
+                    decodedMoments[0] = first
+                }
+
+                var computedDistance: Int = decodedTrail?.distanceMeters ?? 0
+                if computedDistance == 0 || computedDistance == 85 {
+                    if loadedFootsteps.count > 1 {
+                        var d: Float = 0
+                        for i in 1..<loadedFootsteps.count {
+                            d += simd_distance(loadedFootsteps[i], loadedFootsteps[i - 1])
+                        }
+                        computedDistance = max(1, Int(d))
+                    } else {
+                        computedDistance = 85
+                    }
+                }
+
+                let trailSubtitle: String = record.shortDescription ?? (decodedTrail?.subtitle ?? "Community trail from @\(record.username)")
+                let placeIdVal: String = record.placeLabel ?? (decodedTrail?.placeId ?? "shared-place")
+                let placeNameVal: String = record.placeLabel ?? (decodedTrail?.placeName ?? "Shared Territory")
+                let localityVal: String = record.placeLabel ?? (decodedTrail?.locality ?? "Community Discovery")
+                let wingVal: String = decodedTrail?.wing ?? "Shared Capture"
+                let floorCodeVal: String = decodedTrail?.floorCode ?? "LVL 00"
+                let floorTitleVal: String = decodedTrail?.floorTitle ?? "Ground Floor"
+                let meshVal: String = decodedTrail?.meshDensity ?? "Community LiDAR Mesh"
+                let sampleFreqVal: String = decodedTrail?.samplingFrequency ?? "24.6 kHz"
+                let nodeCountVal: Int = max(decodedMoments.count, max(1, loadedFootsteps.count))
+                let notesVal: String = record.shortDescription ?? ""
+                let latVal: Double? = record.discoveryAnchor?.latitude ?? decodedTrail?.latitude
+                let lonVal: Double? = record.discoveryAnchor?.longitude ?? decodedTrail?.longitude
+                let headingVal: Double? = decodedTrail?.startHeadingDegrees
+                let vantageVal: String = decodedTrail?.startVantageDescription ?? "Beginning of trail"
+                let createdDateVal: Date = decodedTrail?.createdAt ?? Date()
+
                 let downloadedTrail = TrailDetail(
                     id: record.trailId,
                     title: record.title,
-                    subtitle: record.shortDescription ?? "Community trail from @\(record.username)",
-                    placeId: record.placeLabel ?? "shared-place",
-                    placeName: record.placeLabel ?? "Shared Territory",
-                    locality: record.placeLabel ?? "Community Discovery",
-                    wing: "Shared Capture",
+                    subtitle: trailSubtitle,
+                    placeId: placeIdVal,
+                    placeName: placeNameVal,
+                    locality: localityVal,
+                    wing: wingVal,
                     authorName: record.displayName,
                     authorRole: "Contributor (@\(record.username))",
-                    distanceMeters: 85,
-                    floorCode: "LVL 00",
-                    floorTitle: "Ground Floor",
-                    meshDensity: "Community LiDAR Mesh",
-                    samplingFrequency: "24.6 kHz",
-                    nodeCount: 4,
-                    personalNotes: record.shortDescription ?? "",
-                    moments: [
-                        SpatialMoment(
-                            id: "dl-moment-1",
-                            index: 1,
-                            title: "Arrival",
-                            subtitle: "Beginning of shared trail",
-                            narrative: "Explored and preserved from @\(record.username).",
-                            architecturalNote: "Published on LEZ registry.",
-                            distanceAlongPathMeters: 0,
-                            relativeElevation: "+0.00m",
-                            mediaType: "note"
-                        )
-                    ],
+                    distanceMeters: computedDistance,
+                    floorCode: floorCodeVal,
+                    floorTitle: floorTitleVal,
+                    meshDensity: meshVal,
+                    samplingFrequency: sampleFreqVal,
+                    nodeCount: nodeCountVal,
+                    personalNotes: notesVal,
+                    moments: decodedMoments,
                     visibility: .privateDraft,
                     isDraft: false,
-                    coverImageName: nil,
-                    latitude: record.discoveryAnchor?.latitude,
-                    longitude: record.discoveryAnchor?.longitude,
+                    coverImageName: coverPhoto,
+                    latitude: latVal,
+                    longitude: lonVal,
                     isRetrace: false,
-                    createdAt: Date(),
+                    startFramePhotoName: startPhoto,
+                    startHeadingDegrees: headingVal,
+                    startVantageDescription: vantageVal,
+                    createdAt: createdDateVal,
                     updatedAt: Date(),
                     isDownloaded: true,
                     sourceTrailId: record.trailId,
@@ -211,8 +274,8 @@ public final class TrailDownloadManager: ObservableObject {
                     downloadedAt: Date()
                 )
 
-                // Step 6: Atomic commit to local library
-                TrailsDataStore.shared.saveFinalTrail(trail: downloadedTrail)
+                // Step 6: Atomic commit to local library with footsteps preserved
+                TrailsDataStore.shared.saveFinalTrail(trail: downloadedTrail, footsteps: loadedFootsteps)
 
                 // Step 7: Ready
                 stages[trailId] = .ready

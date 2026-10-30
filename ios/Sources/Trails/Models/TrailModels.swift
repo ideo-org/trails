@@ -470,12 +470,13 @@ public struct TrailDetail: Identifiable, Hashable, Codable {
     }
 
     public func resolvedStartFrameURL(fallbackTrailId: String? = nil) -> URL? {
+        let effectiveFallback = fallbackTrailId ?? sourceTrailId ?? inspiredByTrailId
         if let startName = startFramePhotoName {
             let fileURL = TrailPackageStore.shared.mediaDirectory(for: id).appendingPathComponent(startName)
             if FileManager.default.fileExists(atPath: fileURL.path) {
                 return fileURL
             }
-            if let fallback = fallbackTrailId ?? inspiredByTrailId {
+            if let fallback = effectiveFallback {
                 let fallbackURL = TrailPackageStore.shared.mediaDirectory(for: fallback).appendingPathComponent(startName)
                 if FileManager.default.fileExists(atPath: fallbackURL.path) {
                     return fallbackURL
@@ -484,28 +485,41 @@ public struct TrailDetail: Identifiable, Hashable, Codable {
         }
         // Fall back to first photo moment or video thumbnail
         if let firstPhoto = moments.first(where: { ($0.hasPhoto || $0.mediaType == "photo") && $0.photoFileName != nil }) {
-            return firstPhoto.resolvedPhotoURL(trailId: id, fallbackTrailId: fallbackTrailId ?? inspiredByTrailId)
+            if let url = firstPhoto.resolvedPhotoURL(trailId: id, fallbackTrailId: effectiveFallback) {
+                return url
+            }
         }
         if let firstVideo = moments.first(where: { ($0.hasVideo || $0.mediaType == "video") && ($0.videoThumbnailAssetName != nil || $0.photoFileName != nil) }) {
-            return firstVideo.resolvedVideoThumbnailURL(trailId: id, fallbackTrailId: fallbackTrailId ?? inspiredByTrailId)
+            if let url = firstVideo.resolvedVideoThumbnailURL(trailId: id, fallbackTrailId: effectiveFallback) {
+                return url
+            }
+        }
+        // Fall back to scanning local media directory for start-frame or cover image
+        if let localMediaURL = TrailPackageStore.shared.resolvedCoverOrFirstFrame(for: id) {
+            return localMediaURL
+        }
+        if let fallback = effectiveFallback,
+           let fallbackMediaURL = TrailPackageStore.shared.resolvedCoverOrFirstFrame(for: fallback) {
+            return fallbackMediaURL
         }
         return nil
     }
 
     public func resolvedCoverImageURL(fallbackTrailId: String? = nil) -> URL? {
+        let effectiveFallback = fallbackTrailId ?? sourceTrailId ?? inspiredByTrailId
         if let cover = coverImageName {
             let fileURL = TrailPackageStore.shared.mediaDirectory(for: id).appendingPathComponent(cover)
             if FileManager.default.fileExists(atPath: fileURL.path) {
                 return fileURL
             }
-            if let fallback = fallbackTrailId ?? inspiredByTrailId {
+            if let fallback = effectiveFallback {
                 let fallbackURL = TrailPackageStore.shared.mediaDirectory(for: fallback).appendingPathComponent(cover)
                 if FileManager.default.fileExists(atPath: fallbackURL.path) {
                     return fallbackURL
                 }
             }
         }
-        return resolvedStartFrameURL(fallbackTrailId: fallbackTrailId)
+        return resolvedStartFrameURL(fallbackTrailId: effectiveFallback)
     }
 }
 
@@ -1172,15 +1186,25 @@ public final class TrailPackageStore {
         var trails: [TrailDetail] = []
         for dir in trailDirs {
             let manifestURL = dir.appendingPathComponent("manifest.json")
+            let detailURL = dir.appendingPathComponent("trail_detail.json")
             let momentsURL = dir.appendingPathComponent("moments.json")
 
-            guard let manifestData = try? Data(contentsOf: manifestURL),
-                  var trail = try? decoder.decode(TrailDetail.self, from: manifestData) else {
+            var decodedTrail: TrailDetail?
+            if let manifestData = try? Data(contentsOf: manifestURL),
+               let trail = try? decoder.decode(TrailDetail.self, from: manifestData) {
+                decodedTrail = trail
+            } else if let detailData = try? Data(contentsOf: detailURL),
+                      let trail = try? decoder.decode(TrailDetail.self, from: detailData) {
+                decodedTrail = trail
+            }
+
+            guard var trail = decodedTrail else {
                 continue
             }
 
             if let momentsData = try? Data(contentsOf: momentsURL),
-               let moments = try? decoder.decode([SpatialMoment].self, from: momentsData) {
+               let moments = try? decoder.decode([SpatialMoment].self, from: momentsData),
+               !moments.isEmpty {
                 trail.moments = moments
             }
 
@@ -1190,17 +1214,29 @@ public final class TrailPackageStore {
         return trails.sorted { $0.updatedAt > $1.updatedAt }
     }
 
-    public func loadFootsteps(for trailId: String) -> [SIMD3<Float>] {
+    public func loadFootsteps(for trailId: String, fallbackTrailId: String? = nil) -> [SIMD3<Float>] {
         let samplesURL = trailDirectory(for: trailId)
             .appendingPathComponent("tracking", isDirectory: true)
             .appendingPathComponent("samples.json")
 
-        guard let data = try? Data(contentsOf: samplesURL),
-              let records = try? decoder.decode([PathSampleRecord].self, from: data) else {
-            return []
+        if let data = try? Data(contentsOf: samplesURL),
+           let records = try? decoder.decode([PathSampleRecord].self, from: data),
+           !records.isEmpty {
+            return records.map { SIMD3<Float>($0.positionX, $0.positionY, $0.positionZ) }
         }
 
-        return records.map { SIMD3<Float>($0.positionX, $0.positionY, $0.positionZ) }
+        if let fallback = fallbackTrailId {
+            let fallbackURL = trailDirectory(for: fallback)
+                .appendingPathComponent("tracking", isDirectory: true)
+                .appendingPathComponent("samples.json")
+            if let data = try? Data(contentsOf: fallbackURL),
+               let records = try? decoder.decode([PathSampleRecord].self, from: data),
+               !records.isEmpty {
+                return records.map { SIMD3<Float>($0.positionX, $0.positionY, $0.positionZ) }
+            }
+        }
+
+        return []
     }
 
     // MARK: - Retrace Sessions (PRD v0.3.0 §2 & §7)

@@ -150,18 +150,32 @@ public struct RetraceTrailView: View {
     // MARK: - Reference Target Resolution & Match Helpers
 
     private var currentReferenceImage: UIImage? {
+        let fallbackId = referenceTrail.sourceTrailId ?? referenceTrail.inspiredByTrailId
         if let cp = activeReferenceCheckpoint {
-            if let url = cp.resolvedPhotoURL(trailId: referenceTrail.id, fallbackTrailId: referenceTrail.inspiredByTrailId),
+            if let url = cp.resolvedPhotoURL(trailId: referenceTrail.id, fallbackTrailId: fallbackId),
                let img = UIImage(contentsOfFile: url.path) {
                 return img
             }
-            if let url = cp.resolvedVideoThumbnailURL(trailId: referenceTrail.id, fallbackTrailId: referenceTrail.inspiredByTrailId),
+            if let url = cp.resolvedVideoThumbnailURL(trailId: referenceTrail.id, fallbackTrailId: fallbackId),
                let img = UIImage(contentsOfFile: url.path) {
                 return img
             }
         }
-        if let startURL = referenceTrail.resolvedStartFrameURL(),
+        if let startURL = referenceTrail.resolvedStartFrameURL(fallbackTrailId: fallbackId),
            let img = UIImage(contentsOfFile: startURL.path) {
+            return img
+        }
+        if let coverURL = referenceTrail.resolvedCoverImageURL(fallbackTrailId: fallbackId),
+           let img = UIImage(contentsOfFile: coverURL.path) {
+            return img
+        }
+        if let url = TrailPackageStore.shared.resolvedCoverOrFirstFrame(for: referenceTrail.id),
+           let img = UIImage(contentsOfFile: url.path) {
+            return img
+        }
+        if let fallback = fallbackId,
+           let url = TrailPackageStore.shared.resolvedCoverOrFirstFrame(for: fallback),
+           let img = UIImage(contentsOfFile: url.path) {
             return img
         }
         return nil
@@ -644,10 +658,14 @@ public struct RetraceTrailView: View {
                     visitedOrderArray.append(moment.id)
                 }
                 activeCheckpointEncounter = nil
+                if moment.index == 1 || moment.title.lowercased().contains("arrival") || !hasConfirmedStart {
+                    hasConfirmedStart = true
+                    showingStartFrameGuidance = false
+                }
                 if selectedTargetCheckpointId == moment.id {
                     selectedTargetCheckpointId = nil
                 }
-                triggerToast("Stop \(moment.index) Visited ✓ (Match: \(similarityIndexPercentage)%)")
+                triggerToast(moment.index == 1 ? "Start Point Confirmed · Continue Along Trail ✓" : "Stop \(moment.index) Visited ✓")
             }
         }
         // Voice Note Checkpoint Sheet
@@ -1360,6 +1378,11 @@ public struct RetraceTrailView: View {
                 Button {
                     Haptics.success()
                     hasConfirmedStart = true
+                    if let first = referenceTrail.moments.first, !visitedCheckpointIds.contains(first.id) {
+                        visitedCheckpointIds.insert(first.id)
+                        visitedOrderArray.append(first.id)
+                    }
+                    activeCheckpointEncounter = nil
                     withAnimation(.spring(response: 0.35)) {
                         showingStartFrameGuidance = false
                     }
@@ -1634,9 +1657,39 @@ public struct RetraceTrailView: View {
                         .font(.system(size: 11, weight: .bold))
                 }
                 .foregroundColor(.black)
-                .padding(.horizontal, 12)
+                .padding(.horizontal, 10)
                 .padding(.vertical, 8)
                 .background(Color(hex: "#00E5FF"))
+                .clipShape(Capsule())
+            }
+
+            // Quick Confirm / Start & Continue Button
+            Button {
+                Haptics.success()
+                if !visitedCheckpointIds.contains(moment.id) {
+                    visitedCheckpointIds.insert(moment.id)
+                    visitedOrderArray.append(moment.id)
+                }
+                if moment.index == 1 || moment.title.lowercased().contains("arrival") || !hasConfirmedStart {
+                    hasConfirmedStart = true
+                    showingStartFrameGuidance = false
+                }
+                withAnimation(.spring(response: 0.35)) {
+                    activeCheckpointEncounter = nil
+                }
+                triggerToast(moment.index == 1 ? "Start Point Confirmed · Continue ✓" : "Checkpoint \(moment.index) Visited ✓")
+            } label: {
+                HStack(spacing: 3) {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 10, weight: .bold))
+                    Text(moment.index == 1 ? "Start" : "Done")
+                        .font(AppFonts.labelUI)
+                        .fontWeight(.semibold)
+                }
+                .foregroundColor(.black)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+                .background(Color.green)
                 .clipShape(Capsule())
             }
         }
@@ -2373,14 +2426,17 @@ public struct RetraceTrailView: View {
         positioningMode = "localSpatialAligned"
         alignmentMethod = "originAnchor"
 
-        // Load reference footsteps
-        let loaded = TrailPackageStore.shared.loadFootsteps(for: referenceTrail.id)
+        // Load reference footsteps with source trail fallback
+        let fallbackId = referenceTrail.sourceTrailId ?? referenceTrail.inspiredByTrailId
+        let loaded = TrailPackageStore.shared.loadFootsteps(for: referenceTrail.id, fallbackTrailId: fallbackId)
         if !loaded.isEmpty {
             referenceFootsteps = loaded
-        } else {
+        } else if !referenceTrail.moments.isEmpty {
             referenceFootsteps = referenceTrail.moments.map { m in
-                SIMD3<Float>(Float(m.positionX / 24.0), Float((m.positionZ ?? 0) / 24.0), Float(m.positionY / 24.0))
+                SIMD3<Float>(Float(m.positionX), Float(m.positionZ ?? 0), Float(m.positionY))
             }
+        } else {
+            referenceFootsteps = [SIMD3<Float>(0, 0, 0), SIMD3<Float>(0, 0, 1.2)]
         }
 
         scannerEngine.resetAndStartScanning()
@@ -2792,6 +2848,36 @@ private struct CompareVantageSheet: View {
     let moment: SpatialMoment
     let onMarkVisited: () -> Void
 
+    private var resolvedMomentImage: UIImage? {
+        let fallbackId = referenceTrail.sourceTrailId ?? referenceTrail.inspiredByTrailId
+        if moment.hasPhoto, let photoURL = moment.resolvedPhotoURL(trailId: referenceTrail.id, fallbackTrailId: fallbackId),
+           let img = UIImage(contentsOfFile: photoURL.path) {
+            return img
+        }
+        if let asset = moment.photoAssetName, let img = UIImage(named: asset) {
+            return img
+        }
+        // Fall back to reference trail start frame / first frame photo or cover image
+        if let startURL = referenceTrail.resolvedStartFrameURL(fallbackTrailId: fallbackId),
+           let img = UIImage(contentsOfFile: startURL.path) {
+            return img
+        }
+        if let coverURL = referenceTrail.resolvedCoverImageURL(fallbackTrailId: fallbackId),
+           let img = UIImage(contentsOfFile: coverURL.path) {
+            return img
+        }
+        if let url = TrailPackageStore.shared.resolvedCoverOrFirstFrame(for: referenceTrail.id),
+           let img = UIImage(contentsOfFile: url.path) {
+            return img
+        }
+        if let fallback = fallbackId,
+           let url = TrailPackageStore.shared.resolvedCoverOrFirstFrame(for: fallback),
+           let img = UIImage(contentsOfFile: url.path) {
+            return img
+        }
+        return nil
+    }
+
     var body: some View {
         NavigationStack {
             ZStack {
@@ -2811,13 +2897,25 @@ private struct CompareVantageSheet: View {
                     .padding(.top, 10)
 
                     ZStack {
-                        if moment.hasPhoto, let photoURL = moment.resolvedPhotoURL(trailId: referenceTrail.id),
-                           let image = UIImage(contentsOfFile: photoURL.path) {
-                            Image(uiImage: image)
-                                .resizable()
-                                .scaledToFit()
-                                .cornerRadius(16)
-                        } else if moment.hasVideo, let videoURL = moment.resolvedVideoURL(trailId: referenceTrail.id) {
+                        if let image = resolvedMomentImage {
+                            VStack(spacing: 8) {
+                                Image(uiImage: image)
+                                    .resizable()
+                                    .scaledToFit()
+                                    .frame(maxHeight: 280)
+                                    .cornerRadius(16)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 16)
+                                            .stroke(Color(hex: "#00E5FF").opacity(0.35), lineWidth: 1.5)
+                                    )
+
+                                if !moment.hasPhoto {
+                                    Text("Reference First Frame · Start Vantage")
+                                        .font(AppFonts.labelSpatial)
+                                        .foregroundColor(AppColors.mutedBrass)
+                                }
+                            }
+                        } else if moment.hasVideo, let videoURL = moment.resolvedVideoURL(trailId: referenceTrail.id, fallbackTrailId: referenceTrail.sourceTrailId) {
                             VideoPlayer(player: AVPlayer(url: videoURL))
                                 .frame(height: 240)
                                 .cornerRadius(16)
@@ -2837,7 +2935,7 @@ private struct CompareVantageSheet: View {
                                 )
                         }
                     }
-                    .frame(maxHeight: 280)
+                    .frame(maxHeight: 290)
                     .padding(.horizontal, 16)
 
                     if !moment.narrative.isEmpty {
@@ -2857,9 +2955,9 @@ private struct CompareVantageSheet: View {
                         dismiss()
                     } label: {
                         HStack(spacing: 8) {
-                            Image(systemName: "checkmark.circle.fill")
+                            Image(systemName: (moment.index == 1 || moment.title.lowercased().contains("arrival")) ? "arrow.right.circle.fill" : "checkmark.circle.fill")
                                 .font(.system(size: 16))
-                            Text("Mark Checkpoint Visited")
+                            Text((moment.index == 1 || moment.title.lowercased().contains("arrival")) ? "Confirm Start & Continue Retrace" : "Mark Checkpoint Visited")
                                 .font(AppFonts.labelUI)
                                 .fontWeight(.bold)
                         }

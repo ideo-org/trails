@@ -99,6 +99,38 @@ public final class TrailsDataStore: ObservableObject {
         if t.isPublished && t.visibility == .privateDraft {
             t.visibility = .publicPlace
         }
+
+        // PRD v0.4.0: Automatically repair missing start frame or cover photos on disk
+        if t.startFramePhotoName == nil {
+            if let photo = packageStore.resolvedCoverOrFirstFrame(for: t.id)?.lastPathComponent ?? (t.sourceTrailId != nil ? packageStore.resolvedCoverOrFirstFrame(for: t.sourceTrailId!)?.lastPathComponent : nil) {
+                t.startFramePhotoName = photo
+            }
+        }
+        if t.coverImageName == nil {
+            t.coverImageName = t.startFramePhotoName ?? packageStore.resolvedCoverOrFirstFrame(for: t.id)?.lastPathComponent
+        }
+
+        // Ensure Checkpoint 1 / Arrival inherits the starting reference frame photo if it has none
+        if var firstMoment = t.moments.first, !firstMoment.hasPhoto && firstMoment.photoFileName == nil {
+            if let startPhoto = t.startFramePhotoName ?? packageStore.resolvedCoverOrFirstFrame(for: t.id)?.lastPathComponent {
+                firstMoment.photoFileName = startPhoto
+                firstMoment.mediaType = "photo"
+                t.moments[0] = firstMoment
+            }
+        }
+
+        // If downloaded trail is missing footsteps, recover them from sourceTrailId if available
+        if let srcId = t.sourceTrailId {
+            packageStore.copyAssets(from: srcId, to: t.id)
+            let existingSteps = packageStore.loadFootsteps(for: t.id)
+            if existingSteps.isEmpty {
+                let srcSteps = packageStore.loadFootsteps(for: srcId)
+                if !srcSteps.isEmpty {
+                    packageStore.saveTrailPackage(trail: t, footsteps: srcSteps)
+                }
+            }
+        }
+
         return t
     }
 

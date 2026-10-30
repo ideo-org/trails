@@ -26,7 +26,15 @@ struct RoomLayoutView: View {
 
     var body: some View {
         GeometryReader { geometry in
-            let boundingBox = calculateBoundingBox(for: capturedRoom, footsteps: footsteps)
+            let effectiveFootsteps: [SIMD3<Float>] = {
+                if !footsteps.isEmpty { return footsteps }
+                if !moments.isEmpty {
+                    return moments.map { SIMD3<Float>(Float($0.positionX), Float($0.positionZ ?? 0), Float($0.positionY)) }
+                }
+                return isReferenceDashed ? [SIMD3<Float>(0, 0, 0), SIMD3<Float>(0, 0, 1.0)] : []
+            }()
+
+            let boundingBox = calculateBoundingBox(for: capturedRoom, footsteps: effectiveFootsteps)
             let scale = calculateScale(for: boundingBox, in: geometry.size)
             let offset = calculateOffset(for: boundingBox, scale: scale, in: geometry.size)
 
@@ -59,7 +67,7 @@ struct RoomLayoutView: View {
                     ForEach(room.windows, id: \.identifier) { window in
                         drawSurface(window.dimensions, transform: window.transform, scale: scale, offset: offset, color: AppColors.mutedBrass.opacity(0.7), lineWidth: 1.5)
                     }
-                } else if footsteps.isEmpty {
+                } else if !isReferenceDashed && effectiveFootsteps.isEmpty {
                     // Initial Scan Guidance when empty
                     VStack(spacing: 8) {
                         Image(systemName: "viewfinder")
@@ -75,13 +83,13 @@ struct RoomLayoutView: View {
                 }
 
                 // Continuous Walking Vector (Reference path)
-                drawPathVector(footsteps, scale: scale, offset: offset, color: referenceColor, isDashed: isReferenceDashed)
+                drawPathVector(effectiveFootsteps, scale: scale, offset: offset, color: referenceColor, isDashed: isReferenceDashed)
 
                 // Footstep nodes
-                drawFootstepNodes(footsteps, scale: scale, offset: offset)
+                drawFootstepNodes(effectiveFootsteps, scale: scale, offset: offset)
 
                 // Start of Reference Trail Marker
-                if isReferenceDashed, let startPt = footsteps.first {
+                if isReferenceDashed, let startPt = effectiveFootsteps.first {
                     let pt = projectTo2D(startPt, scale: scale, offset: offset)
                     HStack(spacing: 3) {
                         Image(systemName: "flag.fill")
