@@ -62,15 +62,15 @@ public struct SpatialTrailViewerView: View {
     private var trail: TrailDetail {
         dataStore.activeTrail ?? TrailDetail(
             id: "fallback",
-            title: "An evening through the Haveli",
-            subtitle: "140m path · 4 moments · 2800K dusk",
-            placeId: "dhun-haveli",
-            placeName: "Dhun Haveli",
-            locality: "Jaipur, Rajasthan",
+            title: "Recorded Path",
+            subtitle: "Spatial Walk",
+            placeId: "personal-trail",
+            placeName: "My Trail",
+            locality: "Local Area",
             wing: "Ground Floor",
-            authorName: "Hiro",
-            authorRole: "Architect & Spatial Explorer",
-            distanceMeters: 140,
+            authorName: "Author",
+            authorRole: "Spatial Explorer",
+            distanceMeters: 50,
             moments: [
                 SpatialMoment(
                     id: "m1",

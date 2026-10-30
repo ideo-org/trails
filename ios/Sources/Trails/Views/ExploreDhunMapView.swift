@@ -1,8 +1,8 @@
 //
-//  ExploreDhunMapView.swift
+//  ExploreMapView.swift
 //  Trails
 //
-//  Screen 1: Explore Dhun Map, designed in docs/stitch/explore_dhun_map.
+//  Exploration Map View.
 //  Expresses architectural minimalism with tactile Apple-native controls.
 //
 
@@ -16,7 +16,7 @@ public struct ExploreDhunMapView: View {
     @State private var selectedPlaceForNavigation: Place?
     @State private var showingPlaceDetail: Bool = false
     @State private var showingScanner: Bool = false
-    @State private var activeMapPlaceId: String = "dhun-haveli"
+    @State private var activeMapPlaceId: String = ""
 
     public init() {}
 
@@ -194,7 +194,7 @@ public struct ExploreDhunMapView: View {
                 }
 
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Text("Dhun Quarter")
+                    Text("Architectural Archive")
                         .font(AppFonts.labelSpatial)
                         .foregroundColor(AppColors.outline)
                 }
@@ -298,13 +298,13 @@ struct ArchitecturalMapCard: View {
 
                 Spacer()
 
-                // Dhun Haveli Main Marker (Center)
-                MapPinBadge(title: "Dhun Haveli", count: "8 trails", isSelected: selectedPlaceId == "dhun-haveli", isProminent: true) {
-                    if let p = places.first(where: { $0.id == "dhun-haveli" }) {
-                        onSelectPlace(p)
+                // Central Landmark Marker (Center)
+                if let firstPlace = places.first {
+                    MapPinBadge(title: firstPlace.name, count: "\(firstPlace.trailsCount) trails", isSelected: selectedPlaceId == firstPlace.id, isProminent: true) {
+                        onSelectPlace(firstPlace)
                     }
+                    .offset(y: -40)
                 }
-                .offset(y: -40)
 
                 Spacer()
 
