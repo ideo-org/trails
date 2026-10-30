@@ -18,6 +18,7 @@ import Foundation
 import AVFoundation
 import UIKit
 import Combine
+import ImageIO
 
 @MainActor
 public final class CameraCaptureEngine: NSObject, ObservableObject {
@@ -361,46 +362,71 @@ public final class CameraCaptureEngine: NSObject, ObservableObject {
 
 extension CameraCaptureEngine: AVCapturePhotoCaptureDelegate {
     nonisolated public func photoOutput(_ output: AVCapturePhotoOutput, didFinishProcessingPhoto photo: AVCapturePhoto, error: Error?) {
-        Task { @MainActor in
-            if let error = error {
+        if let error = error {
+            Task { @MainActor in
                 self.photoContinuation?.resume(throwing: error)
                 self.photoContinuation = nil
-                return
             }
+            return
+        }
 
-            guard let data = photo.fileDataRepresentation(),
-                  let image = UIImage(data: data),
-                  let destinationURL = self.pendingPhotoDestinationURL,
-                  let thumbnailURL = self.pendingPhotoThumbnailURL else {
-                self.photoContinuation?.resume(throwing: NSError(domain: "CameraCaptureEngine", code: 3, userInfo: [NSLocalizedDescriptionKey: "Failed to process photo data."]))
+        guard let data = photo.fileDataRepresentation() else {
+            Task { @MainActor in
+                self.photoContinuation?.resume(throwing: NSError(domain: "CameraCaptureEngine", code: 3, userInfo: [NSLocalizedDescriptionKey: "Failed to extract photo data."]))
                 self.photoContinuation = nil
+            }
+            return
+        }
+
+        // Process file I/O and thumbnail generation entirely off the main thread
+        Task.detached(priority: .userInitiated) { [weak self, data] in
+            guard let self = self else { return }
+            let (destURL, thumbURL) = await (self.pendingPhotoDestinationURL, self.pendingPhotoThumbnailURL)
+
+            guard let destURL = destURL, let thumbURL = thumbURL, let image = UIImage(data: data) else {
+                await MainActor.run {
+                    self.photoContinuation?.resume(throwing: NSError(domain: "CameraCaptureEngine", code: 3, userInfo: [NSLocalizedDescriptionKey: "Failed to process photo data."]))
+                    self.photoContinuation = nil
+                }
                 return
             }
 
             do {
-                // Save original image atomically
-                try data.write(to: destinationURL, options: .atomic)
+                // 1. Write full photo data to disk asynchronously in background
+                try data.write(to: destURL, options: .atomic)
 
-                // Generate lightweight 400x400 thumbnail
-                if let thumb = self.generateThumbnail(from: image, targetSize: CGSize(width: 400, height: 400)),
+                // 2. Hardware-accelerated thumbnail downsampling using ImageIO
+                if let thumb = Self.generateDownsampledThumbnail(from: data, maxPixelSize: 400),
                    let thumbData = thumb.jpegData(compressionQuality: 0.8) {
-                    try thumbData.write(to: thumbnailURL, options: .atomic)
+                    try thumbData.write(to: thumbURL, options: .atomic)
                 }
 
-                self.photoContinuation?.resume(returning: (image: image, fileURL: destinationURL, thumbnailURL: thumbnailURL))
-                self.photoContinuation = nil
+                // 3. Return lightweight result to MainActor without freezing the UI or camera pipeline
+                await MainActor.run {
+                    self.photoContinuation?.resume(returning: (image: image, fileURL: destURL, thumbnailURL: thumbURL))
+                    self.photoContinuation = nil
+                }
             } catch {
-                self.photoContinuation?.resume(throwing: error)
-                self.photoContinuation = nil
+                await MainActor.run {
+                    self.photoContinuation?.resume(throwing: error)
+                    self.photoContinuation = nil
+                }
             }
         }
     }
 
-    private func generateThumbnail(from image: UIImage, targetSize: CGSize) -> UIImage? {
-        let renderer = UIGraphicsImageRenderer(size: targetSize)
-        return renderer.image { _ in
-            image.draw(in: CGRect(origin: .zero, size: targetSize))
+    nonisolated public static func generateDownsampledThumbnail(from data: Data, maxPixelSize: Int = 400) -> UIImage? {
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceShouldCacheImmediately: true,
+            kCGImageSourceThumbnailMaxPixelSize: maxPixelSize
+        ]
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+              let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else {
+            return nil
         }
+        return UIImage(cgImage: cgImage)
     }
 }
 
@@ -408,40 +434,51 @@ extension CameraCaptureEngine: AVCapturePhotoCaptureDelegate {
 
 extension CameraCaptureEngine: AVCaptureFileOutputRecordingDelegate {
     nonisolated public func fileOutput(_ output: AVCaptureFileOutput, didFinishRecordingTo outputFileURL: URL, from connections: [AVCaptureConnection], error: Error?) {
-        Task { @MainActor in
-            self.captureState = .idle
-            if let error = error {
-                let nsError = error as NSError
-                // If it recorded successfully up to the stop call, error may be nil or minor
-                if !FileManager.default.fileExists(atPath: outputFileURL.path) {
+        if let error = error {
+            let nsError = error as NSError
+            if !FileManager.default.fileExists(atPath: outputFileURL.path) {
+                Task { @MainActor in
+                    self.captureState = .idle
                     self.videoContinuation?.resume(throwing: error)
                     self.videoContinuation = nil
-                    return
                 }
+                return
             }
+        }
 
-            guard let thumbnailURL = self.pendingVideoThumbnailURL else {
-                self.videoContinuation?.resume(throwing: NSError(domain: "CameraCaptureEngine", code: 4, userInfo: [NSLocalizedDescriptionKey: "Missing thumbnail target URL."]))
-                self.videoContinuation = nil
+        // Generate video duration and thumbnail off the main thread
+        Task.detached(priority: .userInitiated) { [weak self] in
+            guard let self = self else { return }
+            let thumbURL = await self.pendingVideoThumbnailURL
+
+            guard let thumbURL = thumbURL else {
+                await MainActor.run {
+                    self.captureState = .idle
+                    self.videoContinuation?.resume(throwing: NSError(domain: "CameraCaptureEngine", code: 4, userInfo: [NSLocalizedDescriptionKey: "Missing thumbnail target URL."]))
+                    self.videoContinuation = nil
+                }
                 return
             }
 
-            // Extract duration and generate video thumbnail
             let asset = AVURLAsset(url: outputFileURL)
             let durationSeconds = CMTimeGetSeconds(asset.duration)
             let imageGenerator = AVAssetImageGenerator(asset: asset)
             imageGenerator.appliesPreferredTrackTransform = true
+            imageGenerator.maximumSize = CGSize(width: 400, height: 400)
 
             let time = CMTime(seconds: min(1.0, max(0.1, durationSeconds / 2.0)), preferredTimescale: 600)
             if let cgImage = try? imageGenerator.copyCGImage(at: time, actualTime: nil) {
                 let thumbImage = UIImage(cgImage: cgImage)
                 if let thumbData = thumbImage.jpegData(compressionQuality: 0.8) {
-                    try? thumbData.write(to: thumbnailURL, options: .atomic)
+                    try? thumbData.write(to: thumbURL, options: .atomic)
                 }
             }
 
-            self.videoContinuation?.resume(returning: (fileURL: outputFileURL, duration: durationSeconds, thumbnailURL: thumbnailURL))
-            self.videoContinuation = nil
+            await MainActor.run {
+                self.captureState = .idle
+                self.videoContinuation?.resume(returning: (fileURL: outputFileURL, duration: durationSeconds, thumbnailURL: thumbURL))
+                self.videoContinuation = nil
+            }
         }
     }
 }

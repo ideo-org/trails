@@ -60,6 +60,10 @@ struct ScannerView: View {
     // Toast feedback
     @State private var toastMessage: String? = nil
 
+    // Instant In-Session Photo Shutter
+    @State private var isShutterFlashActive: Bool = false
+    @State private var isProcessingPhotoCapture: Bool = false
+
     private var walkedMeters: Int {
         max(1, Int(Float(scannerEngine.footsteps.count) * 0.2))
     }
@@ -168,6 +172,13 @@ struct ScannerView: View {
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
                 .animation(.easeInOut(duration: 0.2), value: toastMessage)
+            }
+
+            // Instant Camera Shutter Flash Overlay
+            if isShutterFlashActive {
+                Color.white
+                    .ignoresSafeArea()
+                    .allowsHitTesting(false)
             }
         }
         .navigationBarHidden(true)
@@ -587,9 +598,7 @@ struct ScannerView: View {
 
             // 3. Secondary: SNAP PHOTO CHECKPOINT
             Button {
-                Haptics.medium()
-                scannerEngine.pauseScanning()
-                showingFullScreenCaptureMode = .photo
+                triggerInstantPhotoCapture()
             } label: {
                 VStack(spacing: 3) {
                     Image(systemName: "camera.fill")
@@ -605,6 +614,13 @@ struct ScannerView: View {
                 .overlay(Circle().stroke(Color.white.opacity(0.25), lineWidth: 1.5))
             }
             .buttonStyle(ScaleButtonStyle())
+            .simultaneousGesture(
+                LongPressGesture(minimumDuration: 0.6).onEnded { _ in
+                    Haptics.heavy()
+                    scannerEngine.pauseScanning()
+                    showingFullScreenCaptureMode = .photo
+                }
+            )
 
             // 4. Secondary: VOICE NOTE CHECKPOINT
             Button {
@@ -689,6 +705,45 @@ struct ScannerView: View {
         persistIncrementalDraft()
         scannerEngine.resumeScanning()
         triggerToast("Checkpoint \(idx) Video Anchored")
+    }
+
+    private func triggerInstantPhotoCapture() {
+        guard !isProcessingPhotoCapture else { return }
+        Haptics.medium()
+
+        isShutterFlashActive = true
+        withAnimation(.easeOut(duration: 0.16)) {
+            isShutterFlashActive = false
+        }
+
+        // Capture instant high-res frame from active AR stream without pausing the live session
+        if let image = scannerEngine.captureCurrentARFrameImage() {
+            isProcessingPhotoCapture = true
+            let id = UUID().uuidString
+            let photoName = "photo_\(id).jpg"
+            let thumbName = "thumb_\(id).jpg"
+            let destURL = TrailPackageStore.shared.mediaDirectory(for: currentTrailId).appendingPathComponent(photoName)
+            let thumbURL = TrailPackageStore.shared.mediaDirectory(for: currentTrailId).appendingPathComponent(thumbName)
+
+            Task.detached(priority: .userInitiated) { [destURL, thumbURL, image] in
+                if let data = image.jpegData(compressionQuality: 0.85) {
+                    try? data.write(to: destURL, options: .atomic)
+                    if let thumb = CameraCaptureEngine.generateDownsampledThumbnail(from: data, maxPixelSize: 400),
+                       let thumbData = thumb.jpegData(compressionQuality: 0.8) {
+                        try? thumbData.write(to: thumbURL, options: .atomic)
+                    }
+                }
+
+                await MainActor.run {
+                    self.isProcessingPhotoCapture = false
+                    self.handleSavedPhotoWaypoint(image: image, fileURL: destURL, thumbURL: thumbURL)
+                }
+            }
+        } else {
+            // Fallback to modal camera if no live AR frame is cached
+            scannerEngine.pauseScanning()
+            showingFullScreenCaptureMode = .photo
+        }
     }
 
     private func handleSavedPhotoWaypoint(image: UIImage, fileURL: URL, thumbURL: URL) {

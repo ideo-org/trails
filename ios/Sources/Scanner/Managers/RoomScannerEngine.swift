@@ -33,12 +33,13 @@ class RoomScannerEngine: NSObject, ObservableObject, RoomCaptureSessionDelegate,
     @Published var currentForwardVector: SIMD2<Float> = SIMD2<Float>(0, -1)
     private let distanceThreshold: Float = 0.2 // meters
     private var lastCapturedPixelBuffer: CVPixelBuffer?
+    private let ciContext = CIContext(options: [CIContextOption.useSoftwareRenderer: false])
 
     public func captureCurrentARFrameImage() -> UIImage? {
-        guard let pixelBuffer = lastCapturedPixelBuffer else { return nil }
-        let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
-        let context = CIContext(options: nil)
-        guard let cgImage = context.createCGImage(ciImage, from: ciImage.extent) else { return nil }
+        let pixelBuffer = captureView?.captureSession.arSession.currentFrame?.capturedImage ?? lastCapturedPixelBuffer
+        guard let buffer = pixelBuffer else { return nil }
+        let ciImage = CIImage(cvPixelBuffer: buffer)
+        guard let cgImage = ciContext.createCGImage(ciImage, from: ciImage.extent) else { return nil }
         return UIImage(cgImage: cgImage, scale: 1.0, orientation: .right)
     }
 
