@@ -88,6 +88,8 @@ public struct RetraceTrailView: View {
     @State private var showingManualCalibrationSheet: Bool = false
     @State private var showingFullScreenCaptureMode: CameraCaptureEngine.CameraMode? = nil
     @State private var toastMessage: String? = nil
+    @State private var isProcessingPhotoCapture: Bool = false
+    @State private var isShutterFlashActive: Bool = false
 
     // Searching animation
     @State private var searchPulseAngle: Double = 0
@@ -525,6 +527,13 @@ public struct RetraceTrailView: View {
                     .padding(.bottom, 220)
                 }
                 .animation(.easeInOut(duration: 0.2), value: toastMessage)
+            }
+
+            // Instant Camera Shutter Flash Overlay
+            if isShutterFlashActive {
+                Color.white
+                    .ignoresSafeArea()
+                    .allowsHitTesting(false)
             }
         }
         .navigationBarHidden(true)
@@ -1501,7 +1510,7 @@ public struct RetraceTrailView: View {
     // MARK: - Waypoint Capture Dock (Exact Parity with ScannerView)
 
     private var waypointCaptureDock: some View {
-        HStack(spacing: 16) {
+        HStack(spacing: 8) {
             // 1. Moments Tray / Thumbnail
             Button {
                 Haptics.light()
@@ -1515,8 +1524,8 @@ public struct RetraceTrailView: View {
                             .fill(Color.black.opacity(0.6))
                             .overlay(
                                 Image(systemName: "photo.stack")
-                                    .font(.system(size: 18))
-                                    .foregroundColor(Color.white.opacity(0.75))
+                                    .font(.system(size: 16))
+                                    .foregroundColor(Color.white.opacity(0.8))
                             )
                     }
 
@@ -1534,95 +1543,122 @@ public struct RetraceTrailView: View {
                             }
                             Spacer()
                         }
-                        .offset(x: 4, y: -4)
+                        .offset(x: 3, y: -3)
                     }
                 }
-                .frame(width: 50, height: 50)
+                .frame(width: 44, height: 44)
                 .clipShape(Circle())
                 .overlay(Circle().stroke(Color.white.opacity(0.25), lineWidth: 1.5))
             }
+            .buttonStyle(ScaleButtonStyle())
 
-            // 2. Primary Prominence: RECORD VIDEO CHECKPOINT
+            Spacer(minLength: 2)
+
+            // 2. QUICK SNAP: Instant 0ms Shutter on Active Trail
             Button {
-                Haptics.medium()
-                scannerEngine.pauseScanning()
-                showingFullScreenCaptureMode = .video
+                triggerInstantPhotoCapture()
             } label: {
-                HStack(spacing: 8) {
+                VStack(spacing: 3) {
                     ZStack {
                         Circle()
-                            .fill(AppColors.terracotta)
-                            .frame(width: 38, height: 38)
-                        Image(systemName: "video.fill")
-                            .font(.system(size: 16, weight: .bold))
+                            .fill(Color.white.opacity(0.18))
+                            .frame(width: 46, height: 46)
+                        Circle()
+                            .stroke(Color.white, lineWidth: 2)
+                            .frame(width: 42, height: 42)
+                        Image(systemName: "camera.fill")
+                            .font(.system(size: 17, weight: .bold))
                             .foregroundColor(.white)
                     }
-
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text("Record Video")
-                            .font(AppFonts.labelUI)
-                            .fontWeight(.bold)
-                            .foregroundColor(.white)
-                        Text("Checkpoint #\(referenceTrail.moments.count + newRetraceMoments.count + 1)")
-                            .font(AppFonts.caption)
-                            .foregroundColor(Color.white.opacity(0.75))
-                    }
-                    .padding(.trailing, 6)
+                    Text("Quick Snap")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundColor(Color.white.opacity(0.9))
                 }
-                .padding(.leading, 6)
-                .padding(.trailing, 14)
-                .frame(height: 52)
-                .background(Color.black.opacity(0.7))
-                .clipShape(Capsule())
-                .overlay(
-                    Capsule().stroke(AppColors.terracotta.opacity(0.8), lineWidth: 1.5)
-                )
             }
             .buttonStyle(ScaleButtonStyle())
 
-            // 3. Secondary: SNAP PHOTO CHECKPOINT
+            Spacer(minLength: 2)
+
+            // 3. ZOOM CAMERA: Optical Telephoto & Full 48MP Smart HDR
             Button {
                 Haptics.medium()
                 scannerEngine.pauseScanning()
                 showingFullScreenCaptureMode = .photo
             } label: {
                 VStack(spacing: 3) {
-                    Image(systemName: "camera.fill")
-                        .font(.system(size: 18))
-                        .foregroundColor(.white)
-                    Text("Photo")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundColor(Color.white.opacity(0.85))
+                    ZStack {
+                        Circle()
+                            .fill(AppColors.mutedBrass.opacity(0.25))
+                            .frame(width: 46, height: 46)
+                        Circle()
+                            .stroke(AppColors.mutedBrass, lineWidth: 2)
+                            .frame(width: 42, height: 42)
+                        Image(systemName: "camera.viewfinder")
+                            .font(.system(size: 18, weight: .semibold))
+                            .foregroundColor(AppColors.mutedBrass)
+                    }
+                    Text("Zoom Cam")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundColor(AppColors.mutedBrass)
                 }
-                .frame(width: 50, height: 50)
-                .background(Color.black.opacity(0.6))
-                .clipShape(Circle())
-                .overlay(Circle().stroke(Color.white.opacity(0.25), lineWidth: 1.5))
             }
             .buttonStyle(ScaleButtonStyle())
 
-            // 4. Secondary: VOICE NOTE CHECKPOINT
+            Spacer(minLength: 2)
+
+            // 4. RECORD VIDEO: 4K UHD Spatial Video
+            Button {
+                Haptics.medium()
+                scannerEngine.pauseScanning()
+                showingFullScreenCaptureMode = .video
+            } label: {
+                VStack(spacing: 3) {
+                    ZStack {
+                        Circle()
+                            .fill(AppColors.terracotta)
+                            .frame(width: 46, height: 46)
+                        Circle()
+                            .stroke(Color.white.opacity(0.55), lineWidth: 2)
+                            .frame(width: 42, height: 42)
+                        Image(systemName: "video.fill")
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundColor(.white)
+                    }
+                    Text("Video")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundColor(Color.white.opacity(0.9))
+                }
+            }
+            .buttonStyle(ScaleButtonStyle())
+
+            Spacer(minLength: 2)
+
+            // 5. VOICE NOTE
             Button {
                 Haptics.light()
                 scannerEngine.pauseScanning()
                 showingVoiceCaptureSheet = true
             } label: {
                 VStack(spacing: 3) {
-                    Image(systemName: "mic.fill")
-                        .font(.system(size: 18))
-                        .foregroundColor(AppColors.mutedBrass)
+                    ZStack {
+                        Circle()
+                            .fill(Color.black.opacity(0.6))
+                            .frame(width: 44, height: 44)
+                        Image(systemName: "mic.fill")
+                            .font(.system(size: 16))
+                            .foregroundColor(AppColors.mutedBrass)
+                    }
+                    .overlay(Circle().stroke(Color.white.opacity(0.2), lineWidth: 1.2))
                     Text("Voice")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundColor(Color.white.opacity(0.85))
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundColor(Color.white.opacity(0.8))
                 }
-                .frame(width: 50, height: 50)
-                .background(Color.black.opacity(0.6))
-                .clipShape(Circle())
-                .overlay(Circle().stroke(Color.white.opacity(0.25), lineWidth: 1.5))
             }
             .buttonStyle(ScaleButtonStyle())
 
-            // 5. Secondary: WRITTEN NOTE CHECKPOINT
+            Spacer(minLength: 2)
+
+            // 6. WRITTEN NOTE
             Button {
                 Haptics.light()
                 scannerEngine.pauseScanning()
@@ -1631,21 +1667,33 @@ public struct RetraceTrailView: View {
                 showingAddNoteSheet = true
             } label: {
                 VStack(spacing: 3) {
-                    Image(systemName: "note.text.badge.plus")
-                        .font(.system(size: 17))
-                        .foregroundColor(.white)
+                    ZStack {
+                        Circle()
+                            .fill(Color.black.opacity(0.6))
+                            .frame(width: 44, height: 44)
+                        Image(systemName: "note.text.badge.plus")
+                            .font(.system(size: 15))
+                            .foregroundColor(.white)
+                    }
+                    .overlay(Circle().stroke(Color.white.opacity(0.2), lineWidth: 1.2))
                     Text("Note")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundColor(Color.white.opacity(0.85))
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundColor(Color.white.opacity(0.8))
                 }
-                .frame(width: 50, height: 50)
-                .background(Color.black.opacity(0.6))
-                .clipShape(Circle())
-                .overlay(Circle().stroke(Color.white.opacity(0.25), lineWidth: 1.5))
             }
             .buttonStyle(ScaleButtonStyle())
         }
-        .padding(.horizontal, 16)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+        .background(
+            Color.black.opacity(0.65)
+                .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 24, style: .continuous)
+                        .stroke(Color.white.opacity(0.12), lineWidth: 1)
+                )
+        )
+        .padding(.horizontal, 10)
     }
 
     // MARK: - Capture Handlers & Anchoring
@@ -1681,6 +1729,49 @@ public struct RetraceTrailView: View {
         newRetraceMoments.append(moment)
         // Note: Do not call scannerEngine.resumeScanning() here - onDismiss handles it after modal exits
         triggerToast("Checkpoint \(idx) Video Anchored ✓")
+    }
+
+    private func triggerInstantPhotoCapture() {
+        guard !isProcessingPhotoCapture else { return }
+        Haptics.medium()
+
+        withAnimation(.linear(duration: 0.05)) {
+            isShutterFlashActive = true
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
+            withAnimation(.easeOut(duration: 0.18)) {
+                isShutterFlashActive = false
+            }
+        }
+
+        // Capture instant high-res frame from active AR stream without pausing the live session
+        if let image = scannerEngine.captureCurrentARFrameImage() {
+            isProcessingPhotoCapture = true
+            let id = UUID().uuidString
+            let photoName = "photo_\(id).jpg"
+            let thumbName = "thumb_\(id).jpg"
+            let destURL = TrailPackageStore.shared.mediaDirectory(for: sessionId).appendingPathComponent(photoName)
+            let thumbURL = TrailPackageStore.shared.mediaDirectory(for: sessionId).appendingPathComponent(thumbName)
+
+            Task.detached(priority: .userInitiated) { [destURL, thumbURL, image] in
+                if let data = image.jpegData(compressionQuality: 0.85) {
+                    try? data.write(to: destURL, options: .atomic)
+                    if let thumb = CameraCaptureEngine.generateDownsampledThumbnail(from: data, maxPixelSize: 400),
+                       let thumbData = thumb.jpegData(compressionQuality: 0.8) {
+                        try? thumbData.write(to: thumbURL, options: .atomic)
+                    }
+                }
+
+                await MainActor.run {
+                    self.isProcessingPhotoCapture = false
+                    self.handleSavedPhotoWaypoint(image: image, fileURL: destURL, thumbURL: thumbURL)
+                }
+            }
+        } else {
+            // Fallback to modal camera if no live AR frame is cached
+            scannerEngine.pauseScanning()
+            showingFullScreenCaptureMode = .photo
+        }
     }
 
     private func handleSavedPhotoWaypoint(image: UIImage, fileURL: URL, thumbURL: URL) {

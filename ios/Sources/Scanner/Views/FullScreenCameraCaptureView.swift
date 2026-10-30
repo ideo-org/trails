@@ -3,8 +3,8 @@
 //  Trails
 //
 //  Dedicated full-screen camera & video recording interface for Trails.
-//  Enables creators to document trail stops/waypoints with full-screen focus,
-//  and seamlessly return to the active trail view once captured or dismissed.
+//  Enables creators to document trail stops/waypoints with optical telephoto zoom,
+//  4K video, 48MP/24MP Smart HDR photos, and seamless in-camera PHOTO/VIDEO mode switching.
 //
 
 import SwiftUI
@@ -14,13 +14,14 @@ public struct FullScreenCameraCaptureView: View {
     @Environment(\.dismiss) private var dismiss
     @ObservedObject var cameraEngine: CameraCaptureEngine
 
-    let mode: CameraCaptureEngine.CameraMode
+    let initialMode: CameraCaptureEngine.CameraMode
     let waypointIndex: Int
     let trailId: String
     let onSavedVideo: (URL, TimeInterval, URL) -> Void
     let onSavedPhoto: (UIImage, URL, URL) -> Void
     let onCancel: () -> Void
 
+    @State private var activeMode: CameraCaptureEngine.CameraMode
     @State private var isFlashActive: Bool = false
     @State private var isProcessing: Bool = false
 
@@ -34,7 +35,8 @@ public struct FullScreenCameraCaptureView: View {
         onCancel: @escaping () -> Void
     ) {
         self.cameraEngine = cameraEngine
-        self.mode = mode
+        self.initialMode = mode
+        self._activeMode = State(initialValue: mode)
         self.waypointIndex = waypointIndex
         self.trailId = trailId
         self.onSavedVideo = onSavedVideo
@@ -60,7 +62,7 @@ public struct FullScreenCameraCaptureView: View {
                 topHUDBar
 
                 // Microphone Warning (if recording video without audio permission)
-                if let warning = cameraEngine.microphoneWarningMessage, mode == .video {
+                if let warning = cameraEngine.microphoneWarningMessage, activeMode == .video {
                     HStack(spacing: 6) {
                         Image(systemName: "mic.slash.fill")
                             .font(.system(size: 11))
@@ -77,9 +79,9 @@ public struct FullScreenCameraCaptureView: View {
 
                 Spacer()
 
-                // Quick Zoom Dock [ 1x | 2x | 3x ]
+                // Quick Zoom Dock [ .5x | 1x | 2x | 3x | 5x ]
                 zoomDock
-                    .padding(.bottom, 20)
+                    .padding(.bottom, 16)
 
                 // Bottom Shutter & Controls Console
                 bottomShutterConsole
@@ -93,7 +95,7 @@ public struct FullScreenCameraCaptureView: View {
                         ProgressView()
                             .progressViewStyle(CircularProgressViewStyle(tint: .white))
                             .scaleEffect(1.3)
-                        Text(mode == .video ? "Anchoring Video Waypoint..." : "Anchoring Photo Waypoint...")
+                        Text(activeMode == .video ? "Anchoring Video Waypoint..." : "Anchoring Photo Waypoint...")
                             .font(AppFonts.labelSpatial)
                             .foregroundColor(.white)
                     }
@@ -106,8 +108,13 @@ public struct FullScreenCameraCaptureView: View {
         }
         .navigationBarHidden(true)
         .onAppear {
-            cameraEngine.cameraMode = mode
+            cameraEngine.cameraMode = activeMode
             cameraEngine.setupAndStart()
+        }
+        .onDisappear {
+            Task {
+                await cameraEngine.teardownAsync()
+            }
         }
     }
 
@@ -121,14 +128,16 @@ public struct FullScreenCameraCaptureView: View {
                 if cameraEngine.captureState == .recordingVideo {
                     Task {
                         _ = try? await cameraEngine.stopVideoRecording()
-                        cameraEngine.stop()
+                        await cameraEngine.stopAsync()
                         onCancel()
                         dismiss()
                     }
                 } else {
-                    cameraEngine.stop()
-                    onCancel()
-                    dismiss()
+                    Task {
+                        await cameraEngine.stopAsync()
+                        onCancel()
+                        dismiss()
+                    }
                 }
             } label: {
                 HStack(spacing: 6) {
@@ -161,9 +170,9 @@ public struct FullScreenCameraCaptureView: View {
                         .foregroundColor(AppColors.terracotta)
                 } else {
                     Circle()
-                        .fill(mode == .video ? AppColors.terracotta : AppColors.mutedBrass)
+                        .fill(activeMode == .video ? AppColors.terracotta : AppColors.mutedBrass)
                         .frame(width: 7, height: 7)
-                    Text("WAYPOINT \(waypointIndex) · \(mode.rawValue)")
+                    Text("WAYPOINT \(waypointIndex) · \(activeMode.rawValue)")
                         .font(AppFonts.labelSpatial)
                         .fontWeight(.semibold)
                         .foregroundColor(.white)
@@ -215,14 +224,14 @@ public struct FullScreenCameraCaptureView: View {
 
     private var zoomDock: some View {
         HStack(spacing: 6) {
-            ForEach([1.0, 2.0, 3.0], id: \.self) { factor in
+            ForEach(cameraEngine.availableZoomFactors, id: \.self) { factor in
                 Button {
                     Haptics.light()
                     withAnimation(.spring(response: 0.25)) {
-                        cameraEngine.setZoom(factor: CGFloat(factor))
+                        cameraEngine.setZoom(factor: factor)
                     }
                 } label: {
-                    Text(String(format: "%.0fx", factor))
+                    Text(factor == 0.5 ? ".5" : String(format: "%.0f", factor))
                         .font(AppFonts.labelSpatial)
                         .fontWeight(.bold)
                         .foregroundColor(abs(cameraEngine.zoomFactor - factor) < 0.2 ? AppColors.primary : .white)
@@ -240,12 +249,17 @@ public struct FullScreenCameraCaptureView: View {
     // MARK: - Bottom Shutter Console
 
     private var bottomShutterConsole: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 14) {
+            // In-Camera Mode Switcher [ PHOTO | VIDEO ]
+            if cameraEngine.captureState != .recordingVideo {
+                modeSwitcher
+            }
+
             HStack {
                 Spacer()
 
                 // Primary Shutter Button
-                if mode == .video {
+                if activeMode == .video {
                     videoShutterButton
                 } else {
                     photoShutterButton
@@ -254,10 +268,10 @@ public struct FullScreenCameraCaptureView: View {
                 Spacer()
             }
 
-            Text(mode == .video ? (cameraEngine.captureState == .recordingVideo ? "Tap red square to finish & anchor waypoint" : "Tap to record checkpoint video") : "Tap to snap photo & anchor waypoint")
+            Text(activeMode == .video ? (cameraEngine.captureState == .recordingVideo ? "Tap red square to finish & anchor waypoint" : "Tap to record checkpoint video") : "Tap to snap photo & anchor waypoint")
                 .font(AppFonts.caption)
                 .foregroundColor(Color.white.opacity(0.75))
-                .padding(.top, 4)
+                .padding(.top, 2)
         }
         .padding(.horizontal, 24)
         .padding(.bottom, 36)
@@ -269,6 +283,55 @@ public struct FullScreenCameraCaptureView: View {
             )
             .ignoresSafeArea()
         )
+    }
+
+    // MARK: - Mode Switcher
+
+    private var modeSwitcher: some View {
+        HStack(spacing: 6) {
+            Button {
+                Haptics.selection()
+                if activeMode != .photo {
+                    withAnimation(.easeInOut(duration: 0.18)) {
+                        activeMode = .photo
+                    }
+                    cameraEngine.cameraMode = .photo
+                    cameraEngine.setupAndStart()
+                }
+            } label: {
+                Text("PHOTO")
+                    .font(AppFonts.labelSpatial)
+                    .fontWeight(.bold)
+                    .foregroundColor(activeMode == .photo ? AppColors.primary : Color.white.opacity(0.65))
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 6)
+                    .background(activeMode == .photo ? Color.white : Color.clear)
+                    .clipShape(Capsule())
+            }
+
+            Button {
+                Haptics.selection()
+                if activeMode != .video {
+                    withAnimation(.easeInOut(duration: 0.18)) {
+                        activeMode = .video
+                    }
+                    cameraEngine.cameraMode = .video
+                    cameraEngine.setupAndStart()
+                }
+            } label: {
+                Text("VIDEO")
+                    .font(AppFonts.labelSpatial)
+                    .fontWeight(.bold)
+                    .foregroundColor(activeMode == .video ? Color.white : Color.white.opacity(0.65))
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 6)
+                    .background(activeMode == .video ? AppColors.terracotta : Color.clear)
+                    .clipShape(Capsule())
+            }
+        }
+        .padding(3)
+        .background(Color.black.opacity(0.55))
+        .clipShape(Capsule())
     }
 
     // MARK: - Shutter Buttons
@@ -324,13 +387,13 @@ public struct FullScreenCameraCaptureView: View {
             Task {
                 do {
                     let result = try await cameraEngine.stopVideoRecording()
-                    cameraEngine.stop()
+                    await cameraEngine.stopAsync()
                     isProcessing = false
                     onSavedVideo(result.fileURL, result.duration, result.thumbnailURL)
                     dismiss()
                 } catch {
                     isProcessing = false
-                    cameraEngine.stop()
+                    await cameraEngine.stopAsync()
                     dismiss()
                 }
             }
@@ -365,13 +428,13 @@ public struct FullScreenCameraCaptureView: View {
         Task {
             do {
                 let result = try await cameraEngine.capturePhoto(destinationURL: destURL, thumbnailURL: thumbURL)
-                cameraEngine.stop()
+                await cameraEngine.stopAsync()
                 isProcessing = false
                 onSavedPhoto(result.image, result.fileURL, result.thumbnailURL)
                 dismiss()
             } catch {
                 isProcessing = false
-                cameraEngine.stop()
+                await cameraEngine.stopAsync()
                 dismiss()
             }
         }

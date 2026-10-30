@@ -534,22 +534,39 @@ function rankDevice(device: XcDevice) {
 }
 
 function findDevice(devices: XcDevice[], requested: string) {
-	const physicalDevices = devices
-		.filter(isPhysicalIOSDevice)
+	const allPhysical = devices.filter(
+		(d) =>
+			d.simulator !== true &&
+			typeof d.identifier === "string" &&
+			typeof d.platform === "string" &&
+			d.platform.toLowerCase().includes("iphoneos"),
+	);
+
+	const physicalDevices = allPhysical
+		.filter((d) => d.available === true)
 		.sort((left, right) => rankDevice(left) - rankDevice(right));
 
 	if (!requested) {
-		return physicalDevices[0];
+		return physicalDevices[0] ?? allPhysical[0];
 	}
 
 	const requestedLower = requested.toLowerCase();
-	return physicalDevices.find((device) => {
-		return (
-			device.identifier === requested ||
-			device.name?.toLowerCase() === requestedLower ||
-			device.name?.toLowerCase().includes(requestedLower)
-		);
-	});
+	return (
+		physicalDevices.find((device) => {
+			return (
+				device.identifier === requested ||
+				device.name?.toLowerCase() === requestedLower ||
+				device.name?.toLowerCase().includes(requestedLower)
+			);
+		}) ??
+		allPhysical.find((device) => {
+			return (
+				device.identifier === requested ||
+				device.name?.toLowerCase() === requestedLower ||
+				device.name?.toLowerCase().includes(requestedLower)
+			);
+		})
+	);
 }
 
 async function readDevices() {
@@ -562,7 +579,7 @@ async function readDevices() {
 }
 
 async function readSimulators(): Promise<XcDevice[]> {
-	const stdout = await capture(["xcrun", "simctl", "list", "--json", "devices"]);
+	const stdout = await capture(["xcrun", "simctl", "list", "--json", "devices", "available"]);
 	const parsed = JSON.parse(stdout);
 	const devices: XcDevice[] = [];
 	for (const runtime of Object.values(parsed.devices) as any[]) {
@@ -587,13 +604,13 @@ function findSimulator(simulators: XcDevice[], requested?: string) {
 	}
 	if (requested) {
 		const requestedLower = requested.toLowerCase();
-		return simulators.find((device) => {
-			return (
-				device.identifier === requested ||
-				device.name?.toLowerCase() === requestedLower ||
-				device.name?.toLowerCase().includes(requestedLower)
-			);
-		});
+		return (
+			simulators.find((d) => d.identifier === requested) ??
+			simulators.find((d) => d.name?.toLowerCase() === requestedLower && isBootedSimulator(d)) ??
+			simulators.find((d) => d.name?.toLowerCase() === requestedLower) ??
+			simulators.find((d) => d.name?.toLowerCase().includes(requestedLower) && isBootedSimulator(d)) ??
+			simulators.find((d) => d.name?.toLowerCase().includes(requestedLower))
+		);
 	}
 	return simulators.find(isBootedSimulator) ?? simulators[0];
 }
@@ -643,6 +660,9 @@ function resetSourcePackagesCache() {
 }
 
 async function resolvePackageDependencies() {
+	if (!SHOULD_RESET_SOURCE_PACKAGES && existsSync(path.join(SOURCE_PACKAGES_DIR, "Package.resolved"))) {
+		return;
+	}
 	resetSourcePackagesCache();
 	mkdirSync(DERIVED_DATA, { recursive: true });
 	mkdirSync(SOURCE_PACKAGES_DIR, { recursive: true });
@@ -662,9 +682,10 @@ async function buildApp(
 	destination: string,
 	configuration: string,
 	resultBundlePath: string,
+	isSimulator = false,
 ) {
 	await resolvePackageDependencies();
-	await run([
+	const buildArgs = [
 		"xcodebuild",
 		"build",
 		"-scheme",
@@ -682,9 +703,11 @@ async function buildApp(
 		`TRACKER_HOST=${process.env.TRACKER_HOST || "vm.ideomind.org"}`,
 		"-resultBundlePath",
 		resultBundlePath,
-		"-allowProvisioningUpdates",
-		"-allowProvisioningDeviceRegistration",
-	]);
+	];
+	if (!isSimulator) {
+		buildArgs.push("-allowProvisioningUpdates", "-allowProvisioningDeviceRegistration");
+	}
+	await run(buildArgs);
 }
 
 async function runUITests(
@@ -844,7 +867,7 @@ async function main() {
 			? `Building ${SCHEME} (${CONFIGURATION}) for generic iOS device...`
 			: `Building ${SCHEME} (${CONFIGURATION}) for ${device!.name ?? device!.identifier}...`,
 	);
-	await buildApp(destination, CONFIGURATION, runArtifacts.buildResultBundlePath);
+	await buildApp(destination, CONFIGURATION, runArtifacts.buildResultBundlePath, isSimulator);
 	if (existsSync(runArtifacts.buildResultBundlePath)) {
 		await printArtifact(
 			"xcodebuild result bundle",
