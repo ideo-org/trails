@@ -297,7 +297,7 @@ public struct PublicTrailDetailView: View {
             switch downloadStage {
             case .notDownloaded:
                 Button {
-                    Haptics.impact(.medium)
+                    Haptics.medium()
                     downloadManager.startDownload(record: record)
                 } label: {
                     HStack(spacing: 8) {
@@ -342,7 +342,7 @@ public struct PublicTrailDetailView: View {
             case .ready:
                 VStack(spacing: 8) {
                     Button {
-                        Haptics.impact(.medium)
+                        Haptics.medium()
                         showingOpenTrailViewer = true
                     } label: {
                         HStack(spacing: 8) {
@@ -376,7 +376,7 @@ public struct PublicTrailDetailView: View {
                     } label: {
                         Text("Remove Download")
                             .font(AppFonts.caption)
-                            .foregroundColor(AppColors.errorRed)
+                            .foregroundColor(AppColors.error)
                     }
                 }
 
@@ -384,7 +384,7 @@ public struct PublicTrailDetailView: View {
                 VStack(spacing: 6) {
                     Text(reason)
                         .font(AppFonts.caption)
-                        .foregroundColor(AppColors.errorRed)
+                        .foregroundColor(AppColors.error)
                         .multilineTextAlignment(.center)
 
                     Button {
@@ -408,7 +408,7 @@ public struct PublicTrailDetailView: View {
                         .font(AppFonts.labelUI)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 14)
-                        .background(AppColors.accentOrange)
+                        .background(AppColors.terracotta)
                         .foregroundColor(.white)
                         .clipShape(Capsule())
                 }

@@ -23,7 +23,7 @@ public struct LogosPublicationReceipt: Codable, Identifiable, Sendable {
     public let verifiedAt: String
 }
 
-public struct LogosCapabilities: Codable, Sendable {
+public struct LogosCapabilities: Codable, Hashable, Sendable {
     public let hasPhotos: Bool
     public let hasVideos: Bool
     public let hasVoice: Bool

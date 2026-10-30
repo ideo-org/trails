@@ -4,9 +4,15 @@ import Combine
 
 @MainActor
 final class TrailsLocationManager: NSObject, ObservableObject {
+    public static let shared = TrailsLocationManager()
+
     @Published private(set) var authorizationStatus: CLAuthorizationStatus
     @Published private(set) var currentLocation: CLLocation?
     @Published private(set) var currentHeading: Double?
+
+    public var lastKnownLocation: CLLocation? {
+        currentLocation
+    }
 
     private let manager = CLLocationManager()
 
