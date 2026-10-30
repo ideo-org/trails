@@ -320,6 +320,9 @@ class RoomScannerEngine: NSObject, ObservableObject, RoomCaptureSessionDelegate,
 
         let buffer = frame.capturedImage
 
+        // Forward to in-line AR video recorder if video recording is active
+        ARVideoRecorder.shared.appendPixelBuffer(buffer, at: frame.timestamp)
+
         Task { @MainActor in
             guard self.isScanning, !self.isSimulated else { return }
 

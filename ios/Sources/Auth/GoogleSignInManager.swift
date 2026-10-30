@@ -67,10 +67,11 @@ class GoogleSignInManager {
         ensureConfiguration()
 
         guard GIDSignIn.sharedInstance.configuration != nil else {
+            let bundleId = Bundle.main.bundleIdentifier ?? "this app"
             throw NSError(
                 domain: "GoogleSignInManager",
                 code: -1,
-                userInfo: [NSLocalizedDescriptionKey: "Google Sign-In is not configured yet for com.logos.trails in Firebase. You can continue using your Username!"]
+                userInfo: [NSLocalizedDescriptionKey: "Google Sign-In is not configured yet for \(bundleId) in Firebase. You can continue using your Username!"]
             )
         }
 

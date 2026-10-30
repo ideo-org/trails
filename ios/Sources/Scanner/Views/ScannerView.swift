@@ -26,6 +26,7 @@ struct ScannerView: View {
     @StateObject private var cameraEngine = CameraCaptureEngine()
     @StateObject private var locationManager = TrailsLocationManager()
     @StateObject private var audioManager = AudioManager.shared
+    @StateObject private var arVideoRecorder = ARVideoRecorder.shared
 
     // Active Trail Record
     @State private var currentTrailId: String = UUID().uuidString
@@ -49,8 +50,9 @@ struct ScannerView: View {
     @State private var noteTitle: String = ""
     @State private var noteBody: String = ""
 
-    // In-line Voice Recording (keeping camera / view active)
+    // In-line Voice & Video Recording (keeping camera / view & trail tracking active)
     @State private var isInLineVoiceRecording: Bool = false
+    @State private var isInLineVideoRecording: Bool = false
 
     // Starting Point Reference Frame / Vantage State
     @State private var startFramePhotoFileName: String? = nil
@@ -436,6 +438,8 @@ struct ScannerView: View {
             // 1. Checkpoint Sequence Ribbon Along Path
             if isInLineVoiceRecording {
                 inLineVoiceRecordingBar
+            } else if isInLineVideoRecording {
+                inLineVideoRecordingBar
             } else {
                 checkpointRibbon
             }
@@ -452,6 +456,55 @@ struct ScannerView: View {
             )
             .ignoresSafeArea()
         )
+    }
+
+    // MARK: - In-Line Video Recording Bar (Keeps camera viewport & trail tracking live)
+
+    private var inLineVideoRecordingBar: some View {
+        HStack(spacing: 12) {
+            Circle()
+                .fill(AppColors.terracotta)
+                .frame(width: 10, height: 10)
+                .overlay(
+                    Circle()
+                        .stroke(AppColors.terracotta.opacity(0.5), lineWidth: 3)
+                        .scaleEffect(1.6)
+                )
+
+            Text("RECORDING VIDEO")
+                .font(AppFonts.labelSpatial)
+                .foregroundColor(AppColors.terracotta)
+                .tracking(1.2)
+
+            Spacer()
+
+            let m = Int(arVideoRecorder.recordingDuration) / 60
+            let s = Int(arVideoRecorder.recordingDuration) % 60
+            Text(String(format: "%02d:%02d", m, s))
+                .font(AppFonts.labelMetric)
+                .foregroundColor(.white)
+
+            Button {
+                toggleInLineVideoRecording()
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "checkmark.circle.fill")
+                    Text("Done")
+                }
+                .font(AppFonts.labelUI)
+                .foregroundColor(.white)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 4)
+                .background(AppColors.terracotta)
+                .clipShape(Capsule())
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(Color.black.opacity(0.85))
+        .clipShape(Capsule())
+        .overlay(Capsule().stroke(AppColors.terracotta.opacity(0.4), lineWidth: 1))
+        .padding(.horizontal, 16)
     }
 
     // MARK: - In-Line Voice Recording Bar (Keeps camera viewport visible)
@@ -668,26 +721,24 @@ struct ScannerView: View {
 
             Spacer(minLength: 2)
 
-            // 4. RECORD VIDEO: 4K UHD Spatial Video
+            // 4. RECORD VIDEO - Live In-situ recording with continuous trail & odometry tracking
             Button {
-                Haptics.medium()
-                scannerEngine.pauseScanning()
-                showingFullScreenCaptureMode = .video
+                toggleInLineVideoRecording()
             } label: {
                 ZStack {
                     Circle()
-                        .fill(AppColors.terracotta)
+                        .fill(isInLineVideoRecording ? AppColors.terracotta : Color.black.opacity(0.6))
                         .frame(width: 46, height: 46)
                     Circle()
-                        .stroke(Color.white.opacity(0.55), lineWidth: 2)
+                        .stroke(isInLineVideoRecording ? AppColors.terracotta : Color.white.opacity(0.55), lineWidth: 2)
                         .frame(width: 42, height: 42)
-                    Image(systemName: "video.fill")
+                    Image(systemName: isInLineVideoRecording ? "stop.fill" : "video.fill")
                         .font(.system(size: 16, weight: .bold))
                         .foregroundColor(.white)
                 }
             }
             .buttonStyle(ScaleButtonStyle())
-            .accessibilityLabel("Record Video")
+            .accessibilityLabel(isInLineVideoRecording ? "Stop Video Recording" : "Record Video")
 
             Spacer(minLength: 2)
 
@@ -902,6 +953,34 @@ struct ScannerView: View {
                 .appendingPathComponent("voice_\(UUID().uuidString).m4a")
             if audioManager.startRecording(destinationURL: dest) {
                 isInLineVoiceRecording = true
+                Haptics.medium()
+            }
+        }
+    }
+
+    private func toggleInLineVideoRecording() {
+        Haptics.light()
+        if isInLineVideoRecording {
+            isInLineVideoRecording = false
+            Task {
+                do {
+                    let result = try await arVideoRecorder.stopRecording()
+                    await MainActor.run {
+                        handleSavedVideoWaypoint(fileURL: result.url, duration: result.duration, thumbURL: result.thumbURL)
+                    }
+                } catch {
+                    print("Failed to finalize in-situ AR video recording: \(error)")
+                }
+            }
+        } else {
+            let id = UUID().uuidString
+            let videoURL = TrailPackageStore.shared.mediaDirectory(for: currentTrailId)
+                .appendingPathComponent("video_\(id).mp4")
+            let thumbURL = TrailPackageStore.shared.mediaDirectory(for: currentTrailId)
+                .appendingPathComponent("thumb_\(id).jpg")
+
+            if arVideoRecorder.startRecording(destinationURL: videoURL, thumbnailURL: thumbURL) {
+                isInLineVideoRecording = true
                 Haptics.medium()
             }
         }
@@ -1139,6 +1218,9 @@ struct ScannerView: View {
         cameraEngine.stop()
         if audioManager.isRecording {
             _ = audioManager.stopRecording()
+        }
+        if arVideoRecorder.isRecording {
+            Task { try? await arVideoRecorder.stopRecording() }
         }
     }
 

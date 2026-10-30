@@ -16,7 +16,10 @@ struct WidgetHelper {
     // 1. Main app target -> Signing & Capabilities -> App Groups
     // 2. Widget extension target -> Signing & Capabilities -> App Groups
     // Format: group.<bundle-id>.widgets
-    private static let appGroupIdentifier = "group.com.logos.trails.widgets"
+    private static var appGroupIdentifier: String {
+        let bundleId = Bundle.main.bundleIdentifier ?? "com.app2020.iportal"
+        return "group.\(bundleId).widgets"
+    }
 
     private static let streakDataKey = "widgetStreakData"
 

@@ -132,7 +132,8 @@ extension AppleSignInManager {
             if nsError.code == ASAuthorizationError.canceled.rawValue {
                 return nil // User cancelled
             }
-            return "Apple Sign-In is not configured yet for com.logos.trails. You can continue using your Username!"
+            let bundleId = Bundle.main.bundleIdentifier ?? "this app"
+            return "Apple Sign-In is not configured yet for \(bundleId). You can continue using your Username!"
         }
         return error.localizedDescription
     }
