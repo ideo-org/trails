@@ -8,6 +8,7 @@
 //
 
 import SwiftUI
+import CoreLocation
 
 public struct PlaceCollectionView: View {
     @Environment(\.dismiss) private var dismiss

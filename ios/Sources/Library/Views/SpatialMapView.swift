@@ -7,6 +7,7 @@
 
 import SwiftUI
 import SwiftData
+import CoreLocation
 
 // Fallback to MapKit if GoogleMaps isn't compiled in the target
 #if canImport(GoogleMaps)
