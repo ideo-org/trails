@@ -49,6 +49,7 @@ public struct RetraceTrailView: View {
     @State private var showingMomentsTray: Bool = false
     @State private var noteTitle: String = ""
     @State private var noteBody: String = ""
+    @State private var isInLineVoiceRecording: Bool = false
 
     // PRD v0.3.1 Positioning Modes & Alignment State Machine
     @State private var positioningMode: String = "localSpatialAligned" // "localSpatialAligned", "localSpatialUnaligned", "manualFollowAlong", "geographic"
@@ -529,9 +530,9 @@ public struct RetraceTrailView: View {
                 .animation(.easeInOut(duration: 0.2), value: toastMessage)
             }
 
-            // Instant Camera Shutter Flash Overlay
+            // Instant Camera Shutter Flash Overlay - subtle vignette pulse instead of blinding full-screen white
             if isShutterFlashActive {
-                Color.white
+                Color.black.opacity(0.3)
                     .ignoresSafeArea()
                     .allowsHitTesting(false)
             }
@@ -1387,7 +1388,11 @@ public struct RetraceTrailView: View {
             .padding(.horizontal, 16)
 
             // 1. Checkpoints Ribbon
-            checkpointRibbon
+            if isInLineVoiceRecording {
+                inLineVoiceRecordingBar
+            } else {
+                checkpointRibbon
+            }
 
             // 2. Waypoint Capture Action Dock (Video, Photo, Mic, Note)
             waypointCaptureDock
@@ -1401,6 +1406,55 @@ public struct RetraceTrailView: View {
             )
             .ignoresSafeArea()
         )
+    }
+
+    // MARK: - In-Line Voice Recording Bar (Keeps camera viewport visible)
+
+    private var inLineVoiceRecordingBar: some View {
+        HStack(spacing: 12) {
+            Circle()
+                .fill(AppColors.terracotta)
+                .frame(width: 10, height: 10)
+                .overlay(
+                    Circle()
+                        .stroke(AppColors.terracotta.opacity(0.5), lineWidth: 3)
+                        .scaleEffect(1.6)
+                )
+
+            Text("RECORDING OBSERVATION")
+                .font(AppFonts.labelSpatial)
+                .foregroundColor(AppColors.terracotta)
+                .tracking(1.2)
+
+            Spacer()
+
+            let m = Int(audioManager.recordingDuration) / 60
+            let s = Int(audioManager.recordingDuration) % 60
+            Text(String(format: "%02d:%02d", m, s))
+                .font(AppFonts.labelMetric)
+                .foregroundColor(.white)
+
+            Button {
+                toggleInLineVoiceRecording()
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "checkmark.circle.fill")
+                    Text("Done")
+                }
+                .font(AppFonts.labelUI)
+                .foregroundColor(.white)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 4)
+                .background(AppColors.terracotta)
+                .clipShape(Capsule())
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(Color.black.opacity(0.85))
+        .clipShape(Capsule())
+        .overlay(Capsule().stroke(AppColors.terracotta.opacity(0.4), lineWidth: 1))
+        .padding(.horizontal, 16)
     }
 
     // MARK: - Checkpoints Ribbon
@@ -1633,25 +1687,23 @@ public struct RetraceTrailView: View {
 
             Spacer(minLength: 2)
 
-            // 5. VOICE NOTE
+            // 5. VOICE NOTE - Live In-situ recording without obscuring camera view
             Button {
-                Haptics.light()
-                scannerEngine.pauseScanning()
-                showingVoiceCaptureSheet = true
+                toggleInLineVoiceRecording()
             } label: {
                 VStack(spacing: 3) {
                     ZStack {
                         Circle()
-                            .fill(Color.black.opacity(0.6))
+                            .fill(isInLineVoiceRecording ? AppColors.terracotta : Color.black.opacity(0.6))
                             .frame(width: 44, height: 44)
-                        Image(systemName: "mic.fill")
+                        Image(systemName: isInLineVoiceRecording ? "stop.fill" : "mic.fill")
                             .font(.system(size: 16))
-                            .foregroundColor(AppColors.mutedBrass)
+                            .foregroundColor(isInLineVoiceRecording ? .white : AppColors.mutedBrass)
                     }
-                    .overlay(Circle().stroke(Color.white.opacity(0.2), lineWidth: 1.2))
-                    Text("Voice")
+                    .overlay(Circle().stroke(isInLineVoiceRecording ? AppColors.terracotta : Color.white.opacity(0.2), lineWidth: 1.2))
+                    Text(isInLineVoiceRecording ? "Stop" : "Voice")
                         .font(.system(size: 9, weight: .semibold))
-                        .foregroundColor(Color.white.opacity(0.8))
+                        .foregroundColor(isInLineVoiceRecording ? AppColors.terracotta : Color.white.opacity(0.8))
                 }
             }
             .buttonStyle(ScaleButtonStyle())
@@ -1832,6 +1884,23 @@ public struct RetraceTrailView: View {
         newRetraceMoments.append(moment)
         scannerEngine.resumeScanning()
         triggerToast("Checkpoint \(idx) Voice Anchored ✓")
+    }
+
+    private func toggleInLineVoiceRecording() {
+        Haptics.light()
+        if isInLineVoiceRecording {
+            isInLineVoiceRecording = false
+            if let result = audioManager.stopRecording() {
+                handleSavedVoiceWaypoint(audioURL: result.url, duration: result.duration)
+            }
+        } else {
+            let dest = TrailPackageStore.shared.mediaDirectory(for: sessionId)
+                .appendingPathComponent("voice_\(UUID().uuidString).m4a")
+            if audioManager.startRecording(destinationURL: dest) {
+                isInLineVoiceRecording = true
+                Haptics.medium()
+            }
+        }
     }
 
     private func saveTextMoment(title: String, text: String) {

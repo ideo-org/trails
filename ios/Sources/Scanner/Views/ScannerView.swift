@@ -910,6 +910,23 @@ struct ScannerView: View {
         triggerToast("Checkpoint \(idx) Voice Anchored")
     }
 
+    private func toggleInLineVoiceRecording() {
+        Haptics.light()
+        if isInLineVoiceRecording {
+            isInLineVoiceRecording = false
+            if let result = audioManager.stopRecording() {
+                handleSavedVoiceWaypoint(audioURL: result.url, duration: result.duration)
+            }
+        } else {
+            let dest = TrailPackageStore.shared.mediaDirectory(for: currentTrailId)
+                .appendingPathComponent("voice_\(UUID().uuidString).m4a")
+            if audioManager.startRecording(destinationURL: dest) {
+                isInLineVoiceRecording = true
+                Haptics.medium()
+            }
+        }
+    }
+
     private func saveTextMoment(title: String, text: String) {
         let id = UUID().uuidString
         let idx = recordedMoments.count + 1
