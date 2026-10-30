@@ -764,7 +764,7 @@ public struct DiscoverView: View {
                     }
                 }
 
-                if viewModel.creators.isEmpty {
+                if viewModel.displayedCreators.isEmpty {
                     Section {
                         Text("No other creators discovered yet.")
                             .font(AppFonts.caption)
@@ -772,7 +772,7 @@ public struct DiscoverView: View {
                     }
                 } else {
                     Section("Published Creators") {
-                        ForEach(viewModel.creators) { creator in
+                        ForEach(viewModel.displayedCreators) { creator in
                             Button {
                                 viewModel.setCreatorFilter(creator)
                                 showingCreatorFilterSheet = false
@@ -795,6 +795,22 @@ public struct DiscoverView: View {
                                     }
                                 }
                             }
+                        }
+                    }
+                }
+
+                Section("Testing & Samples") {
+                    Toggle(isOn: Binding(
+                        get: { viewModel.state.includeTestTrails },
+                        set: { viewModel.setIncludeTestTrails($0) }
+                    )) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Include test trails & creators")
+                                .font(AppFonts.bodyMedium)
+                                .foregroundColor(AppColors.deepInk)
+                            Text("Shows seed records and @test-* accounts")
+                                .font(AppFonts.caption)
+                                .foregroundColor(AppColors.onSurfaceVariant)
                         }
                     }
                 }

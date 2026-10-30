@@ -20,6 +20,7 @@ import AuthenticationServices
 public struct UserProfileView: View {
     @ObservedObject var authManager = AuthManager.shared
     @ObservedObject var dataStore = TrailsDataStore.shared
+    @AppStorage("trails_discover_include_test_trails") private var includeTestTrails: Bool = false
 
     @State private var showingEditProfile: Bool = false
     @State private var showingLoginSheet: Bool = false
@@ -284,6 +285,33 @@ public struct UserProfileView: View {
                             .padding(.horizontal, 20)
                         }
 
+                        // MARK: - Testing & Discover Feeds
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("Discovery Feeds")
+                                .font(AppFonts.headlineSmall)
+                                .foregroundColor(AppColors.deepInk)
+                                .padding(.horizontal, 20)
+
+                            VStack(spacing: 0) {
+                                Toggle(isOn: $includeTestTrails) {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text("Show Test Trails in Discover")
+                                            .font(AppFonts.bodyMedium)
+                                            .foregroundColor(AppColors.deepInk)
+                                        Text("Includes sample seed records and @test-* creators")
+                                            .font(AppFonts.caption)
+                                            .foregroundColor(AppColors.onSurfaceVariant)
+                                    }
+                                }
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 14)
+                            }
+                            .background(AppColors.pureWhite)
+                            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                            .shadow(color: Color.black.opacity(0.03), radius: 6, x: 0, y: 2)
+                            .padding(.horizontal, 20)
+                        }
+
                         Spacer(minLength: 40)
                     }
                 }
@@ -346,8 +374,12 @@ public struct UserProfileView: View {
                                     .foregroundColor(AppColors.forestGreen)
                             }
 
-                            if let email = authManager.user?.email, !email.isEmpty {
+                            if let email = authManager.effectiveEmail, !email.isEmpty {
                                 Text(email)
+                                    .font(AppFonts.caption)
+                                    .foregroundColor(AppColors.outline)
+                            } else if authManager.isAppleLinked {
+                                Text("Apple ID Verified")
                                     .font(AppFonts.caption)
                                     .foregroundColor(AppColors.outline)
                             }
@@ -507,6 +539,20 @@ public struct UserProfileView: View {
                                 .foregroundColor(AppColors.outline)
                             }
                             .padding(.top, 4)
+
+                            // Sign In to Existing Account Sheet
+                            Button {
+                                Haptics.medium()
+                                showingLoginSheet = true
+                            } label: {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "rectangle.portrait.and.arrow.right")
+                                    Text("Sign in with Google or Apple")
+                                }
+                                .font(AppFonts.labelSpatial)
+                                .foregroundColor(AppColors.forestGreen)
+                            }
+                            .padding(.top, 2)
                         }
                     }
                 }

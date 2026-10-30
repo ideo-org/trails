@@ -15,6 +15,7 @@ public struct DiscoveryState: Equatable {
     public var areaFilter: DiscoveryAreaFilter = .all
     public var selectedCreator: CreatorRecord? = nil
     public var bookmarkedOnly: Bool = false
+    public var includeTestTrails: Bool = false
     public var query: String = ""
     public var sort: DiscoverySort = .recentlyPublished
     public var selectedTrailId: String? = nil
@@ -45,12 +46,14 @@ public final class DiscoverViewModel: ObservableObject {
     @Published public var errorMessage: String? = nil
     @Published public var isSearching: Bool = false
 
+    private static let includeTestTrailsKey = "trails_discover_include_test_trails"
     private let client = TrailsLogosClient.shared
     private let bookmarksStore = BookmarksStore.shared
     private let locationManager = TrailsLocationManager.shared
     private var cancellables = Set<AnyCancellable>()
 
     public init() {
+        self.state.includeTestTrails = UserDefaults.standard.bool(forKey: Self.includeTestTrailsKey)
         self.availablePlaces = TrailsDataStore.shared.places
 
         // React to bookmark changes
@@ -99,10 +102,47 @@ public final class DiscoverViewModel: ObservableObject {
         }
     }
 
+    // MARK: - Test & Dummy Trails Filter Logic
+
+    public static func isTestRecord(_ record: DiscoveryRecord) -> Bool {
+        let u = record.username.lowercased()
+        let c = record.creatorId.lowercased()
+        let t = record.trailId.lowercased()
+        let title = record.title.lowercased()
+        return u.hasPrefix("test-") || u.hasPrefix("test_") ||
+               c.hasPrefix("test-") || c.hasPrefix("test_") || c.contains("-test-") ||
+               t.hasPrefix("test-") || t.hasPrefix("test_") ||
+               title.contains("(sample)") || title.contains("(test)") ||
+               u == "soundcraft" || u == "hiro" || u == "mira" ||
+               t == "acoustic-resonance-study" || t == "mission-peak-ridge" || t == "dhun-haveli-courtyard"
+    }
+
+    public static func isTestCreator(_ creator: CreatorRecord) -> Bool {
+        let u = creator.username.lowercased()
+        let c = creator.creatorId.lowercased()
+        let d = creator.displayName.lowercased()
+        return u.hasPrefix("test-") || u.hasPrefix("test_") ||
+               c.hasPrefix("test-") || c.hasPrefix("test_") || c.contains("-test-") ||
+               d.contains("(test)") || d.contains("(sample)") ||
+               u == "soundcraft" || u == "hiro" || u == "mira"
+    }
+
+    public var displayedCreators: [CreatorRecord] {
+        if state.includeTestTrails {
+            return creators
+        }
+        return creators.filter { !Self.isTestCreator($0) }
+    }
+
     // MARK: - Filtered Records Display (Unified for Journal and Map)
 
     public var displayedRecords: [DiscoveryRecord] {
         var items = records
+
+        // Filter out dummy/test trails unless user explicitly toggles includeTestTrails
+        if !state.includeTestTrails {
+            items = items.filter { !Self.isTestRecord($0) }
+        }
 
         // Apply Bookmarked filter (PRD §11)
         if state.bookmarkedOnly {
@@ -141,6 +181,16 @@ public final class DiscoverViewModel: ObservableObject {
     }
 
     // MARK: - Filter Modification Actions
+
+    public func setIncludeTestTrails(_ include: Bool) {
+        state.includeTestTrails = include
+        UserDefaults.standard.set(include, forKey: Self.includeTestTrailsKey)
+        objectWillChange.send()
+    }
+
+    public func toggleIncludeTestTrails() {
+        setIncludeTestTrails(!state.includeTestTrails)
+    }
 
     public func setAreaFilter(_ filter: DiscoveryAreaFilter) {
         state.areaFilter = filter
@@ -184,8 +234,8 @@ public final class DiscoverViewModel: ObservableObject {
         // Categorize into Trails, Creators, Places (PRD §8)
         var results: [SearchResultItem] = []
 
-        // Trails
-        let matchingTrails = records.filter {
+        // Trails (honors test trails toggle)
+        let matchingTrails = displayedRecords.filter {
             $0.title.lowercased().contains(trimmed) ||
             ($0.placeLabel?.lowercased().contains(trimmed) ?? false)
         }
@@ -193,8 +243,8 @@ public final class DiscoverViewModel: ObservableObject {
             results.append(.trail(t))
         }
 
-        // Creators
-        let matchingCreators = creators.filter {
+        // Creators (honors test trails toggle)
+        let matchingCreators = displayedCreators.filter {
             $0.username.lowercased().contains(trimmed) ||
             $0.displayName.lowercased().contains(trimmed)
         }
