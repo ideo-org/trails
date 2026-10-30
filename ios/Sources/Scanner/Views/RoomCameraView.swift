@@ -10,12 +10,13 @@ struct RoomCameraView: UIViewRepresentable {
     @ObservedObject var engine: RoomScannerEngine
     
     func makeUIView(context: Context) -> RoomCaptureView {
-        let captureView = RoomCaptureView(frame: .zero)
-        engine.attach(to: captureView)
+        let captureView = engine.getOrCreateCaptureView()
         return captureView
     }
     
     func updateUIView(_ uiView: RoomCaptureView, context: Context) {
-        // No updates needed
+        if engine.captureView !== uiView {
+            engine.attach(to: uiView)
+        }
     }
 }

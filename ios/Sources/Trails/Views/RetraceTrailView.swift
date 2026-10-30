@@ -639,10 +639,18 @@ public struct RetraceTrailView: View {
             )
         }
         // Dedicated Full-Screen Camera Interface for Checkpoint Moments
-        .fullScreenCover(isPresented: Binding(
-            get: { showingFullScreenCaptureMode != nil },
-            set: { if !$0 { showingFullScreenCaptureMode = nil } }
-        )) {
+        .fullScreenCover(
+            isPresented: Binding(
+                get: { showingFullScreenCaptureMode != nil },
+                set: { if !$0 { showingFullScreenCaptureMode = nil } }
+            ),
+            onDismiss: {
+                // Safely resume RoomPlan only after the camera modal has completely exited the view hierarchy and released camera hardware
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.20) {
+                    scannerEngine.resumeScanning()
+                }
+            }
+        ) {
             if let mode = showingFullScreenCaptureMode {
                 FullScreenCameraCaptureView(
                     cameraEngine: cameraEngine,
@@ -655,9 +663,7 @@ public struct RetraceTrailView: View {
                     onSavedPhoto: { image, fileURL, thumbURL in
                         handleSavedPhotoWaypoint(image: image, fileURL: fileURL, thumbURL: thumbURL)
                     },
-                    onCancel: {
-                        scannerEngine.resumeScanning()
-                    }
+                    onCancel: {}
                 )
             }
         }
@@ -1673,7 +1679,7 @@ public struct RetraceTrailView: View {
             createdAt: Date()
         )
         newRetraceMoments.append(moment)
-        scannerEngine.resumeScanning()
+        // Note: Do not call scannerEngine.resumeScanning() here - onDismiss handles it after modal exits
         triggerToast("Checkpoint \(idx) Video Anchored ✓")
     }
 
@@ -1701,7 +1707,7 @@ public struct RetraceTrailView: View {
             createdAt: Date()
         )
         newRetraceMoments.append(moment)
-        scannerEngine.resumeScanning()
+        // Note: Do not call scannerEngine.resumeScanning() here - onDismiss handles it after modal exits
         triggerToast("Checkpoint \(idx) Photo Anchored ✓")
     }
 

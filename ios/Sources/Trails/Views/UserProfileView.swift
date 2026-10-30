@@ -6,6 +6,16 @@
 //
 
 import SwiftUI
+#if canImport(FirebaseAuth)
+import FirebaseAuth
+#endif
+#if canImport(AuthenticationServices)
+import AuthenticationServices
+#endif
+#if canImport(GoogleSignIn)
+import GoogleSignIn
+#endif
+import AuthenticationServices
 
 public struct UserProfileView: View {
     @ObservedObject var authManager = AuthManager.shared
@@ -13,6 +23,10 @@ public struct UserProfileView: View {
 
     @State private var showingEditProfile: Bool = false
     @State private var showingLoginSheet: Bool = false
+    @State private var isLinkingProvider: Bool = false
+    @State private var linkErrorMessage: String? = nil
+    @State private var showingUsernameSwitchAlert: Bool = false
+    @State private var switchUsernameText: String = ""
     @State private var draftDisplayName: String = ""
     @State private var draftUsername: String = ""
     @State private var draftIntroduction: String = ""
@@ -292,6 +306,9 @@ public struct UserProfileView: View {
                     .environmentObject(authManager)
                 #endif
             }
+            .sheet(isPresented: $showingUsernameSwitchAlert) {
+                switchUsernameSheet
+            }
         }
     }
 
@@ -301,70 +318,196 @@ public struct UserProfileView: View {
         VStack(alignment: .leading, spacing: 14) {
             #if canImport(Firebase)
             if authManager.authState == .signedIn {
-                HStack(spacing: 12) {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundColor(AppColors.forestGreen)
-                        .font(.system(size: 24))
+                // Connected / Linked Account
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack(spacing: 12) {
+                        if authManager.isGoogleLinked {
+                            Image(systemName: "g.circle.fill")
+                                .foregroundColor(AppColors.forestGreen)
+                                .font(.system(size: 26))
+                        } else if authManager.isAppleLinked {
+                            Image(systemName: "apple.logo")
+                                .foregroundColor(AppColors.deepInk)
+                                .font(.system(size: 24))
+                        } else {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundColor(AppColors.forestGreen)
+                                .font(.system(size: 26))
+                        }
 
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(authManager.user?.displayName ?? "Google Account")
-                            .font(AppFonts.headlineSmall)
-                            .foregroundColor(AppColors.deepInk)
+                        VStack(alignment: .leading, spacing: 2) {
+                            HStack(spacing: 6) {
+                                Text(authManager.isGoogleLinked ? "Linked with Google" : (authManager.isAppleLinked ? "Linked with Apple" : "Cloud Account"))
+                                    .font(AppFonts.headlineSmall)
+                                    .foregroundColor(AppColors.deepInk)
 
-                        if let email = authManager.user?.email {
-                            Text(email)
-                                .font(AppFonts.caption)
-                                .foregroundColor(AppColors.outline)
+                                Image(systemName: "checkmark.seal.fill")
+                                    .font(.system(size: 13))
+                                    .foregroundColor(AppColors.forestGreen)
+                            }
+
+                            if let email = authManager.user?.email, !email.isEmpty {
+                                Text(email)
+                                    .font(AppFonts.caption)
+                                    .foregroundColor(AppColors.outline)
+                            }
+                        }
+
+                        Spacer()
+
+                        Button {
+                            Haptics.light()
+                            authManager.signOut()
+                        } label: {
+                            Text("Sign Out")
+                                .font(AppFonts.labelUI)
+                                .foregroundColor(AppColors.error)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 6)
+                                .background(AppColors.surfaceContainerLow)
+                                .clipShape(Capsule())
                         }
                     }
 
-                    Spacer()
+                    Divider()
 
-                    Button {
-                        Haptics.light()
-                        authManager.signOut()
-                    } label: {
-                        Text("Sign Out")
+                    HStack {
+                        Text("Author Username:")
+                            .font(AppFonts.labelSpatial)
+                            .foregroundColor(AppColors.outline)
+                        Text("@\(effectiveUsername)")
+                            .font(AppFonts.labelSpatial)
+                            .foregroundColor(AppColors.forestGreen)
+                            .fontWeight(.semibold)
+                        Spacer()
+                    }
+
+                    // Multi-provider linking option
+                    if !authManager.isGoogleLinked {
+                        Button {
+                            linkGoogle()
+                        } label: {
+                            HStack(spacing: 8) {
+                                Image(systemName: "g.circle.fill")
+                                Text("Also Link Google Account")
+                            }
                             .font(AppFonts.labelUI)
-                            .foregroundColor(AppColors.error)
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 6)
-                            .background(AppColors.surfaceContainerLow)
-                            .clipShape(Capsule())
+                            .foregroundColor(AppColors.forestGreen)
+                        }
+                        .padding(.top, 2)
+                    } else if !authManager.isAppleLinked {
+                        Button {
+                            linkApple()
+                        } label: {
+                            HStack(spacing: 8) {
+                                Image(systemName: "apple.logo")
+                                Text("Also Link Apple ID")
+                            }
+                            .font(AppFonts.labelUI)
+                            .foregroundColor(AppColors.deepInk)
+                        }
+                        .padding(.top, 2)
                     }
                 }
             } else {
-                VStack(alignment: .leading, spacing: 12) {
+                // Local Username / Anonymous Identity
+                VStack(alignment: .leading, spacing: 14) {
                     HStack(spacing: 10) {
-                        Image(systemName: "person.badge.shield.checkmark.fill")
-                            .foregroundColor(AppColors.forestGreen)
-                            .font(.system(size: 20))
+                        Image(systemName: "shield.lefthalf.filled")
+                            .foregroundColor(AppColors.terracotta)
+                            .font(.system(size: 22))
+
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("Cloud Identity")
-                                .font(AppFonts.headlineSmall)
-                                .foregroundColor(AppColors.deepInk)
-                            Text("Sign in with Google to sync your profile across devices.")
+                            HStack(spacing: 6) {
+                                Text("Local Author Identity")
+                                    .font(AppFonts.headlineSmall)
+                                    .foregroundColor(AppColors.deepInk)
+                                Text("@\(effectiveUsername)")
+                                    .font(AppFonts.labelSpatial)
+                                    .foregroundColor(AppColors.forestGreen)
+                            }
+
+                            Text("Your trails are stored privately on this device. Link Google or Apple anytime to sync across devices.")
                                 .font(AppFonts.caption)
                                 .foregroundColor(AppColors.outline)
                         }
                     }
 
-                    Button {
-                        Haptics.medium()
-                        showingLoginSheet = true
-                    } label: {
-                        HStack(spacing: 8) {
-                            Image(systemName: "g.circle.fill")
-                                .font(.system(size: 16, weight: .bold))
-                            Text("Sign in with Google")
-                                .font(AppFonts.labelUI)
-                                .fontWeight(.semibold)
+                    if let error = linkErrorMessage {
+                        HStack(spacing: 6) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundColor(AppColors.error)
+                            Text(error)
+                                .font(AppFonts.bodySmall)
+                                .foregroundColor(AppColors.error)
                         }
-                        .foregroundColor(AppColors.onPrimary)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 46)
-                        .background(AppColors.forestGreen)
-                        .clipShape(Capsule())
+                        .padding(10)
+                        .background(AppColors.error.opacity(0.1))
+                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    }
+
+                    if isLinkingProvider {
+                        HStack(spacing: 10) {
+                            ProgressView()
+                            Text("Linking account...")
+                                .font(AppFonts.labelSpatial)
+                                .foregroundColor(AppColors.forestGreen)
+                        }
+                        .padding(.vertical, 8)
+                    } else {
+                        VStack(spacing: 10) {
+                            // Link with Google
+                            Button {
+                                Haptics.medium()
+                                linkGoogle()
+                            } label: {
+                                HStack(spacing: 8) {
+                                    Image(systemName: "g.circle.fill")
+                                        .font(.system(size: 16, weight: .bold))
+                                    Text("Link Google Account")
+                                        .font(AppFonts.labelUI)
+                                        .fontWeight(.semibold)
+                                }
+                                .foregroundColor(AppColors.onPrimary)
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 44)
+                                .background(AppColors.forestGreen)
+                                .clipShape(Capsule())
+                            }
+
+                            // Link with Apple
+                            Button {
+                                Haptics.medium()
+                                linkApple()
+                            } label: {
+                                HStack(spacing: 8) {
+                                    Image(systemName: "apple.logo")
+                                        .font(.system(size: 16, weight: .semibold))
+                                    Text("Link Apple ID")
+                                        .font(AppFonts.labelUI)
+                                        .fontWeight(.semibold)
+                                }
+                                .foregroundColor(AppColors.pureWhite)
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 44)
+                                .background(AppColors.deepInk)
+                                .clipShape(Capsule())
+                            }
+
+                            // Switch Username
+                            Button {
+                                switchUsernameText = effectiveUsername
+                                showingUsernameSwitchAlert = true
+                            } label: {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "person.arrow.left.and.arrow.right")
+                                    Text("Switch or Log In with another Username")
+                                }
+                                .font(AppFonts.labelSpatial)
+                                .foregroundColor(AppColors.outline)
+                            }
+                            .padding(.top, 4)
+                        }
                     }
                 }
             }
@@ -382,6 +525,124 @@ public struct UserProfileView: View {
         )
         .shadow(color: Color.black.opacity(0.03), radius: 6, x: 0, y: 2)
         .padding(.horizontal, 20)
+    }
+
+    // MARK: - Account Linking Actions
+
+    private func linkGoogle() {
+        isLinkingProvider = true
+        linkErrorMessage = nil
+        Task {
+            do {
+                #if canImport(GoogleSignIn)
+                guard let user = try await GoogleSignInManager.shared.signInWithGoogle() else {
+                    await MainActor.run { self.isLinkingProvider = false }
+                    return
+                }
+                _ = try await authManager.googleAuth(user)
+                await MainActor.run {
+                    self.isLinkingProvider = false
+                    Haptics.success()
+                }
+                #endif
+            } catch let error as NSError {
+                await MainActor.run {
+                    self.isLinkingProvider = false
+                    if error.domain == "com.google.GIDSignIn" && error.code == -5 {
+                        return
+                    }
+                    self.linkErrorMessage = error.localizedDescription
+                }
+            }
+        }
+    }
+
+    private func linkApple() {
+        isLinkingProvider = true
+        linkErrorMessage = nil
+        Task {
+            do {
+                let credential = try await AppleSignInManager.shared.requestAppleAuthorization()
+                _ = try await authManager.appleAuth(credential, nonce: AppleSignInManager.nonce)
+                await MainActor.run {
+                    self.isLinkingProvider = false
+                    Haptics.success()
+                }
+            } catch let error as NSError {
+                await MainActor.run {
+                    self.isLinkingProvider = false
+                    // Error 1001 is user cancellation in ASAuthorizationError
+                    if error.code == 1001 {
+                        return
+                    }
+                    self.linkErrorMessage = error.localizedDescription
+                }
+            }
+        }
+    }
+
+    private var switchUsernameSheet: some View {
+        NavigationStack {
+            ZStack {
+                AppColors.canvas
+                    .ignoresSafeArea()
+
+                VStack(alignment: .leading, spacing: 20) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("ENTER USERNAME")
+                            .font(AppFonts.labelSpatial)
+                            .foregroundColor(AppColors.outline)
+
+                        HStack(spacing: 4) {
+                            Text("@")
+                                .font(AppFonts.bodyLarge)
+                                .foregroundColor(AppColors.outline)
+
+                            TextField("username (e.g. explorer)", text: $switchUsernameText)
+                                .font(AppFonts.bodyLarge)
+                                .foregroundColor(AppColors.deepInk)
+                                .textInputAutocapitalization(.never)
+                                .autocorrectionDisabled()
+                        }
+                        .padding(14)
+                        .background(AppColors.pureWhite)
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .stroke(AppColors.outlineVariant.opacity(0.5), lineWidth: 1)
+                        )
+                    }
+
+                    Text("Switch your local author identity on this device. Future trails and moments will be attributed to this username.")
+                        .font(AppFonts.labelSpatial)
+                        .foregroundColor(AppColors.outline)
+
+                    Spacer()
+
+                    Button("Use Username") {
+                        let clean = switchUsernameText.trimmingCharacters(in: .whitespacesAndNewlines)
+                            .trimmingCharacters(in: CharacterSet(charactersIn: "@"))
+                        guard !clean.isEmpty else { return }
+                        authManager.signInWithUsername(clean)
+                        Haptics.success()
+                        showingUsernameSwitchAlert = false
+                    }
+                    .buttonStyle(PrimaryButtonStyle())
+                    .disabled(switchUsernameText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+                .padding(24)
+            }
+            .navigationTitle("Switch Username")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        showingUsernameSwitchAlert = false
+                    }
+                    .foregroundColor(AppColors.forestGreen)
+                }
+            }
+        }
     }
 
     private var editProfileSheet: some View {

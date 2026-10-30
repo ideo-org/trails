@@ -23,14 +23,14 @@ class RoomScannerEngine: NSObject, ObservableObject, RoomCaptureSessionDelegate,
     // Hardware support check
     @Published var isSupported: Bool = RoomCaptureSession.isSupported
 
-    private weak var captureView: RoomCaptureView?
+    private(set) var captureView: RoomCaptureView?
     private var simulationTimer: Timer?
     private var simulationStep: Int = 0
 
     // For path plotting distance threshold (to avoid redundant points)
-    @Published var lastRecordedPosition: SIMD3<Float>?
-    @Published var currentYawDegrees: Double = 0 // Spatial orientation / compass yaw in world frame (0..360)
-    @Published var currentForwardVector: SIMD2<Float> = SIMD2<Float>(0, -1)
+    var lastRecordedPosition: SIMD3<Float>?
+    var currentYawDegrees: Double = 0 // Spatial orientation / compass yaw in world frame (0..360)
+    var currentForwardVector: SIMD2<Float> = SIMD2<Float>(0, -1)
     private let distanceThreshold: Float = 0.2 // meters
     private var lastCapturedPixelBuffer: CVPixelBuffer?
     private let ciContext = CIContext(options: [CIContextOption.useSoftwareRenderer: false])
@@ -52,6 +52,15 @@ class RoomScannerEngine: NSObject, ObservableObject, RoomCaptureSessionDelegate,
         super.init()
     }
 
+    func getOrCreateCaptureView() -> RoomCaptureView {
+        if let existing = captureView {
+            return existing
+        }
+        let view = RoomCaptureView(frame: .zero)
+        attach(to: view)
+        return view
+    }
+
     func attach(to view: RoomCaptureView) {
         self.captureView = view
         view.captureSession.delegate = self
@@ -67,8 +76,9 @@ class RoomScannerEngine: NSObject, ObservableObject, RoomCaptureSessionDelegate,
 
     func startScanning() {
         if isSupported {
+            let view = getOrCreateCaptureView()
             let config = RoomCaptureSession.Configuration()
-            captureView?.captureSession.run(configuration: config)
+            view.captureSession.run(configuration: config)
             isSimulated = false
             isScanning = true
         } else {
@@ -82,17 +92,19 @@ class RoomScannerEngine: NSObject, ObservableObject, RoomCaptureSessionDelegate,
         simulationTimer = nil
         if isSupported {
             captureView?.captureSession.stop()
+            captureView?.captureSession.arSession.pause()
         }
         isScanning = false
     }
 
     func resumeScanning() {
-        guard !isScanning else { return }
         if isSupported {
+            let view = getOrCreateCaptureView()
             let config = RoomCaptureSession.Configuration()
-            captureView?.captureSession.run(configuration: config)
+            view.captureSession.run(configuration: config)
             isScanning = true
         } else {
+            guard !isScanning else { return }
             isScanning = true
             simulationTimer?.invalidate()
             simulationTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
@@ -151,6 +163,7 @@ class RoomScannerEngine: NSObject, ObservableObject, RoomCaptureSessionDelegate,
         simulationTimer = nil
         if isSupported {
             captureView?.captureSession.stop()
+            captureView?.captureSession.arSession.pause()
         }
         isScanning = false
     }
@@ -208,7 +221,30 @@ class RoomScannerEngine: NSObject, ObservableObject, RoomCaptureSessionDelegate,
     }
 
     nonisolated func captureSession(_ session: RoomCaptureSession, didEndWith data: CapturedRoomData, error: Error?) {
-        // Handle end of scan if necessary
+        if let error = error {
+            print("RoomCaptureSession didEndWith error: \(error)")
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 350_000_000)
+                if self.isScanning {
+                    let config = RoomCaptureSession.Configuration()
+                    self.captureView?.captureSession.run(configuration: config)
+                }
+            }
+        }
+    }
+
+    nonisolated func sessionWasInterrupted(_ session: ARSession) {
+        print("ARSession was interrupted by another capture session")
+    }
+
+    nonisolated func sessionInterruptionEnded(_ session: ARSession) {
+        print("ARSession interruption ended, cleanly resuming RoomCaptureSession")
+        Task { @MainActor in
+            if self.isScanning {
+                let config = RoomCaptureSession.Configuration()
+                self.captureView?.captureSession.run(configuration: config)
+            }
+        }
     }
 
     func exportWorldMap(completion: @escaping (Data?) -> Void) {

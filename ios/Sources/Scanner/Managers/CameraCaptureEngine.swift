@@ -2,15 +2,16 @@
 //  CameraCaptureEngine.swift
 //  Trails
 //
-//  Native AVCam-style capture pipeline for Trails v0.2.1 (PRD §9, §10, §11, §12).
+//  Native AVCam-style capture pipeline for Trails v0.2.1.
 //  Provides:
-//  - Responsive AVCaptureSession with 1080p 30fps video and high-res photo capture
+//  - Responsive AVCaptureSession with 4K UHD video and 48MP/24MP high-res photo capture
+//  - Triple-camera multi-lens optical telephoto support (0.5x, 1x, 2x, 3x, 5x)
 //  - Real AVCapturePhotoOutput and AVCaptureMovieFileOutput
 //  - Front / rear camera switching
 //  - Torch / flash controls
-//  - Supported zoom controls (1.0x, 2.0x, pinch-to-zoom)
+//  - Supported zoom controls (optical switchover & pinch-to-zoom)
 //  - Tap to focus and expose
-//  - Durable file persistence to trail media storage with lightweight thumbnail generation
+//  - Durable file persistence to trail media storage with lightweight ImageIO thumbnail generation
 //  - Graceful audio permission handling (silent video with clear warning if mic denied)
 //
 
@@ -44,7 +45,8 @@ public final class CameraCaptureEngine: NSObject, ObservableObject {
     @Published public private(set) var isTorchOn: Bool = false
     @Published public private(set) var isFlashOn: Bool = false
     @Published public private(set) var zoomFactor: CGFloat = 1.0
-    @Published public private(set) var maxZoomFactor: CGFloat = 5.0
+    @Published public private(set) var maxZoomFactor: CGFloat = 15.0
+    @Published public private(set) var availableZoomFactors: [CGFloat] = [1.0, 2.0, 3.0]
     @Published public private(set) var isMicrophoneAuthorized: Bool = true
     @Published public private(set) var isCameraAuthorized: Bool = true
     @Published public private(set) var videoRecordingSeconds: Int = 0
@@ -114,7 +116,9 @@ public final class CameraCaptureEngine: NSObject, ObservableObject {
         sessionQueue.async { [weak self] in
             guard let self = self else { return }
             self.configureSession()
-            self.session.startRunning()
+            if !self.session.isRunning {
+                self.session.startRunning()
+            }
             Task { @MainActor in
                 self.isSessionRunning = self.session.isRunning
             }
@@ -122,28 +126,150 @@ public final class CameraCaptureEngine: NSObject, ObservableObject {
     }
 
     public func stop() {
+        teardown()
+    }
+
+    public func stopAsync() async {
+        await teardownAsync()
+    }
+
+    public func teardown() {
         sessionQueue.async { [weak self] in
             guard let self = self else { return }
             if self.session.isRunning {
                 self.session.stopRunning()
             }
+            self.session.beginConfiguration()
+            for input in self.session.inputs {
+                self.session.removeInput(input)
+            }
+            for output in self.session.outputs {
+                self.session.removeOutput(output)
+            }
+            self.session.commitConfiguration()
+            self.videoDeviceInput = nil
+            self.audioDeviceInput = nil
             Task { @MainActor in
                 self.isSessionRunning = false
             }
         }
     }
 
+    public func teardownAsync() async {
+        await withCheckedContinuation { continuation in
+            sessionQueue.async { [weak self] in
+                guard let self = self else {
+                    continuation.resume()
+                    return
+                }
+                if self.session.isRunning {
+                    self.session.stopRunning()
+                }
+                self.session.beginConfiguration()
+                for input in self.session.inputs {
+                    self.session.removeInput(input)
+                }
+                for output in self.session.outputs {
+                    self.session.removeOutput(output)
+                }
+                self.session.commitConfiguration()
+                self.videoDeviceInput = nil
+                self.audioDeviceInput = nil
+                Task { @MainActor in
+                    self.isSessionRunning = false
+                    continuation.resume()
+                }
+            }
+        }
+    }
+
+    private func bestVideoDevice(position: AVCaptureDevice.Position) -> AVCaptureDevice? {
+        if position == .back {
+            let deviceTypes: [AVCaptureDevice.DeviceType] = [
+                .builtInTripleCamera,
+                .builtInDualWideCamera,
+                .builtInDualCamera,
+                .builtInWideAngleCamera
+            ]
+            let discovery = AVCaptureDevice.DiscoverySession(
+                deviceTypes: deviceTypes,
+                mediaType: .video,
+                position: .back
+            )
+            return discovery.devices.first ?? AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back)
+        } else {
+            return AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .front)
+        }
+    }
+
+    private func updateAvailableZoomFactors(for device: AVCaptureDevice) {
+        var factors: [CGFloat] = []
+        let minZoom = device.minAvailableVideoZoomFactor
+        let maxZoom = min(15.0, device.maxAvailableVideoZoomFactor)
+
+        if minZoom <= 0.6 {
+            factors.append(0.5)
+        }
+        if minZoom <= 1.0 && maxZoom >= 1.0 {
+            factors.append(1.0)
+        }
+        if maxZoom >= 2.0 {
+            factors.append(2.0)
+        }
+        if maxZoom >= 3.0 {
+            factors.append(3.0)
+        }
+        if maxZoom >= 5.0 {
+            factors.append(5.0)
+        }
+        if factors.isEmpty {
+            factors = [1.0, 2.0, 3.0]
+        }
+        Task { @MainActor in
+            self.availableZoomFactors = factors
+            self.maxZoomFactor = maxZoom
+        }
+    }
+
     private func configureSession() {
         session.beginConfiguration()
-        session.sessionPreset = .high
 
-        // Add Video Input
-        if let videoDevice = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back) {
+        // Set resolution preset: Full raw sensor resolution for Photos, 4K UHD for Videos
+        if cameraMode == .photo {
+            if session.canSetSessionPreset(.photo) {
+                session.sessionPreset = .photo
+            } else {
+                session.sessionPreset = .high
+            }
+        } else {
+            if session.canSetSessionPreset(.hd4K3840x2160) {
+                session.sessionPreset = .hd4K3840x2160
+            } else if session.canSetSessionPreset(.hd1920x1080) {
+                session.sessionPreset = .hd1920x1080
+            } else {
+                session.sessionPreset = .high
+            }
+        }
+
+        // Remove stale inputs and outputs if reconfiguring
+        for input in session.inputs {
+            session.removeInput(input)
+        }
+        for output in session.outputs {
+            session.removeOutput(output)
+        }
+        self.videoDeviceInput = nil
+        self.audioDeviceInput = nil
+
+        // Add Video Input (Selecting Triple Camera / Optical Zoom capable hardware)
+        let currentPosition: AVCaptureDevice.Position = isFrontCamera ? .front : .back
+        if let videoDevice = bestVideoDevice(position: currentPosition) {
             do {
                 let videoInput = try AVCaptureDeviceInput(device: videoDevice)
                 if session.canAddInput(videoInput) {
                     session.addInput(videoInput)
                     self.videoDeviceInput = videoInput
+                    updateAvailableZoomFactors(for: videoDevice)
                 }
             } catch {
                 print("Failed to create video input: \(error)")
@@ -165,19 +291,22 @@ public final class CameraCaptureEngine: NSObject, ObservableObject {
             }
         }
 
-        // Add Photo Output
+        // Add Photo Output configured for highest resolution & Smart HDR / Deep Fusion
         if session.canAddOutput(photoOutput) {
             session.addOutput(photoOutput)
             photoOutput.isHighResolutionCaptureEnabled = true
-            photoOutput.maxPhotoQualityPrioritization = .balanced
+            photoOutput.maxPhotoQualityPrioritization = .quality
         }
 
-        // Add Movie Output
+        // Add Movie Output configured for 4K & Cinematic Extended stabilization
         if session.canAddOutput(movieFileOutput) {
             session.addOutput(movieFileOutput)
             if let connection = movieFileOutput.connection(with: .video) {
+                if connection.isVideoOrientationSupported {
+                    connection.videoOrientation = .portrait
+                }
                 if connection.isVideoStabilizationSupported {
-                    connection.preferredVideoStabilizationMode = .auto
+                    connection.preferredVideoStabilizationMode = .cinematicExtended
                 }
             }
         }
@@ -195,7 +324,7 @@ public final class CameraCaptureEngine: NSObject, ObservableObject {
             let currentPosition = self.videoDeviceInput?.device.position ?? .back
             let newPosition: AVCaptureDevice.Position = (currentPosition == .back) ? .front : .back
 
-            guard let newDevice = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: newPosition) else {
+            guard let newDevice = self.bestVideoDevice(position: newPosition) else {
                 return
             }
 
@@ -210,6 +339,8 @@ public final class CameraCaptureEngine: NSObject, ObservableObject {
                     self.videoDeviceInput = newInput
                 }
                 self.session.commitConfiguration()
+
+                self.updateAvailableZoomFactors(for: newDevice)
 
                 Task { @MainActor in
                     self.isFrontCamera = (newPosition == .front)
@@ -244,7 +375,7 @@ public final class CameraCaptureEngine: NSObject, ObservableObject {
 
     public func setZoom(factor: CGFloat) {
         guard let device = videoDeviceInput?.device else { return }
-        let clamped = max(1.0, min(factor, min(5.0, device.activeFormat.videoMaxZoomFactor)))
+        let clamped = max(device.minAvailableVideoZoomFactor, min(factor, min(15.0, device.maxAvailableVideoZoomFactor)))
         do {
             try device.lockForConfiguration()
             device.videoZoomFactor = clamped
@@ -296,6 +427,8 @@ public final class CameraCaptureEngine: NSObject, ObservableObject {
                 } else {
                     settings.flashMode = .off
                 }
+                settings.isHighResolutionPhotoEnabled = true
+                settings.photoQualityPrioritization = .quality
                 self.photoOutput.capturePhoto(with: settings, delegate: self)
             }
         }
@@ -315,10 +448,13 @@ public final class CameraCaptureEngine: NSObject, ObservableObject {
         self.videoRecordingSeconds = 0
         self.activeVideoDurationString = "00:00"
 
-        // Setup recording orientation
+        // Setup recording orientation & stabilization
         if let connection = movieFileOutput.connection(with: .video) {
             if connection.isVideoOrientationSupported {
                 connection.videoOrientation = .portrait
+            }
+            if connection.isVideoStabilizationSupported {
+                connection.preferredVideoStabilizationMode = .cinematicExtended
             }
         }
 

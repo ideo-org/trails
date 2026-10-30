@@ -15,6 +15,7 @@
 import SwiftUI
 import RoomPlan
 import AVKit
+import CoreLocation
 
 struct ScannerView: View {
     @Environment(\.dismiss) private var dismiss
@@ -189,10 +190,18 @@ struct ScannerView: View {
             teardownTrailSession()
         }
         // Dedicated Full-Screen Camera Interface (Video / Photo)
-        .fullScreenCover(isPresented: Binding(
-            get: { showingFullScreenCaptureMode != nil },
-            set: { if !$0 { showingFullScreenCaptureMode = nil } }
-        )) {
+        .fullScreenCover(
+            isPresented: Binding(
+                get: { showingFullScreenCaptureMode != nil },
+                set: { if !$0 { showingFullScreenCaptureMode = nil } }
+            ),
+            onDismiss: {
+                // Safely resume RoomPlan only after the camera modal has completely exited the view hierarchy and released camera hardware
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                    scannerEngine.resumeScanning()
+                }
+            }
+        ) {
             if let mode = showingFullScreenCaptureMode {
                 FullScreenCameraCaptureView(
                     cameraEngine: cameraEngine,
@@ -205,9 +214,7 @@ struct ScannerView: View {
                     onSavedPhoto: { image, fileURL, thumbURL in
                         handleSavedPhotoWaypoint(image: image, fileURL: fileURL, thumbURL: thumbURL)
                     },
-                    onCancel: {
-                        scannerEngine.resumeScanning()
-                    }
+                    onCancel: {}
                 )
             }
         }
@@ -598,7 +605,9 @@ struct ScannerView: View {
 
             // 3. Secondary: SNAP PHOTO CHECKPOINT
             Button {
-                triggerInstantPhotoCapture()
+                Haptics.medium()
+                scannerEngine.pauseScanning()
+                showingFullScreenCaptureMode = .photo
             } label: {
                 VStack(spacing: 3) {
                     Image(systemName: "camera.fill")
@@ -614,13 +623,6 @@ struct ScannerView: View {
                 .overlay(Circle().stroke(Color.white.opacity(0.25), lineWidth: 1.5))
             }
             .buttonStyle(ScaleButtonStyle())
-            .simultaneousGesture(
-                LongPressGesture(minimumDuration: 0.6).onEnded { _ in
-                    Haptics.heavy()
-                    scannerEngine.pauseScanning()
-                    showingFullScreenCaptureMode = .photo
-                }
-            )
 
             // 4. Secondary: VOICE NOTE CHECKPOINT
             Button {
@@ -703,7 +705,7 @@ struct ScannerView: View {
 
         recordedMoments.append(moment)
         persistIncrementalDraft()
-        scannerEngine.resumeScanning()
+        // Note: Do not call scannerEngine.resumeScanning() here - onDismiss handles it after modal exits
         triggerToast("Checkpoint \(idx) Video Anchored")
     }
 
@@ -711,9 +713,13 @@ struct ScannerView: View {
         guard !isProcessingPhotoCapture else { return }
         Haptics.medium()
 
-        isShutterFlashActive = true
-        withAnimation(.easeOut(duration: 0.16)) {
-            isShutterFlashActive = false
+        withAnimation(.linear(duration: 0.05)) {
+            isShutterFlashActive = true
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
+            withAnimation(.easeOut(duration: 0.18)) {
+                isShutterFlashActive = false
+            }
         }
 
         // Capture instant high-res frame from active AR stream without pausing the live session
@@ -773,7 +779,7 @@ struct ScannerView: View {
 
         recordedMoments.append(moment)
         persistIncrementalDraft()
-        scannerEngine.resumeScanning()
+        // Note: Do not call scannerEngine.resumeScanning() here - if from modal, onDismiss handles it; if instant, not paused.
         triggerToast("Checkpoint \(idx) Photo Anchored")
     }
 
