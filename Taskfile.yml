@@ -7,24 +7,10 @@ tasks:
     cmds:
       - task --list
 
-  kill-dev:
-    desc: Free port 8095 using bunx kill-port
-    cmds:
-      - bunx kill-port 8095
-
-  restart-dev:
-    desc: Alias for task dev
-    dir: trails.logos
-    cmds:
-      - task: dev
-        vars:
-          CLI_ARGS: '{{.CLI_ARGS}}'
-
   dev:
     desc: Clean up port 8095 and run the API server with tsx
     dir: trails.logos
     cmds:
-      - bunx kill-port 8095
       - task dev -- {{.CLI_ARGS}}
 
   test:
