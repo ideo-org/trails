@@ -29,10 +29,14 @@ public struct ReviewPublishTrailView: View {
     @State private var showingPublicDetailAfterPublish: Bool = false
     @State private var logosPublishError: String?
 
-    public init() {}
+    private let initialTrail: TrailDetail?
+
+    public init(trail: TrailDetail? = nil) {
+        self.initialTrail = trail
+    }
 
     private var activeTrail: TrailDetail {
-        dataStore.activeTrail ?? TrailDetail(
+        initialTrail ?? dataStore.activeTrail ?? TrailDetail(
             id: UUID().uuidString,
             title: "Untitled Trail",
             subtitle: "Recorded spatial path",
@@ -581,6 +585,16 @@ public struct ReviewPublishTrailView: View {
 
             // Construct compliant manifest (PRD §17 & §18)
             let isoNow = ISO8601DateFormatter().string(from: updated.createdAt)
+            var placeDict: [String: Any] = [
+                "name": updated.placeName,
+                "locality": updated.locality
+            ]
+            if let lat = updated.latitude, let lon = updated.longitude {
+                placeDict["geographicAnchor"] = [
+                    "latitude": lat,
+                    "longitude": lon
+                ]
+            }
             let manifest: [String: Any] = [
                 "schemaVersion": "1.0.0",
                 "trailId": updated.id,
@@ -591,14 +605,7 @@ public struct ReviewPublishTrailView: View {
                 "creatorUsername": dataStore.localProfile.displayName.lowercased().replacingOccurrences(of: " ", with: ""),
                 "creatorId": "creator-\(dataStore.localProfile.id)",
                 "recordedAt": isoNow,
-                "place": [
-                    "name": updated.placeName,
-                    "locality": updated.locality,
-                    "geographicAnchor": [
-                        "latitude": updated.latitude ?? 26.9124,
-                        "longitude": updated.longitude ?? 75.7873
-                    ]
-                ],
+                "place": placeDict,
                 "capabilities": [
                     "hasPhotos": updated.photoCount > 0,
                     "hasVideos": updated.videoCount > 0,
@@ -627,9 +634,16 @@ public struct ReviewPublishTrailView: View {
                 return
             }
 
-            let entries = [
+            var entries = [
                 TrailZipArchiver.FileEntry(name: "manifest.json", data: manifestJson)
             ]
+            let packageDir = TrailPackageStore.shared.trailDirectory(for: updated.id)
+            if let momentsData = try? Data(contentsOf: packageDir.appendingPathComponent("moments.json")) {
+                entries.append(TrailZipArchiver.FileEntry(name: "moments.json", data: momentsData))
+            }
+            if let samplesData = try? Data(contentsOf: packageDir.appendingPathComponent("tracking/samples.json")) {
+                entries.append(TrailZipArchiver.FileEntry(name: "tracking/samples.json", data: samplesData))
+            }
             let packageZip = TrailZipArchiver.createZip(entries: entries)
 
             do {

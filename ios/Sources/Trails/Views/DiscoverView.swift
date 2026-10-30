@@ -7,6 +7,7 @@
 //
 
 import SwiftUI
+import MapKit
 
 public struct DiscoverView: View {
     @StateObject private var viewModel = DiscoverViewModel()
@@ -16,6 +17,8 @@ public struct DiscoverView: View {
     @State private var showingAreaFilterSheet: Bool = false
     @State private var showingCreatorFilterSheet: Bool = false
     @State private var selectedRecordForDetail: DiscoveryRecord? = nil
+    @State private var mapPosition: MapCameraPosition = .automatic
+    @State private var selectedRecordOnMap: DiscoveryRecord? = nil
 
     public init() {}
 
@@ -86,14 +89,16 @@ public struct DiscoverView: View {
     // MARK: - Header Bar (PRD §5)
 
     private var headerView: some View {
-        VStack(spacing: 10) {
-            // Title & Destination Heading
+        VStack(spacing: 12) {
+            // Top Title Bar
             HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("COMMUNITY")
-                        .font(AppFonts.labelSpatial)
-                        .foregroundColor(AppColors.secondary)
-                        .tracking(1.5)
+                HStack(spacing: 10) {
+                    Image("Logo")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 32, height: 32)
+                        .clipShape(Circle())
+                        .shadow(color: AppColors.primary.opacity(0.12), radius: 4, x: 0, y: 2)
 
                     Text("Discover")
                         .font(AppFonts.headlineMedium)
@@ -121,76 +126,92 @@ public struct DiscoverView: View {
             // Search Bar (PRD §5 & §8)
             searchBarWithAutocomplete
 
-            // Filter Pills & Segmented Mode Switcher (PRD §5: [Area] [Creator] [Saved] [Journal | Map])
-            HStack(spacing: 8) {
-                // Area Filter Pill (Equal prominence - PRD §5)
-                Button {
-                    Haptics.selection()
-                    showingAreaFilterSheet = true
-                } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: "mappin.and.ellipse")
-                            .font(.system(size: 11))
-                        Text(viewModel.state.areaFilter.title)
-                            .font(AppFonts.labelSpatial)
-                        Image(systemName: "chevron.down")
-                            .font(.system(size: 9))
+            // Mode Picker [ Journal | Map ] (PRD §5: Distinct clean row matching My Trails)
+            segmentedModePicker
+
+            // Filter Pills Bar (Equal prominence - PRD §5: [Area] [Creator] [Saved])
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    // Area Filter Pill (PRD §5 & §6)
+                    Button {
+                        Haptics.selection()
+                        showingAreaFilterSheet = true
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "mappin.and.ellipse")
+                                .font(.system(size: 11))
+                            Text(viewModel.state.areaFilter.title)
+                                .font(AppFonts.labelSpatial)
+                            Image(systemName: "chevron.down")
+                                .font(.system(size: 9))
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 7)
+                        .background(viewModel.state.areaFilter != .all ? AppColors.primary : AppColors.surfaceContainerHigh)
+                        .foregroundColor(viewModel.state.areaFilter != .all ? AppColors.onPrimary : AppColors.deepInk)
+                        .clipShape(Capsule())
                     }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 7)
-                    .background(viewModel.state.areaFilter != .all ? AppColors.primary : AppColors.surfaceContainerHigh)
-                    .foregroundColor(viewModel.state.areaFilter != .all ? AppColors.onPrimary : AppColors.deepInk)
-                    .clipShape(Capsule())
-                }
 
-                // Creator Filter Pill (Equal prominence - PRD §5 & §7)
-                Button {
-                    Haptics.selection()
-                    showingCreatorFilterSheet = true
-                } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: "person.crop.circle")
-                            .font(.system(size: 11))
-                        Text(viewModel.state.selectedCreator != nil ? "@\(viewModel.state.selectedCreator!.username)" : "Creator")
-                            .font(AppFonts.labelSpatial)
-                        Image(systemName: "chevron.down")
-                            .font(.system(size: 9))
+                    // Creator Filter Pill (PRD §5 & §7)
+                    Button {
+                        Haptics.selection()
+                        showingCreatorFilterSheet = true
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "person.crop.circle")
+                                .font(.system(size: 11))
+                            Text(viewModel.state.selectedCreator != nil ? "@\(viewModel.state.selectedCreator!.username)" : "Creator")
+                                .font(AppFonts.labelSpatial)
+                            Image(systemName: "chevron.down")
+                                .font(.system(size: 9))
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 7)
+                        .background(viewModel.state.selectedCreator != nil ? AppColors.primary : AppColors.surfaceContainerHigh)
+                        .foregroundColor(viewModel.state.selectedCreator != nil ? AppColors.onPrimary : AppColors.deepInk)
+                        .clipShape(Capsule())
                     }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 7)
-                    .background(viewModel.state.selectedCreator != nil ? AppColors.primary : AppColors.surfaceContainerHigh)
-                    .foregroundColor(viewModel.state.selectedCreator != nil ? AppColors.onPrimary : AppColors.deepInk)
-                    .clipShape(Capsule())
-                }
 
-                // Saved Filter Pill (PRD §5 & §11)
-                Button {
-                    Haptics.selection()
-                    viewModel.toggleBookmarkedOnly()
-                } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: viewModel.state.bookmarkedOnly ? "bookmark.fill" : "bookmark")
-                            .font(.system(size: 11))
-                        Text("Saved")
-                            .font(AppFonts.labelSpatial)
+                    // Saved Filter Pill (PRD §5 & §11)
+                    Button {
+                        Haptics.selection()
+                        viewModel.toggleBookmarkedOnly()
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: viewModel.state.bookmarkedOnly ? "bookmark.fill" : "bookmark")
+                                .font(.system(size: 11))
+                            Text("Saved")
+                                .font(AppFonts.labelSpatial)
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 7)
+                        .background(viewModel.state.bookmarkedOnly ? AppColors.terracotta : AppColors.surfaceContainerHigh)
+                        .foregroundColor(viewModel.state.bookmarkedOnly ? .white : AppColors.deepInk)
+                        .clipShape(Capsule())
                     }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 7)
-                    .background(viewModel.state.bookmarkedOnly ? AppColors.terracotta : AppColors.surfaceContainerHigh)
-                    .foregroundColor(viewModel.state.bookmarkedOnly ? .white : AppColors.deepInk)
-                    .clipShape(Capsule())
+
+                    if hasActiveFilters {
+                        Button {
+                            Haptics.selection()
+                            viewModel.clearFilters()
+                        } label: {
+                            Text("Reset")
+                                .font(AppFonts.labelSpatial)
+                                .foregroundColor(AppColors.outline)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 7)
+                                .background(AppColors.surfaceContainerLow)
+                                .clipShape(Capsule())
+                        }
+                    }
                 }
-
-                Spacer()
-
-                // Mode Picker [ Journal | Map ] (PRD §5)
-                segmentedModePicker
+                .padding(.horizontal, 20)
             }
-            .padding(.horizontal, 20)
             .padding(.bottom, 6)
         }
         .background(AppColors.canvas.opacity(0.96))
     }
+
 
     // MARK: - Search Bar with Autocomplete Dropdown (PRD §8)
 
@@ -291,40 +312,53 @@ public struct DiscoverView: View {
     // MARK: - Segmented Mode Picker [ Journal | Map ]
 
     private var segmentedModePicker: some View {
-        HStack(spacing: 2) {
-            Button {
-                Haptics.selection()
-                withAnimation(.spring(response: 0.28)) {
-                    viewModel.state.presentationMode = .journal
-                }
-            } label: {
-                Text("Journal")
-                    .font(AppFonts.labelSpatial)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
+        HStack {
+            Spacer()
+            HStack(spacing: 4) {
+                Button {
+                    Haptics.selection()
+                    withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) {
+                        viewModel.state.presentationMode = .journal
+                    }
+                } label: {
+                    HStack(spacing: 6) {
+                        Text("Journal")
+                            .font(AppFonts.labelUI)
+                            .foregroundColor(viewModel.state.presentationMode == .journal ? AppColors.onPrimary : AppColors.onSurfaceVariant)
+                    }
+                    .padding(.horizontal, 22)
+                    .padding(.vertical, 8)
                     .background(viewModel.state.presentationMode == .journal ? AppColors.primary : Color.clear)
-                    .foregroundColor(viewModel.state.presentationMode == .journal ? AppColors.onPrimary : AppColors.onSurfaceVariant)
                     .clipShape(Capsule())
-            }
-
-            Button {
-                Haptics.selection()
-                withAnimation(.spring(response: 0.28)) {
-                    viewModel.state.presentationMode = .map
                 }
-            } label: {
-                Text("Map")
-                    .font(AppFonts.labelSpatial)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
+
+                Button {
+                    Haptics.selection()
+                    withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) {
+                        viewModel.state.presentationMode = .map
+                    }
+                } label: {
+                    HStack(spacing: 6) {
+                        if viewModel.state.presentationMode == .map {
+                            Circle()
+                                .fill(AppColors.secondary)
+                                .frame(width: 6, height: 6)
+                        }
+                        Text("Map")
+                            .font(AppFonts.labelUI)
+                            .foregroundColor(viewModel.state.presentationMode == .map ? AppColors.onPrimary : AppColors.onSurfaceVariant)
+                    }
+                    .padding(.horizontal, 22)
+                    .padding(.vertical, 8)
                     .background(viewModel.state.presentationMode == .map ? AppColors.primary : Color.clear)
-                    .foregroundColor(viewModel.state.presentationMode == .map ? AppColors.onPrimary : AppColors.onSurfaceVariant)
                     .clipShape(Capsule())
+                }
             }
+            .padding(4)
+            .background(AppColors.surfaceContainer)
+            .clipShape(Capsule())
+            Spacer()
         }
-        .padding(3)
-        .background(AppColors.surfaceContainerHigh)
-        .clipShape(Capsule())
     }
 
     // MARK: - Active Filters Bar (PRD §5 & §7)
@@ -519,88 +553,100 @@ public struct DiscoverView: View {
 
     private var mapContentView: some View {
         ZStack(alignment: .bottom) {
-            // Cartographic Background Grid
-            Color(hex: "#F5F1E8")
-                .ignoresSafeArea()
-
-            Canvas { context, size in
-                let step: CGFloat = 36
-                for x in stride(from: 0, through: size.width, by: step) {
-                    var path = Path()
-                    path.move(to: CGPoint(x: x, y: 0))
-                    path.addLine(to: CGPoint(x: x, y: size.height))
-                    context.stroke(path, with: .color(AppColors.outlineVariant.opacity(0.35)), style: StrokeStyle(lineWidth: 0.5, dash: [2, 4]))
-                }
-                for y in stride(from: 0, through: size.height, by: step) {
-                    var path = Path()
-                    path.move(to: CGPoint(x: 0, y: y))
-                    path.addLine(to: CGPoint(x: size.width, y: y))
-                    context.stroke(path, with: .color(AppColors.outlineVariant.opacity(0.35)), style: StrokeStyle(lineWidth: 0.5, dash: [2, 4]))
-                }
-            }
-            .ignoresSafeArea()
-
-            // Located Trail Pins
-            GeometryReader { geo in
+            Map(position: $mapPosition) {
                 ForEach(viewModel.locatedRecords) { record in
                     if let anchor = record.discoveryAnchor {
-                        let posX = geo.size.width * 0.5 + CGFloat(anchor.longitude - 75.7873) * 1200
-                        let posY = geo.size.height * 0.45 - CGFloat(anchor.latitude - 26.9124) * 1200
-
-                        Button {
-                            Haptics.selection()
-                            selectedRecordForDetail = record
-                        } label: {
-                            VStack(spacing: 3) {
-                                ZStack {
-                                    Circle()
-                                        .fill(AppColors.primary.opacity(0.2))
-                                        .frame(width: 32, height: 32)
-                                    Circle()
-                                        .fill(AppColors.primary)
-                                        .frame(width: 14, height: 14)
-                                    Circle()
-                                        .fill(Color.white)
-                                        .frame(width: 4, height: 4)
+                        Annotation(record.title, coordinate: CLLocationCoordinate2D(latitude: anchor.latitude, longitude: anchor.longitude)) {
+                            Button {
+                                Haptics.selection()
+                                withAnimation(.spring(response: 0.3)) {
+                                    selectedRecordOnMap = record
                                 }
+                            } label: {
+                                VStack(spacing: 3) {
+                                    ZStack {
+                                        Circle()
+                                            .fill(AppColors.primary.opacity(selectedRecordOnMap?.trailId == record.trailId ? 0.3 : 0.15))
+                                            .frame(width: selectedRecordOnMap?.trailId == record.trailId ? 38 : 30, height: selectedRecordOnMap?.trailId == record.trailId ? 38 : 30)
 
-                                Text(record.title)
-                                    .font(AppFonts.labelSpatial)
-                                    .foregroundColor(AppColors.deepInk)
-                                    .padding(.horizontal, 8)
-                                    .padding(.vertical, 3)
-                                    .background(AppColors.pureWhite.opacity(0.92))
-                                    .clipShape(Capsule())
-                                    .shadow(color: Color.black.opacity(0.08), radius: 4)
+                                        Circle()
+                                            .fill(AppColors.primary)
+                                            .frame(width: 14, height: 14)
+
+                                        Circle()
+                                            .fill(Color.white)
+                                            .frame(width: 5, height: 5)
+                                    }
+
+                                    Text(record.title)
+                                        .font(AppFonts.labelSpatial)
+                                        .foregroundColor(AppColors.deepInk)
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 3)
+                                        .background(AppColors.pureWhite.opacity(0.94))
+                                        .clipShape(Capsule())
+                                        .shadow(color: Color.black.opacity(0.08), radius: 4)
+                                }
                             }
                         }
-                        .position(
-                            x: max(60, min(geo.size.width - 60, posX)),
-                            y: max(60, min(geo.size.height - 140, posY))
-                        )
                     }
                 }
             }
+            .mapStyle(.standard(elevation: .realistic))
+            .ignoresSafeArea()
+            .onAppear {
+                focusMapOnLocatedRecords()
+            }
+            .onChange(of: viewModel.locatedRecords.count) { _, _ in
+                focusMapOnLocatedRecords()
+            }
 
-            // Bottom Results Summary Card
-            VStack {
-                HStack {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("\(viewModel.locatedRecords.count) Map Anchors")
-                            .font(AppFonts.labelSpatial)
-                            .foregroundColor(AppColors.primary)
-                        Text(viewModel.state.areaFilter.title)
-                            .font(AppFonts.headlineSmall)
-                            .foregroundColor(AppColors.deepInk)
+            // Bottom drawer when a trail marker is selected
+            if let record = selectedRecordOnMap {
+                VStack(spacing: 0) {
+                    HStack {
+                        Spacer()
+                        Button {
+                            withAnimation(.spring(response: 0.25)) {
+                                selectedRecordOnMap = nil
+                            }
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.system(size: 20))
+                                .foregroundColor(AppColors.outline)
+                        }
                     }
+                    .padding(.horizontal, 16)
+                    .padding(.top, 12)
 
-                    Spacer()
-
-                    if !viewModel.unlocatedRecords.isEmpty {
-                        Text("\(viewModel.unlocatedRecords.count) unanchored in Journal")
-                            .font(AppFonts.caption)
-                            .foregroundColor(AppColors.outline)
-                    }
+                    PublicTrailCardView(
+                        record: record,
+                        onSelect: {
+                            selectedRecordForDetail = record
+                        },
+                        onSelectCreator: { creatorId in
+                            if let found = viewModel.creators.first(where: { $0.creatorId == creatorId }) {
+                                viewModel.setCreatorFilter(found)
+                            }
+                        }
+                    )
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 24)
+                }
+                .background(
+                    AppColors.canvas
+                        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+                        .shadow(color: Color.black.opacity(0.14), radius: 16, y: -4)
+                )
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            } else if viewModel.locatedRecords.isEmpty {
+                VStack(spacing: 8) {
+                    Text("No Trails with Map Anchors")
+                        .font(AppFonts.headlineSmall)
+                        .foregroundColor(AppColors.deepInk)
+                    Text("Published trails without coordinates appear in Journal view.")
+                        .font(AppFonts.caption)
+                        .foregroundColor(AppColors.outline)
                 }
                 .padding(16)
                 .background(AppColors.surfaceContainerLow)
@@ -609,6 +655,43 @@ public struct DiscoverView: View {
                 .padding(.horizontal, 20)
                 .padding(.bottom, 24)
             }
+        }
+    }
+
+    private func focusMapOnLocatedRecords() {
+        let coords = viewModel.locatedRecords.compactMap { r -> CLLocationCoordinate2D? in
+            guard let a = r.discoveryAnchor else { return nil }
+            return CLLocationCoordinate2D(latitude: a.latitude, longitude: a.longitude)
+        }
+        guard !coords.isEmpty else {
+            if let userLoc = TrailsLocationManager.shared.lastKnownLocation {
+                mapPosition = .region(MKCoordinateRegion(
+                    center: userLoc.coordinate,
+                    span: MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
+                ))
+            }
+            return
+        }
+        var minLat = coords[0].latitude
+        var maxLat = coords[0].latitude
+        var minLon = coords[0].longitude
+        var maxLon = coords[0].longitude
+        for c in coords {
+            minLat = min(minLat, c.latitude)
+            maxLat = max(maxLat, c.latitude)
+            minLon = min(minLon, c.longitude)
+            maxLon = max(maxLon, c.longitude)
+        }
+        let center = CLLocationCoordinate2D(
+            latitude: (minLat + maxLat) / 2.0,
+            longitude: (minLon + maxLon) / 2.0
+        )
+        let span = MKCoordinateSpan(
+            latitudeDelta: max(0.02, (maxLat - minLat) * 1.5),
+            longitudeDelta: max(0.02, (maxLon - minLon) * 1.5)
+        )
+        withAnimation(.easeInOut(duration: 0.4)) {
+            mapPosition = .region(MKCoordinateRegion(center: center, span: span))
         }
     }
 
@@ -636,8 +719,8 @@ public struct DiscoverView: View {
                         if let loc = TrailsLocationManager.shared.lastKnownLocation {
                             viewModel.setAreaFilter(.nearMe(latitude: loc.coordinate.latitude, longitude: loc.coordinate.longitude, radiusKm: 25.0))
                         } else {
-                            // Default location query without requiring strict permission
-                            viewModel.setAreaFilter(.nearMe(latitude: 26.9124, longitude: 75.7873, radiusKm: 25.0))
+                            TrailsLocationManager.shared.requestAccessIfNeeded()
+                            viewModel.setAreaFilter(.all)
                         }
                         showingAreaFilterSheet = false
                     } label: {
@@ -651,28 +734,7 @@ public struct DiscoverView: View {
                     }
                 }
 
-                Section("Available Survey Places") {
-                    ForEach(viewModel.availablePlaces) { place in
-                        Button {
-                            viewModel.setAreaFilter(.chosenPlace(place))
-                            showingAreaFilterSheet = false
-                        } label: {
-                            HStack {
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(place.name)
-                                        .foregroundColor(AppColors.deepInk)
-                                    Text(place.locality)
-                                        .font(AppFonts.caption)
-                                        .foregroundColor(AppColors.outline)
-                                }
-                                Spacer()
-                                if case .chosenPlace(let p) = viewModel.state.areaFilter, p.id == place.id {
-                                    Image(systemName: "checkmark").foregroundColor(AppColors.primary)
-                                }
-                            }
-                        }
-                    }
-                }
+                
             }
             .navigationTitle("Select Area")
             .navigationBarTitleDisplayMode(.inline)
@@ -702,27 +764,35 @@ public struct DiscoverView: View {
                     }
                 }
 
-                Section("Published Creators") {
-                    ForEach(viewModel.creators) { creator in
-                        Button {
-                            viewModel.setCreatorFilter(creator)
-                            showingCreatorFilterSheet = false
-                        } label: {
-                            HStack {
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text("@\(creator.username)")
-                                        .font(AppFonts.bodyMedium)
-                                        .foregroundColor(AppColors.deepInk)
-                                    Text(creator.displayName)
-                                        .font(AppFonts.caption)
-                                        .foregroundColor(AppColors.secondary)
-                                }
-                                Spacer()
-                                Text("\(creator.trailCount) trails")
-                                    .font(AppFonts.labelSpatial)
-                                    .foregroundColor(AppColors.outline)
-                                if viewModel.state.selectedCreator?.creatorId == creator.creatorId {
-                                    Image(systemName: "checkmark").foregroundColor(AppColors.primary)
+                if viewModel.creators.isEmpty {
+                    Section {
+                        Text("No other creators discovered yet.")
+                            .font(AppFonts.caption)
+                            .foregroundColor(AppColors.outline)
+                    }
+                } else {
+                    Section("Published Creators") {
+                        ForEach(viewModel.creators) { creator in
+                            Button {
+                                viewModel.setCreatorFilter(creator)
+                                showingCreatorFilterSheet = false
+                            } label: {
+                                HStack {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text("@\(creator.username)")
+                                            .font(AppFonts.bodyMedium)
+                                            .foregroundColor(AppColors.deepInk)
+                                        Text(creator.displayName)
+                                            .font(AppFonts.caption)
+                                            .foregroundColor(AppColors.secondary)
+                                    }
+                                    Spacer()
+                                    Text("\(creator.trailCount) trails")
+                                        .font(AppFonts.labelSpatial)
+                                        .foregroundColor(AppColors.outline)
+                                    if viewModel.state.selectedCreator?.creatorId == creator.creatorId {
+                                        Image(systemName: "checkmark").foregroundColor(AppColors.primary)
+                                    }
                                 }
                             }
                         }

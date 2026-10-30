@@ -37,6 +37,7 @@ public struct TrailJournalDetailView: View {
     @State private var showingActionSheet: Bool = false
     @State private var showingEditSheet: Bool = false
     @State private var showingDeleteAlert: Bool = false
+    @State private var showingPublishSheet: Bool = false
 
     // Photo & Video Memories Carousel
     @State private var currentMediaIndex: Int = 0
@@ -207,8 +208,17 @@ public struct TrailJournalDetailView: View {
             .sheet(isPresented: $showingStartingPointPanoViewer) {
                 StartingPointPanoViewerSheet(trail: trail)
             }
+            // Publish to Network Sheet
+            .sheet(isPresented: $showingPublishSheet) {
+                ReviewPublishTrailView(trail: trail)
+            }
             // Action Menu Confirmation Dialog
             .confirmationDialog("Trail Options", isPresented: $showingActionSheet, titleVisibility: .visible) {
+                if !trail.isDownloaded {
+                    Button("Publish to Network") {
+                        showingPublishSheet = true
+                    }
+                }
                 Button("Edit Details") {
                     editTitle = trail.title
                     editNotes = trail.personalNotes
@@ -1420,6 +1430,27 @@ public struct TrailJournalDetailView: View {
 
     private var bottomManagementActions: some View {
         VStack(spacing: 12) {
+            if !trail.isDownloaded {
+                Button {
+                    Haptics.medium()
+                    showingPublishSheet = true
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "arrow.up.circle.fill")
+                            .font(.system(size: 16))
+                        Text("Publish to Trails Network")
+                            .font(AppFonts.labelUI)
+                            .fontWeight(.semibold)
+                    }
+                    .foregroundColor(AppColors.onPrimary)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 50)
+                    .background(AppColors.forestGreen)
+                    .clipShape(Capsule())
+                    .shadow(color: AppColors.forestGreen.opacity(0.2), radius: 6, y: 2)
+                }
+            }
+
             Button {
                 Haptics.light()
                 editTitle = trail.title
