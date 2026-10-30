@@ -47,8 +47,8 @@ public struct MyTrailsView: View {
                     }
                 }
 
-                // Floating Sticky "Start a trail" Action (Journal View only)
-                if dataStore.collectionMode == .journal {
+                // Floating Sticky "Start a trail" Action (Journal View only when trails are present)
+                if dataStore.collectionMode == .journal && !dataStore.filteredTrails.isEmpty {
                     floatingStartTrailButton
                         .padding(.bottom, 24)
                         .transition(.scale.combined(with: .opacity))

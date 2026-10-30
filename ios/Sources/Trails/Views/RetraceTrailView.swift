@@ -1612,24 +1612,20 @@ public struct RetraceTrailView: View {
             Button {
                 triggerInstantPhotoCapture()
             } label: {
-                VStack(spacing: 3) {
-                    ZStack {
-                        Circle()
-                            .fill(Color.white.opacity(0.18))
-                            .frame(width: 46, height: 46)
-                        Circle()
-                            .stroke(Color.white, lineWidth: 2)
-                            .frame(width: 42, height: 42)
-                        Image(systemName: "camera.fill")
-                            .font(.system(size: 17, weight: .bold))
-                            .foregroundColor(.white)
-                    }
-                    Text("Quick Snap")
-                        .font(.system(size: 9, weight: .semibold))
-                        .foregroundColor(Color.white.opacity(0.9))
+                ZStack {
+                    Circle()
+                        .fill(Color.white.opacity(0.18))
+                        .frame(width: 46, height: 46)
+                    Circle()
+                        .stroke(Color.white, lineWidth: 2)
+                        .frame(width: 42, height: 42)
+                    Image(systemName: "camera.fill")
+                        .font(.system(size: 17, weight: .bold))
+                        .foregroundColor(.white)
                 }
             }
             .buttonStyle(ScaleButtonStyle())
+            .accessibilityLabel("Quick Photo Snap")
 
             Spacer(minLength: 2)
 
@@ -1639,24 +1635,20 @@ public struct RetraceTrailView: View {
                 scannerEngine.pauseScanning()
                 showingFullScreenCaptureMode = .photo
             } label: {
-                VStack(spacing: 3) {
-                    ZStack {
-                        Circle()
-                            .fill(AppColors.mutedBrass.opacity(0.25))
-                            .frame(width: 46, height: 46)
-                        Circle()
-                            .stroke(AppColors.mutedBrass, lineWidth: 2)
-                            .frame(width: 42, height: 42)
-                        Image(systemName: "camera.viewfinder")
-                            .font(.system(size: 18, weight: .semibold))
-                            .foregroundColor(AppColors.mutedBrass)
-                    }
-                    Text("Zoom Cam")
-                        .font(.system(size: 9, weight: .semibold))
+                ZStack {
+                    Circle()
+                        .fill(AppColors.mutedBrass.opacity(0.25))
+                        .frame(width: 46, height: 46)
+                    Circle()
+                        .stroke(AppColors.mutedBrass, lineWidth: 2)
+                        .frame(width: 42, height: 42)
+                    Image(systemName: "camera.viewfinder")
+                        .font(.system(size: 18, weight: .semibold))
                         .foregroundColor(AppColors.mutedBrass)
                 }
             }
             .buttonStyle(ScaleButtonStyle())
+            .accessibilityLabel("Zoom Camera")
 
             Spacer(minLength: 2)
 
@@ -1666,24 +1658,20 @@ public struct RetraceTrailView: View {
                 scannerEngine.pauseScanning()
                 showingFullScreenCaptureMode = .video
             } label: {
-                VStack(spacing: 3) {
-                    ZStack {
-                        Circle()
-                            .fill(AppColors.terracotta)
-                            .frame(width: 46, height: 46)
-                        Circle()
-                            .stroke(Color.white.opacity(0.55), lineWidth: 2)
-                            .frame(width: 42, height: 42)
-                        Image(systemName: "video.fill")
-                            .font(.system(size: 16, weight: .bold))
-                            .foregroundColor(.white)
-                    }
-                    Text("Video")
-                        .font(.system(size: 9, weight: .semibold))
-                        .foregroundColor(Color.white.opacity(0.9))
+                ZStack {
+                    Circle()
+                        .fill(AppColors.terracotta)
+                        .frame(width: 46, height: 46)
+                    Circle()
+                        .stroke(Color.white.opacity(0.55), lineWidth: 2)
+                        .frame(width: 42, height: 42)
+                    Image(systemName: "video.fill")
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundColor(.white)
                 }
             }
             .buttonStyle(ScaleButtonStyle())
+            .accessibilityLabel("Record Video")
 
             Spacer(minLength: 2)
 
@@ -1691,22 +1679,18 @@ public struct RetraceTrailView: View {
             Button {
                 toggleInLineVoiceRecording()
             } label: {
-                VStack(spacing: 3) {
-                    ZStack {
-                        Circle()
-                            .fill(isInLineVoiceRecording ? AppColors.terracotta : Color.black.opacity(0.6))
-                            .frame(width: 44, height: 44)
-                        Image(systemName: isInLineVoiceRecording ? "stop.fill" : "mic.fill")
-                            .font(.system(size: 16))
-                            .foregroundColor(isInLineVoiceRecording ? .white : AppColors.mutedBrass)
-                    }
-                    .overlay(Circle().stroke(isInLineVoiceRecording ? AppColors.terracotta : Color.white.opacity(0.2), lineWidth: 1.2))
-                    Text(isInLineVoiceRecording ? "Stop" : "Voice")
-                        .font(.system(size: 9, weight: .semibold))
-                        .foregroundColor(isInLineVoiceRecording ? AppColors.terracotta : Color.white.opacity(0.8))
+                ZStack {
+                    Circle()
+                        .fill(isInLineVoiceRecording ? AppColors.terracotta : Color.black.opacity(0.6))
+                        .frame(width: 44, height: 44)
+                    Image(systemName: isInLineVoiceRecording ? "stop.fill" : "mic.fill")
+                        .font(.system(size: 16))
+                        .foregroundColor(isInLineVoiceRecording ? .white : AppColors.mutedBrass)
                 }
+                .overlay(Circle().stroke(isInLineVoiceRecording ? AppColors.terracotta : Color.white.opacity(0.2), lineWidth: 1.2))
             }
             .buttonStyle(ScaleButtonStyle())
+            .accessibilityLabel(isInLineVoiceRecording ? "Stop Recording" : "Record Voice")
 
             Spacer(minLength: 2)
 
@@ -1718,22 +1702,18 @@ public struct RetraceTrailView: View {
                 noteBody = ""
                 showingAddNoteSheet = true
             } label: {
-                VStack(spacing: 3) {
-                    ZStack {
-                        Circle()
-                            .fill(Color.black.opacity(0.6))
-                            .frame(width: 44, height: 44)
-                        Image(systemName: "note.text.badge.plus")
-                            .font(.system(size: 15))
-                            .foregroundColor(.white)
-                    }
-                    .overlay(Circle().stroke(Color.white.opacity(0.2), lineWidth: 1.2))
-                    Text("Note")
-                        .font(.system(size: 9, weight: .semibold))
-                        .foregroundColor(Color.white.opacity(0.8))
+                ZStack {
+                    Circle()
+                        .fill(Color.black.opacity(0.6))
+                        .frame(width: 44, height: 44)
+                    Image(systemName: "note.text.badge.plus")
+                        .font(.system(size: 15))
+                        .foregroundColor(.white)
                 }
+                .overlay(Circle().stroke(Color.white.opacity(0.2), lineWidth: 1.2))
             }
             .buttonStyle(ScaleButtonStyle())
+            .accessibilityLabel("Add Note")
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 8)
