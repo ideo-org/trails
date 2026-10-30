@@ -65,12 +65,14 @@ public final class PreviewUIView: UIView {
 
     public override init(frame: CGRect) {
         super.init(frame: frame)
+        backgroundColor = .black
         setupGestures()
         addSubview(focusIndicator)
     }
 
     required init?(coder: NSCoder) {
         super.init(coder: coder)
+        backgroundColor = .black
         setupGestures()
         addSubview(focusIndicator)
     }

@@ -220,6 +220,13 @@ public struct TrailDetail: Identifiable, Hashable, Codable {
     public var publisherReference: String?
     public var downloadedAt: Date?
 
+    // PRD v0.4.0 §17 & §18 Publication Metadata
+    public var isPublished: Bool
+    public var publishedAt: Date?
+    public var publishedRevision: Int?
+    public var publishedPackageCid: String?
+    public var publishedTransactionRef: String?
+
     enum CodingKeys: String, CodingKey {
         case id, title, subtitle, placeId, placeName, locality, wing
         case authorName, authorRole, distanceMeters, floorCode, floorTitle
@@ -231,6 +238,7 @@ public struct TrailDetail: Identifiable, Hashable, Codable {
         case createdAt, updatedAt
         case isDownloaded, sourceTrailId, sourceRevision, sourcePackageCid
         case creatorId, creatorUsername, publisherReference, downloadedAt
+        case isPublished, publishedAt, publishedRevision, publishedPackageCid, publishedTransactionRef
     }
 
     public var photoCount: Int {
@@ -303,7 +311,12 @@ public struct TrailDetail: Identifiable, Hashable, Codable {
         creatorId: String? = nil,
         creatorUsername: String? = nil,
         publisherReference: String? = nil,
-        downloadedAt: Date? = nil
+        downloadedAt: Date? = nil,
+        isPublished: Bool = false,
+        publishedAt: Date? = nil,
+        publishedRevision: Int? = nil,
+        publishedPackageCid: String? = nil,
+        publishedTransactionRef: String? = nil
     ) {
         self.id = id
         self.title = title
@@ -347,6 +360,113 @@ public struct TrailDetail: Identifiable, Hashable, Codable {
         self.creatorUsername = creatorUsername
         self.publisherReference = publisherReference
         self.downloadedAt = downloadedAt
+        self.isPublished = isPublished
+        self.publishedAt = publishedAt
+        self.publishedRevision = publishedRevision
+        self.publishedPackageCid = publishedPackageCid
+        self.publishedTransactionRef = publishedTransactionRef
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try container.decode(String.self, forKey: .id)
+        self.title = try container.decode(String.self, forKey: .title)
+        self.subtitle = (try? container.decodeIfPresent(String.self, forKey: .subtitle)) ?? ""
+        self.placeId = (try? container.decodeIfPresent(String.self, forKey: .placeId)) ?? "local-place"
+        self.placeName = (try? container.decodeIfPresent(String.self, forKey: .placeName)) ?? "My Trail"
+        self.locality = (try? container.decodeIfPresent(String.self, forKey: .locality)) ?? "Local Area"
+        self.wing = (try? container.decodeIfPresent(String.self, forKey: .wing)) ?? "Ground Floor"
+        self.authorName = (try? container.decodeIfPresent(String.self, forKey: .authorName)) ?? "Explorer"
+        self.authorRole = (try? container.decodeIfPresent(String.self, forKey: .authorRole)) ?? "Spatial Journal"
+        self.distanceMeters = (try? container.decodeIfPresent(Int.self, forKey: .distanceMeters)) ?? 0
+        self.floorCode = (try? container.decodeIfPresent(String.self, forKey: .floorCode)) ?? "LVL 00"
+        self.floorTitle = (try? container.decodeIfPresent(String.self, forKey: .floorTitle)) ?? "Ground Floor"
+        self.meshDensity = (try? container.decodeIfPresent(String.self, forKey: .meshDensity)) ?? "LiDAR Route"
+        self.samplingFrequency = (try? container.decodeIfPresent(String.self, forKey: .samplingFrequency)) ?? "24.6 kHz"
+        self.nodeCount = (try? container.decodeIfPresent(Int.self, forKey: .nodeCount)) ?? 4
+        self.personalNotes = (try? container.decodeIfPresent(String.self, forKey: .personalNotes)) ?? ""
+        self.moments = (try? container.decodeIfPresent([SpatialMoment].self, forKey: .moments)) ?? []
+        self.visibility = (try? container.decodeIfPresent(TrailVisibility.self, forKey: .visibility)) ?? .privateDraft
+        self.isDraft = (try? container.decodeIfPresent(Bool.self, forKey: .isDraft)) ?? false
+        self.coverImageName = try? container.decodeIfPresent(String.self, forKey: .coverImageName)
+        self.latitude = try? container.decodeIfPresent(Double.self, forKey: .latitude)
+        self.longitude = try? container.decodeIfPresent(Double.self, forKey: .longitude)
+        self.inspiredByTrailId = try? container.decodeIfPresent(String.self, forKey: .inspiredByTrailId)
+        self.inspiredByNote = try? container.decodeIfPresent(String.self, forKey: .inspiredByNote)
+        self.isRetrace = (try? container.decodeIfPresent(Bool.self, forKey: .isRetrace)) ?? false
+        self.retraceSimilarityIndex = try? container.decodeIfPresent(Double.self, forKey: .retraceSimilarityIndex)
+        self.retraceReferenceTrailTitle = try? container.decodeIfPresent(String.self, forKey: .retraceReferenceTrailTitle)
+        self.retraceDate = try? container.decodeIfPresent(Date.self, forKey: .retraceDate)
+        self.startFramePhotoName = try? container.decodeIfPresent(String.self, forKey: .startFramePhotoName)
+        self.startHeadingDegrees = try? container.decodeIfPresent(Double.self, forKey: .startHeadingDegrees)
+        self.startVantageDescription = try? container.decodeIfPresent(String.self, forKey: .startVantageDescription)
+        self.isStartingFramePano = try? container.decodeIfPresent(Bool.self, forKey: .isStartingFramePano)
+        self.createdAt = (try? container.decodeIfPresent(Date.self, forKey: .createdAt)) ?? Date()
+        self.updatedAt = (try? container.decodeIfPresent(Date.self, forKey: .updatedAt)) ?? Date()
+        self.isDownloaded = (try? container.decodeIfPresent(Bool.self, forKey: .isDownloaded)) ?? false
+        self.sourceTrailId = try? container.decodeIfPresent(String.self, forKey: .sourceTrailId)
+        self.sourceRevision = try? container.decodeIfPresent(Int.self, forKey: .sourceRevision)
+        self.sourcePackageCid = try? container.decodeIfPresent(String.self, forKey: .sourcePackageCid)
+        self.creatorId = try? container.decodeIfPresent(String.self, forKey: .creatorId)
+        self.creatorUsername = try? container.decodeIfPresent(String.self, forKey: .creatorUsername)
+        self.publisherReference = try? container.decodeIfPresent(String.self, forKey: .publisherReference)
+        self.downloadedAt = try? container.decodeIfPresent(Date.self, forKey: .downloadedAt)
+        self.isPublished = (try? container.decodeIfPresent(Bool.self, forKey: .isPublished)) ?? false
+        self.publishedAt = try? container.decodeIfPresent(Date.self, forKey: .publishedAt)
+        self.publishedRevision = try? container.decodeIfPresent(Int.self, forKey: .publishedRevision)
+        self.publishedPackageCid = try? container.decodeIfPresent(String.self, forKey: .publishedPackageCid)
+        self.publishedTransactionRef = try? container.decodeIfPresent(String.self, forKey: .publishedTransactionRef)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(title, forKey: .title)
+        try container.encode(subtitle, forKey: .subtitle)
+        try container.encode(placeId, forKey: .placeId)
+        try container.encode(placeName, forKey: .placeName)
+        try container.encode(locality, forKey: .locality)
+        try container.encode(wing, forKey: .wing)
+        try container.encode(authorName, forKey: .authorName)
+        try container.encode(authorRole, forKey: .authorRole)
+        try container.encode(distanceMeters, forKey: .distanceMeters)
+        try container.encode(floorCode, forKey: .floorCode)
+        try container.encode(floorTitle, forKey: .floorTitle)
+        try container.encode(meshDensity, forKey: .meshDensity)
+        try container.encode(samplingFrequency, forKey: .samplingFrequency)
+        try container.encode(nodeCount, forKey: .nodeCount)
+        try container.encode(personalNotes, forKey: .personalNotes)
+        try container.encode(moments, forKey: .moments)
+        try container.encode(visibility, forKey: .visibility)
+        try container.encode(isDraft, forKey: .isDraft)
+        try container.encodeIfPresent(coverImageName, forKey: .coverImageName)
+        try container.encodeIfPresent(latitude, forKey: .latitude)
+        try container.encodeIfPresent(longitude, forKey: .longitude)
+        try container.encodeIfPresent(inspiredByTrailId, forKey: .inspiredByTrailId)
+        try container.encodeIfPresent(inspiredByNote, forKey: .inspiredByNote)
+        try container.encode(isRetrace, forKey: .isRetrace)
+        try container.encodeIfPresent(retraceSimilarityIndex, forKey: .retraceSimilarityIndex)
+        try container.encodeIfPresent(retraceReferenceTrailTitle, forKey: .retraceReferenceTrailTitle)
+        try container.encodeIfPresent(retraceDate, forKey: .retraceDate)
+        try container.encodeIfPresent(startFramePhotoName, forKey: .startFramePhotoName)
+        try container.encodeIfPresent(startHeadingDegrees, forKey: .startHeadingDegrees)
+        try container.encodeIfPresent(startVantageDescription, forKey: .startVantageDescription)
+        try container.encodeIfPresent(isStartingFramePano, forKey: .isStartingFramePano)
+        try container.encode(createdAt, forKey: .createdAt)
+        try container.encode(updatedAt, forKey: .updatedAt)
+        try container.encode(isDownloaded, forKey: .isDownloaded)
+        try container.encodeIfPresent(sourceTrailId, forKey: .sourceTrailId)
+        try container.encodeIfPresent(sourceRevision, forKey: .sourceRevision)
+        try container.encodeIfPresent(sourcePackageCid, forKey: .sourcePackageCid)
+        try container.encodeIfPresent(creatorId, forKey: .creatorId)
+        try container.encodeIfPresent(creatorUsername, forKey: .creatorUsername)
+        try container.encodeIfPresent(publisherReference, forKey: .publisherReference)
+        try container.encodeIfPresent(downloadedAt, forKey: .downloadedAt)
+        try container.encode(isPublished, forKey: .isPublished)
+        try container.encodeIfPresent(publishedAt, forKey: .publishedAt)
+        try container.encodeIfPresent(publishedRevision, forKey: .publishedRevision)
+        try container.encodeIfPresent(publishedPackageCid, forKey: .publishedPackageCid)
+        try container.encodeIfPresent(publishedTransactionRef, forKey: .publishedTransactionRef)
     }
 
     public func resolvedStartFrameURL(fallbackTrailId: String? = nil) -> URL? {
@@ -370,52 +490,6 @@ public struct TrailDetail: Identifiable, Hashable, Codable {
             return firstVideo.resolvedVideoThumbnailURL(trailId: id, fallbackTrailId: fallbackTrailId ?? inspiredByTrailId)
         }
         return nil
-    }
-
-    public init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        self.id = try container.decode(String.self, forKey: .id)
-        self.title = try container.decode(String.self, forKey: .title)
-        self.subtitle = try container.decode(String.self, forKey: .subtitle)
-        self.placeId = try container.decode(String.self, forKey: .placeId)
-        self.placeName = try container.decode(String.self, forKey: .placeName)
-        self.locality = try container.decodeIfPresent(String.self, forKey: .locality) ?? "Local Area"
-        self.wing = try container.decodeIfPresent(String.self, forKey: .wing) ?? "Main"
-        self.authorName = try container.decodeIfPresent(String.self, forKey: .authorName) ?? "A trail by you"
-        self.authorRole = try container.decodeIfPresent(String.self, forKey: .authorRole) ?? "Explorer"
-        self.distanceMeters = try container.decodeIfPresent(Int.self, forKey: .distanceMeters) ?? 0
-        self.floorCode = try container.decodeIfPresent(String.self, forKey: .floorCode) ?? "LVL 00"
-        self.floorTitle = try container.decodeIfPresent(String.self, forKey: .floorTitle) ?? "Ground Floor"
-        self.meshDensity = try container.decodeIfPresent(String.self, forKey: .meshDensity) ?? "LiDAR Route"
-        self.samplingFrequency = try container.decodeIfPresent(String.self, forKey: .samplingFrequency) ?? "24.6 kHz"
-        self.nodeCount = try container.decodeIfPresent(Int.self, forKey: .nodeCount) ?? 0
-        self.personalNotes = try container.decodeIfPresent(String.self, forKey: .personalNotes) ?? ""
-        self.moments = try container.decodeIfPresent([SpatialMoment].self, forKey: .moments) ?? []
-        self.visibility = try container.decodeIfPresent(TrailVisibility.self, forKey: .visibility) ?? .privateDraft
-        self.isDraft = try container.decodeIfPresent(Bool.self, forKey: .isDraft) ?? false
-        self.coverImageName = try container.decodeIfPresent(String.self, forKey: .coverImageName)
-        self.latitude = try container.decodeIfPresent(Double.self, forKey: .latitude)
-        self.longitude = try container.decodeIfPresent(Double.self, forKey: .longitude)
-        self.inspiredByTrailId = try container.decodeIfPresent(String.self, forKey: .inspiredByTrailId)
-        self.inspiredByNote = try container.decodeIfPresent(String.self, forKey: .inspiredByNote)
-        self.isRetrace = try container.decodeIfPresent(Bool.self, forKey: .isRetrace) ?? false
-        self.retraceSimilarityIndex = try container.decodeIfPresent(Double.self, forKey: .retraceSimilarityIndex)
-        self.retraceReferenceTrailTitle = try container.decodeIfPresent(String.self, forKey: .retraceReferenceTrailTitle)
-        self.retraceDate = try container.decodeIfPresent(Date.self, forKey: .retraceDate)
-        self.startFramePhotoName = try container.decodeIfPresent(String.self, forKey: .startFramePhotoName)
-        self.startHeadingDegrees = try container.decodeIfPresent(Double.self, forKey: .startHeadingDegrees)
-        self.startVantageDescription = try container.decodeIfPresent(String.self, forKey: .startVantageDescription)
-        self.isStartingFramePano = try container.decodeIfPresent(Bool.self, forKey: .isStartingFramePano)
-        self.createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
-        self.updatedAt = try container.decodeIfPresent(Date.self, forKey: .updatedAt) ?? Date()
-        self.isDownloaded = try container.decodeIfPresent(Bool.self, forKey: .isDownloaded) ?? false
-        self.sourceTrailId = try container.decodeIfPresent(String.self, forKey: .sourceTrailId)
-        self.sourceRevision = try container.decodeIfPresent(Int.self, forKey: .sourceRevision)
-        self.sourcePackageCid = try container.decodeIfPresent(String.self, forKey: .sourcePackageCid)
-        self.creatorId = try container.decodeIfPresent(String.self, forKey: .creatorId)
-        self.creatorUsername = try container.decodeIfPresent(String.self, forKey: .creatorUsername)
-        self.publisherReference = try container.decodeIfPresent(String.self, forKey: .publisherReference)
-        self.downloadedAt = try container.decodeIfPresent(Date.self, forKey: .downloadedAt)
     }
 }
 
@@ -1034,7 +1108,9 @@ public final class TrailPackageStore {
             try? data.write(to: samplesURL, options: .atomic)
         }
 
-        updateLibraryIndex()
+        if !trail.isDraft {
+            updateLibraryIndex()
+        }
     }
 
     public func updateTrailMetadata(trail: TrailDetail) {

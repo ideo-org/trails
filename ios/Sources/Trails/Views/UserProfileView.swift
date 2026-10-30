@@ -275,7 +275,8 @@ public struct UserProfileView: View {
                                 .padding(.horizontal, 20)
 
                             VStack(spacing: 0) {
-                                DiagnosticRow(title: "Local Trails Count", value: "\(dataStore.savedTrails.count) Saved, \(dataStore.userDrafts.count) Draft", isOk: nil)
+                                let publishedCount = dataStore.savedTrails.filter { $0.isPublished }.count
+                                DiagnosticRow(title: "Local Trails Count", value: publishedCount > 0 ? "\(dataStore.savedTrails.count) Saved (\(publishedCount) Published), \(dataStore.userDrafts.count) Draft" : "\(dataStore.savedTrails.count) Saved, \(dataStore.userDrafts.count) Draft", isOk: nil)
                                 Divider().padding(.leading, 16)
                                 DiagnosticRow(title: "Offline Mesh Cache", value: "128.4 MB", isOk: nil)
                             }
@@ -614,14 +615,12 @@ public struct UserProfileView: View {
                     self.isLinkingProvider = false
                     Haptics.success()
                 }
-            } catch let error as NSError {
+            } catch {
                 await MainActor.run {
                     self.isLinkingProvider = false
-                    // Error 1001 is user cancellation in ASAuthorizationError
-                    if error.code == 1001 {
-                        return
+                    if let message = AppleSignInManager.friendlyErrorMessage(for: error) {
+                        self.linkErrorMessage = message
                     }
-                    self.linkErrorMessage = error.localizedDescription
                 }
             }
         }
@@ -665,13 +664,15 @@ public struct UserProfileView: View {
 
                     Spacer()
 
-                    Button("Use Username") {
+                    Button {
                         let clean = switchUsernameText.trimmingCharacters(in: .whitespacesAndNewlines)
                             .trimmingCharacters(in: CharacterSet(charactersIn: "@"))
                         guard !clean.isEmpty else { return }
                         authManager.signInWithUsername(clean)
                         Haptics.success()
                         showingUsernameSwitchAlert = false
+                    } label: {
+                        Text("Use Username")
                     }
                     .buttonStyle(PrimaryButtonStyle())
                     .disabled(switchUsernameText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
@@ -763,7 +764,7 @@ public struct UserProfileView: View {
 
                     Spacer()
 
-                    Button("Save") {
+                    Button {
                         let cleanName = draftDisplayName.trimmingCharacters(in: .whitespacesAndNewlines)
                         let cleanIntro = draftIntroduction.trimmingCharacters(in: .whitespacesAndNewlines)
                         let cleanUser = draftUsername.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -775,6 +776,8 @@ public struct UserProfileView: View {
                             avatarURL: effectiveAvatarURL?.absoluteString
                         )
                         showingEditProfile = false
+                    } label: {
+                        Text("Save")
                     }
                     .buttonStyle(PrimaryButtonStyle())
                 }

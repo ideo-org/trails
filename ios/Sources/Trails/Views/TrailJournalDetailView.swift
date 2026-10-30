@@ -17,6 +17,10 @@ public struct TrailJournalDetailView: View {
 
     let trail: TrailDetail
 
+    private var currentTrail: TrailDetail {
+        dataStore.savedTrails.first(where: { $0.id == trail.id }) ?? trail
+    }
+
     // Revisit & Presentation Replay
     @State private var showingRevisitReplay: Bool = false
     @State private var showingRetraceView: Bool = false
@@ -67,11 +71,13 @@ public struct TrailJournalDetailView: View {
                         // MARK: - 2. Title & Curatorial Attribution
                         titleAndAttributionSection
 
-                        // MARK: - 2.5 Retrace / Download Provenance Card
-                        if trail.isDownloaded {
+                        // MARK: - 2.5 Retrace / Download / Published Provenance Card
+                        if currentTrail.isDownloaded {
                             downloadedProvenanceCard
-                        } else if trail.isRetrace {
+                        } else if currentTrail.isRetrace {
                             retraceProvenanceCard
+                        } else if currentTrail.isPublished {
+                            publishedProvenanceCard
                         }
 
                         // MARK: - 3. Author's Personal Notes Callout
@@ -134,7 +140,7 @@ public struct TrailJournalDetailView: View {
                             .scaledToFit()
                             .frame(width: 20, height: 20)
                             .clipShape(Circle())
-                        Text(trail.isRetrace ? "Retraced Trail Record" : "Your Saved Trail")
+                        Text(currentTrail.isRetrace ? "Retraced Trail Record" : (currentTrail.isPublished ? "Published Trail" : "Your Saved Trail"))
                             .font(AppFonts.headlineSmall)
                             .foregroundColor(AppColors.primary)
                     }
@@ -144,8 +150,8 @@ public struct TrailJournalDetailView: View {
                     HStack(spacing: 12) {
                         // Share
                         ShareLink(
-                            item: "Trail: \(trail.title)\n\(trail.subtitle)\nRecorded on Trails iOS",
-                            subject: Text(trail.title)
+                            item: "Trail: \(currentTrail.title)\n\(currentTrail.subtitle)\nRecorded on Trails iOS",
+                            subject: Text(currentTrail.title)
                         ) {
                             Image(systemName: "square.and.arrow.up")
                                 .font(.system(size: 16))
@@ -210,18 +216,24 @@ public struct TrailJournalDetailView: View {
             }
             // Publish to Network Sheet
             .sheet(isPresented: $showingPublishSheet) {
-                ReviewPublishTrailView(trail: trail)
+                ReviewPublishTrailView(trail: currentTrail)
             }
             // Action Menu Confirmation Dialog
             .confirmationDialog("Trail Options", isPresented: $showingActionSheet, titleVisibility: .visible) {
-                if !trail.isDownloaded {
-                    Button("Publish to Network") {
-                        showingPublishSheet = true
+                if !currentTrail.isDownloaded {
+                    if currentTrail.isPublished {
+                        Button("View Network Publication") {
+                            showingPublishSheet = true
+                        }
+                    } else {
+                        Button("Publish to Network") {
+                            showingPublishSheet = true
+                        }
                     }
                 }
                 Button("Edit Details") {
-                    editTitle = trail.title
-                    editNotes = trail.personalNotes
+                    editTitle = currentTrail.title
+                    editNotes = currentTrail.personalNotes
                     showingEditSheet = true
                 }
                 Button("Delete from iPhone", role: .destructive) {
@@ -659,6 +671,80 @@ public struct TrailJournalDetailView: View {
         .overlay(
             RoundedRectangle(cornerRadius: 18)
                 .stroke(Color(hex: "#00838F").opacity(0.25), lineWidth: 1)
+        )
+    }
+
+    // MARK: - 2.6 Published Provenance Card (PRD v0.4.0 §17)
+
+    private var publishedProvenanceCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                ZStack {
+                    Circle()
+                        .fill(AppColors.forestGreen.opacity(0.18))
+                        .frame(width: 28, height: 28)
+                    Image(systemName: "checkmark.seal.fill")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundColor(AppColors.forestGreen)
+                }
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("PUBLISHED TO TRAILS NETWORK")
+                        .font(AppFonts.labelSpatial)
+                        .foregroundColor(AppColors.forestGreen)
+                        .tracking(1.0)
+
+                    if let pubAt = currentTrail.publishedAt {
+                        Text("Live on decentralized registry · \(pubAt.formatted(date: .abbreviated, time: .shortened))")
+                            .font(AppFonts.caption)
+                            .foregroundColor(AppColors.onSurfaceVariant)
+                    } else {
+                        Text("Live on decentralized registry")
+                            .font(AppFonts.caption)
+                            .foregroundColor(AppColors.onSurfaceVariant)
+                    }
+                }
+
+                Spacer()
+
+                Button {
+                    Haptics.light()
+                    showingPublishSheet = true
+                } label: {
+                    Text("Receipt")
+                        .font(AppFonts.caption)
+                        .fontWeight(.semibold)
+                        .foregroundColor(AppColors.forestGreen)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(AppColors.forestGreen.opacity(0.12))
+                        .clipShape(Capsule())
+                }
+            }
+
+            if let cid = currentTrail.publishedPackageCid, !cid.isEmpty {
+                HStack(spacing: 6) {
+                    Text("Package CID:")
+                        .font(AppFonts.caption)
+                        .foregroundColor(AppColors.outline)
+                    Text(cid)
+                        .font(.system(size: 11, design: .monospaced))
+                        .foregroundColor(AppColors.primary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(AppColors.surfaceContainerLow)
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+            }
+        }
+        .padding(16)
+        .background(AppColors.forestGreen.opacity(0.06))
+        .clipShape(RoundedRectangle(cornerRadius: 18))
+        .overlay(
+            RoundedRectangle(cornerRadius: 18)
+                .stroke(AppColors.forestGreen.opacity(0.25), lineWidth: 1)
         )
     }
 
@@ -1430,24 +1516,56 @@ public struct TrailJournalDetailView: View {
 
     private var bottomManagementActions: some View {
         VStack(spacing: 12) {
-            if !trail.isDownloaded {
-                Button {
-                    Haptics.medium()
-                    showingPublishSheet = true
-                } label: {
-                    HStack(spacing: 8) {
-                        Image(systemName: "arrow.up.circle.fill")
-                            .font(.system(size: 16))
-                        Text("Publish to Trails Network")
-                            .font(AppFonts.labelUI)
-                            .fontWeight(.semibold)
+            if !currentTrail.isDownloaded {
+                if currentTrail.isPublished {
+                    Button {
+                        Haptics.light()
+                        showingPublishSheet = true
+                    } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.system(size: 16))
+                                .foregroundColor(AppColors.forestGreen)
+                            Text("Published to Trails Network")
+                                .font(AppFonts.labelUI)
+                                .fontWeight(.semibold)
+                                .foregroundColor(AppColors.forestGreen)
+                            Spacer()
+                            Text("View Details")
+                                .font(AppFonts.caption)
+                                .foregroundColor(AppColors.secondary)
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundColor(AppColors.secondary)
+                        }
+                        .padding(.horizontal, 16)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 50)
+                        .background(AppColors.forestGreen.opacity(0.12))
+                        .clipShape(Capsule())
+                        .overlay(
+                            Capsule().stroke(AppColors.forestGreen.opacity(0.3), lineWidth: 1)
+                        )
                     }
-                    .foregroundColor(AppColors.onPrimary)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 50)
-                    .background(AppColors.forestGreen)
-                    .clipShape(Capsule())
-                    .shadow(color: AppColors.forestGreen.opacity(0.2), radius: 6, y: 2)
+                } else {
+                    Button {
+                        Haptics.medium()
+                        showingPublishSheet = true
+                    } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: "arrow.up.circle.fill")
+                                .font(.system(size: 16))
+                            Text("Publish to Trails Network")
+                                .font(AppFonts.labelUI)
+                                .fontWeight(.semibold)
+                        }
+                        .foregroundColor(AppColors.onPrimary)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 50)
+                        .background(AppColors.forestGreen)
+                        .clipShape(Capsule())
+                        .shadow(color: AppColors.forestGreen.opacity(0.2), radius: 6, y: 2)
+                    }
                 }
             }
 
@@ -1514,13 +1632,15 @@ public struct TrailJournalDetailView: View {
                     }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") {
+                    Button {
                         Haptics.success()
                         var updated = trail
                         updated.title = editTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? trail.title : editTitle
                         updated.personalNotes = editNotes
                         dataStore.updateTrail(trail: updated)
                         showingEditSheet = false
+                    } label: {
+                        Text("Save")
                     }
                 }
             }

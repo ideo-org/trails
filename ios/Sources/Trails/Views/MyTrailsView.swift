@@ -364,6 +364,19 @@ public struct MyTrailsView: View {
                                     .padding(.vertical, 5)
                                     .background(Color(hex: "#00838F"))
                                     .clipShape(Capsule())
+                                } else if hero.isPublished {
+                                    HStack(spacing: 5) {
+                                        Image(systemName: "checkmark.seal.fill")
+                                            .font(.system(size: 11, weight: .bold))
+                                            .foregroundColor(AppColors.forestGreen)
+                                        Text("PUBLISHED")
+                                            .font(AppFonts.labelSpatial)
+                                            .foregroundColor(AppColors.forestGreen)
+                                    }
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 5)
+                                    .background(AppColors.pureWhite.opacity(0.95))
+                                    .clipShape(Capsule())
                                 } else {
                                     HStack(spacing: 5) {
                                         Circle()
@@ -601,6 +614,16 @@ public struct MyTrailsView: View {
                                         .font(AppFonts.caption)
                                         .foregroundColor(AppColors.secondary)
                                         .lineLimit(1)
+                                } else if trail.isPublished {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "checkmark.circle.fill")
+                                            .font(.system(size: 8))
+                                            .foregroundColor(AppColors.forestGreen)
+                                        Text("Published to Network")
+                                            .font(AppFonts.labelSpatial)
+                                            .foregroundColor(AppColors.forestGreen)
+                                    }
+                                    .padding(.top, 2)
                                 } else {
                                     HStack(spacing: 4) {
                                         Circle()

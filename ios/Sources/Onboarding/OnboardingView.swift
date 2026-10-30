@@ -11,17 +11,29 @@
 //
 
 import SwiftUI
+#if canImport(AuthenticationServices)
+import AuthenticationServices
+#endif
+#if canImport(GoogleSignIn)
+import GoogleSignIn
+#endif
 
 struct OnboardingView: View {
     @Binding var isOnboardingDone: Bool
 
     @AppStorage("localCreatorId") private var localCreatorId: String = ""
     @AppStorage("localDisplayName") private var localDisplayName: String = ""
+    @AppStorage("localUsername") private var localUsername: String = ""
     @AppStorage("localIntroduction") private var localIntroduction: String = ""
 
+    @ObservedObject private var authManager = AuthManager.shared
+
     @State private var currentPage = 0
+    @State private var enteredUsername: String = ""
     @State private var enteredDisplayName: String = ""
     @State private var enteredIntroduction: String = ""
+    @State private var isAuthenticatingSocial: Bool = false
+    @State private var socialAuthError: String? = nil
 
     private let totalPages = 4
 
@@ -67,6 +79,9 @@ struct OnboardingView: View {
             initializeLocalCreatorId()
             if !localDisplayName.isEmpty {
                 enteredDisplayName = localDisplayName
+            }
+            if !localUsername.isEmpty {
+                enteredUsername = localUsername
             }
             if !localIntroduction.isEmpty {
                 enteredIntroduction = localIntroduction
@@ -288,104 +303,247 @@ struct OnboardingView: View {
         .padding(.horizontal, 20)
     }
 
-    // MARK: - Page 3: Local Identity Setup (PRD Section 8.1 & 9.1)
+    // MARK: - Page 3: Identity & Access (Username, Google, Apple)
 
     private var identityPage: some View {
         ScrollView(.vertical, showsIndicators: false) {
             VStack(spacing: 20) {
-                Spacer(minLength: 16)
+                Spacer(minLength: 12)
 
                 // Icon
                 Circle()
                     .fill(AppColors.surfaceContainerLow)
-                    .frame(width: 80, height: 80)
+                    .frame(width: 72, height: 72)
                     .overlay(
                         Image(systemName: "person.crop.circle.badge.checkmark")
-                            .font(.system(size: 40, weight: .light))
+                            .font(.system(size: 36, weight: .light))
                             .foregroundColor(AppColors.terracotta)
                     )
 
                 // Headline
-                VStack(spacing: 10) {
-                    Text("LOCAL IDENTITY")
+                VStack(spacing: 8) {
+                    Text("CHOOSE YOUR IDENTITY")
                         .font(AppFonts.labelSpatial)
                         .tracking(2.0)
                         .foregroundColor(AppColors.mutedBrass)
 
-                    Text("Author your spatial journey.")
+                    Text("How would you like to start?")
                         .font(AppFonts.headlineLarge)
                         .foregroundColor(AppColors.deepInk)
                         .multilineTextAlignment(.center)
 
-                    Text("Set a display name to attribute your trails and moments. No password or email needed.")
+                    Text("Pick a username to start exploring privately right away, or sign in with Google / Apple. You can link accounts anytime in your Profile.")
                         .font(AppFonts.bodyMedium)
                         .foregroundColor(AppColors.onSurfaceVariant)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 16)
                 }
 
-                // Input Card
-                VStack(alignment: .leading, spacing: 14) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("DISPLAY NAME")
-                            .font(AppFonts.labelSpatial)
-                            .foregroundColor(AppColors.outline)
-
-                        TextField("e.g., Sarah Chen (or leave blank)", text: $enteredDisplayName)
-                            .font(AppFonts.bodyLarge)
-                            .foregroundColor(AppColors.deepInk)
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 12)
-                            .background(AppColors.surfaceContainerLow)
-                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                    .stroke(AppColors.outlineVariant.opacity(0.5), lineWidth: 1)
-                            )
-                    }
-
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("CONTEXT / FOCUS (OPTIONAL)")
-                            .font(AppFonts.labelSpatial)
-                            .foregroundColor(AppColors.outline)
-
-                        TextField("e.g., Resident, Architect, Explorer", text: $enteredIntroduction)
-                            .font(AppFonts.bodyMedium)
-                            .foregroundColor(AppColors.deepInk)
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 12)
-                            .background(AppColors.surfaceContainerLow)
-                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                    .stroke(AppColors.outlineVariant.opacity(0.5), lineWidth: 1)
-                            )
-                    }
-
+                if let error = socialAuthError {
                     HStack(spacing: 8) {
-                        Image(systemName: "info.circle")
-                            .foregroundColor(AppColors.mutedBrass)
-                            .font(.system(size: 13))
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundColor(AppColors.error)
+                        Text(error)
+                            .font(AppFonts.bodySmall)
+                            .foregroundColor(AppColors.error)
+                    }
+                    .padding(12)
+                    .frame(maxWidth: .infinity)
+                    .background(AppColors.error.opacity(0.1))
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .padding(.horizontal, 16)
+                }
 
-                        Text("Default attribution: “A trail by you” until a name is supplied.")
+                if isAuthenticatingSocial {
+                    VStack(spacing: 12) {
+                        ProgressView()
+                            .scaleEffect(1.2)
+                        Text("Connecting your account...")
+                            .font(AppFonts.labelSpatial)
+                            .foregroundColor(AppColors.forestGreen)
+                    }
+                    .padding(24)
+                    .frame(maxWidth: .infinity)
+                    .background(AppColors.pureWhite)
+                    .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                    .padding(.horizontal, 16)
+                } else {
+                    // Option 1: Start with Username (Private & Instant)
+                    VStack(alignment: .leading, spacing: 14) {
+                        HStack {
+                            Image(systemName: "person.circle.fill")
+                                .foregroundColor(AppColors.forestGreen)
+                            Text("START WITH USERNAME")
+                                .font(AppFonts.labelSpatial)
+                                .foregroundColor(AppColors.forestGreen)
+                                .tracking(1.2)
+                            Spacer()
+                            Text("100% PRIVATE")
+                                .font(AppFonts.labelSpatial)
+                                .foregroundColor(AppColors.mutedBrass)
+                        }
+
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("USERNAME")
+                                .font(AppFonts.labelSpatial)
+                                .foregroundColor(AppColors.outline)
+
+                            HStack(spacing: 4) {
+                                Text("@")
+                                    .font(AppFonts.bodyLarge)
+                                    .foregroundColor(AppColors.outline)
+
+                                TextField("username (e.g., alex, explorer)", text: $enteredUsername)
+                                    .font(AppFonts.bodyLarge)
+                                    .foregroundColor(AppColors.deepInk)
+                                    .textInputAutocapitalization(.never)
+                                    .autocorrectionDisabled(true)
+                            }
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 12)
+                            .background(AppColors.surfaceContainerLow)
+                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                    .stroke(AppColors.outlineVariant.opacity(0.5), lineWidth: 1)
+                            )
+                        }
+
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("DISPLAY NAME (OPTIONAL)")
+                                .font(AppFonts.labelSpatial)
+                                .foregroundColor(AppColors.outline)
+
+                            TextField("e.g., Alex Chen", text: $enteredDisplayName)
+                                .font(AppFonts.bodyMedium)
+                                .foregroundColor(AppColors.deepInk)
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 12)
+                                .background(AppColors.surfaceContainerLow)
+                                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                        .stroke(AppColors.outlineVariant.opacity(0.5), lineWidth: 1)
+                                )
+                        }
+
+                        HStack(spacing: 8) {
+                            Image(systemName: "checkmark.shield.fill")
+                                .foregroundColor(AppColors.forestGreen)
+                                .font(.system(size: 13))
+
+                            Text("No password needed. Captures stay on device.")
+                                .font(AppFonts.labelSpatial)
+                                .foregroundColor(AppColors.outline)
+                        }
+                        .padding(.top, 2)
+
+                        Button {
+                            saveIdentityAndComplete()
+                        } label: {
+                            HStack(spacing: 8) {
+                                Text(buttonTitleForUsername)
+                                    .font(AppFonts.headlineSmall)
+                                Image(systemName: "arrow.right")
+                            }
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 50)
+                            .foregroundColor(AppColors.onPrimary)
+                            .background(AppColors.forestGreen)
+                            .clipShape(Capsule())
+                        }
+                        .padding(.top, 4)
+                        .accessibilityIdentifier("onboarding.startWithUsername")
+                    }
+                    .padding(20)
+                    .background(AppColors.pureWhite)
+                    .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 20, style: .continuous)
+                            .stroke(AppColors.outlineVariant.opacity(0.5), lineWidth: 1)
+                    )
+                    .shadow(color: Color.black.opacity(0.03), radius: 8, x: 0, y: 3)
+                    .padding(.horizontal, 16)
+
+                    // Divider
+                    HStack {
+                        Rectangle()
+                            .frame(height: 1)
+                            .foregroundColor(AppColors.outlineVariant.opacity(0.4))
+                            .padding(.horizontal, 20)
+                        Text("or continue with")
                             .font(AppFonts.labelSpatial)
                             .foregroundColor(AppColors.outline)
+                        Rectangle()
+                            .frame(height: 1)
+                            .foregroundColor(AppColors.outlineVariant.opacity(0.4))
+                            .padding(.horizontal, 20)
                     }
-                    .padding(.top, 2)
+                    .padding(.vertical, 4)
+
+                    // Option 2 & 3: Social Sign-In Options (Google & Apple)
+                    VStack(spacing: 12) {
+                        #if canImport(GoogleSignIn)
+                        Button {
+                            Task {
+                                await continueWithGoogle()
+                            }
+                        } label: {
+                            HStack(spacing: 10) {
+                                Image(systemName: "g.circle.fill")
+                                    .font(.system(size: 20, weight: .bold))
+                                Text("Continue with Google")
+                                    .font(AppFonts.headlineSmall)
+                            }
+                            .foregroundColor(AppColors.deepInk)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 48)
+                            .background(AppColors.pureWhite)
+                            .clipShape(Capsule())
+                            .overlay(
+                                Capsule()
+                                    .stroke(AppColors.outlineVariant.opacity(0.6), lineWidth: 1)
+                            )
+                        }
+                        #endif
+
+                        Button {
+                            continueWithApple()
+                        } label: {
+                            HStack(spacing: 10) {
+                                Image(systemName: "apple.logo")
+                                    .font(.system(size: 18, weight: .semibold))
+                                Text("Continue with Apple")
+                                    .font(AppFonts.headlineSmall)
+                            }
+                            .foregroundColor(AppColors.pureWhite)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 48)
+                            .background(AppColors.deepInk)
+                            .clipShape(Capsule())
+                        }
+
+                        Text("Link Google or Apple to sync your creator identity and publish verified trails.")
+                            .font(AppFonts.labelSpatial)
+                            .foregroundColor(AppColors.outline)
+                            .multilineTextAlignment(.center)
+                            .padding(.top, 4)
+                    }
+                    .padding(.horizontal, 16)
                 }
-                .padding(20)
-                .background(AppColors.pureWhite)
-                .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 20, style: .continuous)
-                        .stroke(AppColors.outlineVariant.opacity(0.5), lineWidth: 1)
-                )
-                .shadow(color: Color.black.opacity(0.03), radius: 8, x: 0, y: 3)
-                .padding(.horizontal, 16)
 
                 Spacer(minLength: 16)
             }
         }
+    }
+
+    private var buttonTitleForUsername: String {
+        let clean = enteredUsername.trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "@"))
+        if !clean.isEmpty {
+            return "Start as @\(clean)"
+        }
+        return "Start Exploring with Username"
     }
 
     // MARK: - Bottom Controls
@@ -420,18 +578,13 @@ struct OnboardingView: View {
                 .buttonStyle(PrimaryButtonStyle())
                 .accessibilityIdentifier("onboarding.next")
             } else {
-                VStack(spacing: 10) {
-                    Button("Open My Trails") {
-                        saveIdentityAndComplete()
-                    }
-                    .buttonStyle(PrimaryButtonStyle())
-                    .accessibilityIdentifier("onboarding.startScanning")
-
-                    Button("Skip and use default identity") {
-                        completeOnboarding()
-                    }
-                    .buttonStyle(SecondaryButtonStyle())
+                Button("Skip and use guest identity") {
+                    completeOnboarding()
                 }
+                .font(AppFonts.labelUI)
+                .foregroundColor(AppColors.outline)
+                .padding(.vertical, 4)
+                .accessibilityIdentifier("onboarding.skipFinal")
             }
 
             // Contextual Guidance Note (PRD 8.1 & 10.3)
@@ -452,18 +605,76 @@ struct OnboardingView: View {
 
     private func saveIdentityAndComplete() {
         let trimmedName = enteredDisplayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedUsername = enteredUsername.trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "@"))
+            .lowercased()
         let trimmedIntro = enteredIntroduction.trimmingCharacters(in: .whitespacesAndNewlines)
 
         localDisplayName = trimmedName
+        localUsername = trimmedUsername
         localIntroduction = trimmedIntro
+
+        let effectiveDisplayName = trimmedName.isEmpty ? (trimmedUsername.isEmpty ? "A trail by you" : trimmedUsername.capitalized) : trimmedName
 
         // Persist to the TrailsDataStore local profile so You tab and trail authorship pick it up
         TrailsDataStore.shared.updateProfile(
-            displayName: trimmedName.isEmpty ? "A trail by you" : trimmedName,
-            introduction: trimmedIntro.isEmpty ? "Spatial explorer documenting living spaces." : trimmedIntro
+            displayName: effectiveDisplayName,
+            introduction: trimmedIntro.isEmpty ? "Spatial explorer documenting living spaces." : trimmedIntro,
+            username: trimmedUsername.isEmpty ? nil : trimmedUsername
         )
 
         completeOnboarding()
+    }
+
+    private func continueWithGoogle() async {
+        isAuthenticatingSocial = true
+        socialAuthError = nil
+        do {
+            #if canImport(GoogleSignIn)
+            guard let user = try await GoogleSignInManager.shared.signInWithGoogle() else {
+                isAuthenticatingSocial = false
+                return
+            }
+            _ = try await authManager.googleAuth(user)
+            await MainActor.run {
+                self.isAuthenticatingSocial = false
+                completeOnboarding()
+            }
+            #else
+            isAuthenticatingSocial = false
+            #endif
+        } catch let error as NSError {
+            await MainActor.run {
+                self.isAuthenticatingSocial = false
+                if error.domain == "com.google.GIDSignIn" && error.code == -5 {
+                    // Cancelled by user
+                    return
+                }
+                self.socialAuthError = error.localizedDescription
+            }
+        }
+    }
+
+    private func continueWithApple() {
+        isAuthenticatingSocial = true
+        socialAuthError = nil
+        Task {
+            do {
+                let credential = try await AppleSignInManager.shared.requestAppleAuthorization()
+                _ = try await authManager.appleAuth(credential, nonce: AppleSignInManager.nonce)
+                await MainActor.run {
+                    self.isAuthenticatingSocial = false
+                    completeOnboarding()
+                }
+            } catch {
+                await MainActor.run {
+                    self.isAuthenticatingSocial = false
+                    if let message = AppleSignInManager.friendlyErrorMessage(for: error) {
+                        self.socialAuthError = message
+                    }
+                }
+            }
+        }
     }
 
     private func completeOnboarding() {

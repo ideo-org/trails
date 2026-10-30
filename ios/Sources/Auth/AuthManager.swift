@@ -78,13 +78,33 @@ class AuthManager: ObservableObject {
     #if canImport(Firebase)
     var user: User?
     private var authStateHandle: AuthStateDidChangeListenerHandle?
-    private let db: Firestore?
+    private var db: Firestore? = nil
     #endif
 
     @Published var authState: AuthState = .signedOut
     @Published var isCheckingAuth: Bool = true
 
+    @Published var localAppleUserId: String? {
+        didSet {
+            UserDefaults.standard.set(localAppleUserId, forKey: "localAppleUserId")
+        }
+    }
+    @Published var localAppleEmail: String? {
+        didSet {
+            UserDefaults.standard.set(localAppleEmail, forKey: "localAppleEmail")
+        }
+    }
+    @Published var localAppleFullName: String? {
+        didSet {
+            UserDefaults.standard.set(localAppleFullName, forKey: "localAppleFullName")
+        }
+    }
+
     private init() {
+        self.localAppleUserId = UserDefaults.standard.string(forKey: "localAppleUserId")
+        self.localAppleEmail = UserDefaults.standard.string(forKey: "localAppleEmail")
+        self.localAppleFullName = UserDefaults.standard.string(forKey: "localAppleFullName")
+
         guard ProcessInfo.processInfo.environment["XCODE_RUNNING_FOR_PREVIEWS"] != "1" else {
             #if canImport(Firebase)
             db = nil
@@ -93,8 +113,15 @@ class AuthManager: ObservableObject {
             return
         }
 
+        if self.localAppleUserId != nil {
+            self.authState = .signedIn
+        }
+
         #if canImport(Firebase)
         if AppConfiguration.useFirebase {
+            if FirebaseApp.app() == nil {
+                FirebaseApp.configure()
+            }
             db = Firestore.firestore()
             Task {
                 await handleSignInValidationAndProviderChecks()
@@ -177,10 +204,11 @@ class AuthManager: ObservableObject {
     var isAnonymous: Bool {
         #if canImport(Firebase)
         if AppConfiguration.useFirebase {
-            return Auth.auth().currentUser?.isAnonymous ?? true
+            guard let currentUser = Auth.auth().currentUser else { return false }
+            return currentUser.isAnonymous
         }
         #endif
-        return true // Local mode is always "anonymous" in terms of not having a provider
+        return false
     }
 
     /// Check if sign-in UI should be shown
@@ -341,36 +369,46 @@ class AuthManager: ObservableObject {
     // MARK: - Sign Out
 
     func signOut() {
+        self.localAppleUserId = nil
+        self.localAppleEmail = nil
+        self.localAppleFullName = nil
+        UserDefaults.standard.removeObject(forKey: "localAppleUserId")
+        UserDefaults.standard.removeObject(forKey: "localAppleEmail")
+        UserDefaults.standard.removeObject(forKey: "localAppleFullName")
+
         #if canImport(Firebase)
-        guard AppConfiguration.useFirebase else { return }
+        if AppConfiguration.useFirebase {
+            do {
+                try Auth.auth().signOut()
+                SettingsViewModel.shared.restoreSettings(newSettings: [:])
 
-        do {
-            try Auth.auth().signOut()
-            SettingsViewModel.shared.restoreSettings(newSettings: [:])
-
-            // Reset RevenueCat to anonymous
-            #if canImport(RevenueCat)
-            if AppConfiguration.isRevenueCatConfigured {
-                Purchases.shared.logOut { _, error in
-                    if let error = error {
-                        debugPrint("Failed to log out of RevenueCat: \(error)")
+                // Reset RevenueCat to anonymous
+                #if canImport(RevenueCat)
+                if AppConfiguration.isRevenueCatConfigured {
+                    Purchases.shared.logOut { _, error in
+                        if let error = error {
+                            debugPrint("Failed to log out of RevenueCat: \(error)")
+                        }
                     }
                 }
-            }
-            #endif
+                #endif
 
-            // Reset TelemetryDeck to anonymous
-            #if canImport(TelemetryDeck)
-            if AppConfiguration.isTelemetryDeckConfigured {
-                let anonymousID = UIDevice.current.identifierForVendor?.uuidString ?? "unknown_user"
-                TelemetryDeck.updateDefaultUserID(to: anonymousID)
+                // Reset TelemetryDeck to anonymous
+                #if canImport(TelemetryDeck)
+                if AppConfiguration.isTelemetryDeckConfigured {
+                    let anonymousID = UIDevice.current.identifierForVendor?.uuidString ?? "unknown_user"
+                    TelemetryDeck.updateDefaultUserID(to: anonymousID)
+                }
+                #endif
+            } catch {
+                debugPrint("Failed to sign out: \(error.localizedDescription)")
             }
-            #endif
-
-        } catch {
-            debugPrint("Failed to sign out: \(error.localizedDescription)")
         }
         #endif
+
+        DispatchQueue.main.async {
+            self.authState = .authenticated
+        }
     }
 
     // MARK: - Anonymous User Linking
@@ -382,7 +420,11 @@ class AuthManager: ObservableObject {
         }
 
         guard let anonymousUser = Auth.auth().currentUser, anonymousUser.isAnonymous else {
-            throw AuthError.noAnonymousUser
+            let result = try await Auth.auth().signIn(with: credentials)
+            await MainActor.run {
+                self.updateState(user: result.user)
+            }
+            return result
         }
 
         do {
@@ -394,17 +436,16 @@ class AuthManager: ObservableObject {
         } catch let error as NSError {
             if error.code == AuthErrorCode.credentialAlreadyInUse.rawValue {
                 // Credentials already in use - sign in with existing account
-                if let existingCredential = error.userInfo[AuthErrorUserInfoUpdatedCredentialKey] as? AuthCredential {
-                    let result = try await Auth.auth().signIn(with: existingCredential)
+                let fallbackCredential = (error.userInfo[AuthErrorUserInfoUpdatedCredentialKey] as? AuthCredential) ?? credentials
+                let result = try await Auth.auth().signIn(with: fallbackCredential)
 
-                    // Migrate anonymous user data
-                    await migrateAnonymousUserData(from: anonymousUser.uid, to: result.user.uid)
+                // Migrate anonymous user data
+                await migrateAnonymousUserData(from: anonymousUser.uid, to: result.user.uid)
 
-                    await MainActor.run {
-                        self.updateState(user: result.user)
-                    }
-                    return result
+                await MainActor.run {
+                    self.updateState(user: result.user)
                 }
+                return result
             }
             throw error
         }
@@ -469,6 +510,63 @@ class AuthManager: ObservableObject {
     }
     #endif
 
+    /// Check if Google is linked as an authentication provider
+    var isGoogleLinked: Bool {
+        #if canImport(Firebase)
+        guard let user = user else { return false }
+        return user.providerData.contains(where: { $0.providerID == "google.com" })
+        #else
+        return false
+        #endif
+    }
+
+    /// Check if Apple is linked as an authentication provider (native Apple ID or Firebase)
+    var isAppleLinked: Bool {
+        if let appleId = localAppleUserId, !appleId.isEmpty {
+            return true
+        }
+        #if canImport(Firebase)
+        guard let user = user else { return false }
+        return user.providerData.contains(where: { $0.providerID == "apple.com" })
+        #else
+        return false
+        #endif
+    }
+
+    /// User's email from Apple ID or Google/Firebase
+    var effectiveEmail: String? {
+        if let appleEmail = localAppleEmail, !appleEmail.isEmpty {
+            return appleEmail
+        }
+        #if canImport(Firebase)
+        if let email = user?.email, !email.isEmpty {
+            return email
+        }
+        #endif
+        return nil
+    }
+
+    /// Set or switch the active username locally without requiring credentials
+    @MainActor
+    func signInWithUsername(_ rawUsername: String, displayName: String? = nil) {
+        let cleanUsername = rawUsername.trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "@"))
+            .lowercased()
+        guard !cleanUsername.isEmpty else { return }
+
+        let effectiveName = displayName?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let nameToUse = (effectiveName != nil && !effectiveName!.isEmpty) ? effectiveName! : cleanUsername.capitalized
+
+        UserDefaults.standard.set(cleanUsername, forKey: "localUsername")
+        UserDefaults.standard.set(nameToUse, forKey: "localDisplayName")
+
+        TrailsDataStore.shared.updateProfile(
+            displayName: nameToUse,
+            introduction: TrailsDataStore.shared.localProfile.introduction,
+            username: cleanUsername
+        )
+    }
+
     // MARK: - Google Sign-In
 
     #if canImport(Firebase) && canImport(GoogleSignIn)
@@ -477,52 +575,123 @@ class AuthManager: ObservableObject {
             throw AuthError.firebaseDisabled
         }
 
-        guard let idToken = user.idToken?.tokenString else { return nil }
+        guard let idToken = user.idToken?.tokenString else {
+            throw NSError(
+                domain: "AuthManager",
+                code: -1,
+                userInfo: [NSLocalizedDescriptionKey: "Google Sign-In failed to return an ID token."]
+            )
+        }
 
         let credentials = GoogleAuthProvider.credential(
             withIDToken: idToken,
             accessToken: user.accessToken.tokenString
         )
 
-        if isAnonymous {
-            return try await linkAnonymousUser(with: credentials)
+        let result: AuthDataResult
+        if let currentUser = Auth.auth().currentUser, currentUser.isAnonymous {
+            result = try await linkAnonymousUser(with: credentials)
         } else {
-            return try await Auth.auth().signIn(with: credentials)
+            result = try await Auth.auth().signIn(with: credentials)
+            await MainActor.run {
+                self.updateState(user: result.user)
+            }
         }
+
+        // Synchronize Google user info with Trails profile (without overwriting existing custom username)
+        await MainActor.run {
+            let dataStore = TrailsDataStore.shared
+            var newName = dataStore.localProfile.displayName
+            if (newName.isEmpty || newName == "A trail by you"), let gName = result.user.displayName, !gName.isEmpty {
+                newName = gName
+            }
+            let newAvatar = result.user.photoURL?.absoluteString ?? dataStore.localProfile.avatarURL
+            var newUsername = dataStore.localProfile.username
+            if (newUsername == nil || newUsername!.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty),
+               let email = result.user.email,
+               let prefix = email.split(separator: "@").first {
+                newUsername = String(prefix).lowercased()
+            }
+            dataStore.updateProfile(
+                displayName: newName,
+                introduction: dataStore.localProfile.introduction,
+                username: newUsername,
+                avatarURL: newAvatar
+            )
+        }
+
+        return result
     }
     #endif
 
     // MARK: - Apple Sign-In
 
-    #if canImport(Firebase)
+    @discardableResult
     func appleAuth(
         _ appleIDCredential: ASAuthorizationAppleIDCredential,
         nonce: String?
-    ) async throws -> AuthDataResult? {
-        guard AppConfiguration.useFirebase else {
-            throw AuthError.firebaseDisabled
+    ) async throws -> Bool {
+        let appleUserId = appleIDCredential.user
+        let appleEmail = appleIDCredential.email
+        let formattedName = appleIDCredential.fullName?.formatted()
+
+        // 1. Immediately establish verified native Apple ID identity on device
+        await MainActor.run {
+            self.localAppleUserId = appleUserId
+            if let appleEmail, !appleEmail.isEmpty {
+                self.localAppleEmail = appleEmail
+            }
+            if let formattedName, !formattedName.isEmpty {
+                self.localAppleFullName = formattedName
+            }
+
+            let dataStore = TrailsDataStore.shared
+            var newName = dataStore.localProfile.displayName
+            if (newName.isEmpty || newName == "A trail by you"), let formattedName, !formattedName.isEmpty {
+                newName = formattedName
+            }
+            var newUsername = dataStore.localProfile.username
+            if (newUsername == nil || newUsername!.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) {
+                if let email = appleEmail ?? self.localAppleEmail, let prefix = email.split(separator: "@").first {
+                    newUsername = String(prefix).lowercased()
+                }
+            }
+            dataStore.updateProfile(
+                displayName: newName,
+                introduction: dataStore.localProfile.introduction,
+                username: newUsername,
+                avatarURL: dataStore.localProfile.avatarURL
+            )
+
+            self.authState = .signedIn
         }
 
-        guard let nonce else {
-            fatalError("Invalid state: A login callback was received, but no login request was sent.")
+        // 2. Opportunistically link with Firebase if Firebase backend is available
+        #if canImport(Firebase)
+        if AppConfiguration.useFirebase,
+           let nonce = nonce,
+           let appleIDToken = appleIDCredential.identityToken,
+           let idTokenString = String(data: appleIDToken, encoding: .utf8) {
+            let credentials = OAuthProvider.appleCredential(
+                withIDToken: idTokenString,
+                rawNonce: nonce,
+                fullName: appleIDCredential.fullName
+            )
+            do {
+                if let currentUser = Auth.auth().currentUser, currentUser.isAnonymous {
+                    _ = try await linkAnonymousUser(with: credentials)
+                } else {
+                    let result = try await Auth.auth().signIn(with: credentials)
+                    await MainActor.run {
+                        self.updateState(user: result.user)
+                    }
+                }
+            } catch {
+                debugPrint("Note: Firebase Apple sync skipped/offline: \(error.localizedDescription)")
+            }
         }
+        #endif
 
-        guard let appleIDToken = appleIDCredential.identityToken,
-              let idTokenString = String(data: appleIDToken, encoding: .utf8) else {
-            return nil
-        }
-
-        let credentials = OAuthProvider.appleCredential(
-            withIDToken: idTokenString,
-            rawNonce: nonce,
-            fullName: appleIDCredential.fullName
-        )
-
-        if isAnonymous {
-            return try await linkAnonymousUser(with: credentials)
-        } else {
-            return try await Auth.auth().signIn(with: credentials)
-        }
+        return true
     }
-    #endif
 }

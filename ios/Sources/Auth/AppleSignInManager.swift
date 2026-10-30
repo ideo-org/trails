@@ -37,6 +37,7 @@ class AppleSignInManager: NSObject {
 
             let authorizationController = ASAuthorizationController(authorizationRequests: [request])
             authorizationController.delegate = self
+            authorizationController.presentationContextProvider = self
             authorizationController.performRequests()
         }
     }
@@ -59,6 +60,10 @@ extension AppleSignInManager: ASAuthorizationControllerDelegate {
     ) {
         if case let appleIDCredential as ASAuthorizationAppleIDCredential = authorization.credential {
             continuation?.resume(returning: appleIDCredential)
+            continuation = nil
+        } else {
+            continuation?.resume(throwing: NSError(domain: "AppleSignIn", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid credential type"]))
+            continuation = nil
         }
     }
 
@@ -67,6 +72,18 @@ extension AppleSignInManager: ASAuthorizationControllerDelegate {
         didCompleteWithError error: Error
     ) {
         continuation?.resume(throwing: error)
+        continuation = nil
+    }
+}
+
+// MARK: - ASAuthorizationControllerPresentationContextProviding
+
+extension AppleSignInManager: ASAuthorizationControllerPresentationContextProviding {
+
+    func presentationAnchor(for controller: ASAuthorizationController) -> ASPresentationAnchor {
+        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+        let window = scenes.flatMap { $0.windows }.first { $0.isKeyWindow } ?? scenes.first?.windows.first ?? UIWindow()
+        return window
     }
 }
 
@@ -106,5 +123,17 @@ extension AppleSignInManager {
         }.joined()
 
         return hashString
+    }
+
+    /// Provide a user-friendly error message for Apple Sign-In errors
+    static func friendlyErrorMessage(for error: Error) -> String? {
+        let nsError = error as NSError
+        if nsError.domain == ASAuthorizationError.errorDomain {
+            if nsError.code == ASAuthorizationError.canceled.rawValue {
+                return nil // User cancelled
+            }
+            return "Apple Sign-In is not configured yet for com.logos.trails. You can continue using your Username!"
+        }
+        return error.localizedDescription
     }
 }

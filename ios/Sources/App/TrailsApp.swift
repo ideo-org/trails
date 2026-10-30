@@ -33,10 +33,19 @@ import GoogleSignIn
 struct TrailsApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
 
-    @StateObject private var authManager = AuthManager.shared
-    @StateObject private var remoteSyncManager = RemoteSyncManager.shared
+    @StateObject private var authManager: AuthManager
+    @StateObject private var remoteSyncManager: RemoteSyncManager
 
     init() {
+        #if canImport(Firebase)
+        if AppConfiguration.useFirebase && FirebaseApp.app() == nil {
+            FirebaseApp.configure()
+        }
+        #endif
+
+        _authManager = StateObject(wrappedValue: AuthManager.shared)
+        _remoteSyncManager = StateObject(wrappedValue: RemoteSyncManager.shared)
+
         // Ensure the Application Support directory exists to suppress scary SwiftData first-launch logs
         if let supportURL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first {
             try? FileManager.default.createDirectory(at: supportURL, withIntermediateDirectories: true)
@@ -132,7 +141,9 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
         // Initialize Firebase (if enabled)
         if AppConfiguration.useFirebase {
             #if canImport(Firebase)
-            FirebaseApp.configure()
+            if FirebaseApp.app() == nil {
+                FirebaseApp.configure()
+            }
 
             #if DEBUG
             Crashlytics.crashlytics().setCrashlyticsCollectionEnabled(false)

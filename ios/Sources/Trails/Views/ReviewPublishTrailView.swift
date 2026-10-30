@@ -36,7 +36,10 @@ public struct ReviewPublishTrailView: View {
     }
 
     private var activeTrail: TrailDetail {
-        initialTrail ?? dataStore.activeTrail ?? TrailDetail(
+        if let initial = initialTrail {
+            return dataStore.savedTrails.first(where: { $0.id == initial.id }) ?? initial
+        }
+        return dataStore.activeTrail ?? TrailDetail(
             id: UUID().uuidString,
             title: "Untitled Trail",
             subtitle: "Recorded spatial path",
@@ -68,11 +71,12 @@ public struct ReviewPublishTrailView: View {
 
                         // Status Badge
                         HStack {
-                            Image(systemName: "checkmark.shield.fill")
+                            let isPub = activeTrail.isPublished || logosPublishReceipt != nil
+                            Image(systemName: isPub ? "checkmark.seal.fill" : "checkmark.shield.fill")
                                 .font(.system(size: 13))
-                                .foregroundColor(AppColors.primary)
+                                .foregroundColor(isPub ? AppColors.forestGreen : AppColors.primary)
 
-                            Text(activeTrail.isDraft ? "Private Draft · On Device" : "Saved Trail · On Device")
+                            Text(activeTrail.isDraft ? "Private Draft · On Device" : (isPub ? "Published to Network · On Device" : "Saved Trail · On Device"))
                                 .font(AppFonts.labelSpatial)
                                 .foregroundColor(AppColors.deepInk)
 
@@ -375,23 +379,44 @@ public struct ReviewPublishTrailView: View {
 
                         // MARK: - Action Buttons
                         VStack(spacing: 12) {
-                            Button {
-                                saveFinalTrail()
-                            } label: {
-                                HStack {
-                                    Text("Save Trail to My Trails")
-                                        .font(AppFonts.headlineSmall)
-                                    Spacer()
-                                    Image(systemName: "checkmark")
-                                        .font(.system(size: 16, weight: .bold))
+                            if activeTrail.isDraft {
+                                Button {
+                                    saveFinalTrail()
+                                } label: {
+                                    HStack {
+                                        Text("Save Trail to My Trails")
+                                            .font(AppFonts.headlineSmall)
+                                        Spacer()
+                                        Image(systemName: "checkmark")
+                                            .font(.system(size: 16, weight: .bold))
+                                    }
+                                    .foregroundColor(AppColors.onPrimary)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 16)
+                                    .padding(.horizontal, 20)
+                                    .background(AppColors.primary)
+                                    .clipShape(Capsule())
+                                    .shadow(color: AppColors.primaryDark.opacity(0.25), radius: 8, x: 0, y: 4)
                                 }
-                                .foregroundColor(AppColors.onPrimary)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 16)
-                                .padding(.horizontal, 20)
-                                .background(AppColors.primary)
-                                .clipShape(Capsule())
-                                .shadow(color: AppColors.primaryDark.opacity(0.25), radius: 8, x: 0, y: 4)
+                            } else {
+                                Button {
+                                    saveFinalTrail()
+                                } label: {
+                                    HStack {
+                                        Text("Save Changes")
+                                            .font(AppFonts.headlineSmall)
+                                        Spacer()
+                                        Image(systemName: "checkmark")
+                                            .font(.system(size: 16, weight: .bold))
+                                    }
+                                    .foregroundColor(AppColors.onPrimary)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 16)
+                                    .padding(.horizontal, 20)
+                                    .background(AppColors.primary)
+                                    .clipShape(Capsule())
+                                    .shadow(color: AppColors.primaryDark.opacity(0.25), radius: 8, x: 0, y: 4)
+                                }
                             }
 
                             // MARK: - Publish to Logos Network (PRD v0.4.0 §17)
@@ -407,6 +432,60 @@ public struct ReviewPublishTrailView: View {
                                 .padding(12)
                                 .background(AppColors.surfaceContainerHigh)
                                 .clipShape(RoundedRectangle(cornerRadius: 12))
+                            } else if activeTrail.isPublished || logosPublishReceipt != nil {
+                                VStack(spacing: 12) {
+                                    HStack {
+                                        Image(systemName: "checkmark.circle.fill")
+                                            .font(.system(size: 18))
+                                            .foregroundColor(AppColors.forestGreen)
+                                        Text("Published to Logos Network")
+                                            .font(AppFonts.headlineSmall)
+                                            .foregroundColor(AppColors.forestGreen)
+                                        Spacer()
+                                        Image(systemName: "globe.europe.africa.fill")
+                                            .font(.system(size: 16))
+                                            .foregroundColor(AppColors.forestGreen)
+                                    }
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 16)
+                                    .padding(.horizontal, 20)
+                                    .background(AppColors.forestGreen.opacity(0.12))
+                                    .clipShape(Capsule())
+                                    .overlay(
+                                        Capsule().stroke(AppColors.forestGreen.opacity(0.35), lineWidth: 1)
+                                    )
+
+                                    if let cid = logosPublishReceipt?.packageCid ?? activeTrail.publishedPackageCid {
+                                        HStack(spacing: 6) {
+                                            Text("CID:")
+                                                .font(AppFonts.caption)
+                                                .foregroundColor(AppColors.outline)
+                                            Text(cid)
+                                                .font(.system(size: 11, design: .monospaced))
+                                                .foregroundColor(AppColors.onSurfaceVariant)
+                                                .lineLimit(1)
+                                                .truncationMode(.middle)
+                                        }
+                                        .padding(.horizontal, 12)
+                                        .padding(.vertical, 6)
+                                        .background(AppColors.surfaceContainerLow)
+                                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                                    }
+
+                                    Button {
+                                        publishToLogos()
+                                    } label: {
+                                        HStack(spacing: 6) {
+                                            Image(systemName: "arrow.clockwise")
+                                                .font(.system(size: 12))
+                                            Text(isPublishingToLogos ? "Publishing Update (\(publishProgressStage))..." : "Publish Update (New Revision)")
+                                                .font(AppFonts.labelUI)
+                                                .foregroundColor(AppColors.secondary)
+                                        }
+                                        .padding(.top, 2)
+                                    }
+                                    .disabled(isPublishingToLogos)
+                                }
                             } else {
                                 Button {
                                     publishToLogos()
@@ -436,28 +515,30 @@ public struct ReviewPublishTrailView: View {
                                 .disabled(isPublishingToLogos)
                             }
 
-                            Button {
-                                saveAsDraft()
-                            } label: {
-                                Text("Keep on Device as Draft")
-                                    .font(AppFonts.labelUI)
-                                    .foregroundColor(AppColors.primary)
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.vertical, 14)
-                                    .background(AppColors.pureWhite)
-                                    .clipShape(Capsule())
-                                    .overlay(
-                                        Capsule().stroke(AppColors.border, lineWidth: 1)
-                                    )
-                            }
+                            if activeTrail.isDraft {
+                                Button {
+                                    saveAsDraft()
+                                } label: {
+                                    Text("Keep on Device as Draft")
+                                        .font(AppFonts.labelUI)
+                                        .foregroundColor(AppColors.primary)
+                                        .frame(maxWidth: .infinity)
+                                        .padding(.vertical, 14)
+                                        .background(AppColors.pureWhite)
+                                        .clipShape(Capsule())
+                                        .overlay(
+                                            Capsule().stroke(AppColors.border, lineWidth: 1)
+                                        )
+                                }
 
-                            Button {
-                                showingDiscardAlert = true
-                            } label: {
-                                Text("Discard Recording")
-                                    .font(AppFonts.labelUI)
-                                    .foregroundColor(AppColors.error)
-                                    .padding(.top, 4)
+                                Button {
+                                    showingDiscardAlert = true
+                                } label: {
+                                    Text("Discard Recording")
+                                        .font(AppFonts.labelUI)
+                                        .foregroundColor(AppColors.error)
+                                        .padding(.top, 4)
+                                }
                             }
                         }
                         .padding(.horizontal, 16)
@@ -465,7 +546,7 @@ public struct ReviewPublishTrailView: View {
                     }
                 }
             }
-            .navigationTitle("Review Trail")
+            .navigationTitle(activeTrail.isDraft ? "Review Trail" : "Trail Details & Publishing")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
@@ -673,6 +754,15 @@ public struct ReviewPublishTrailView: View {
                 // Stage 6: Published
                 publishProgressStage = "Published"
                 self.logosPublishReceipt = receipt
+
+                // Update and persist trail publication metadata
+                updated.isPublished = true
+                updated.publishedAt = Date()
+                updated.publishedRevision = receipt.revision
+                updated.publishedPackageCid = receipt.packageCid
+                updated.publishedTransactionRef = receipt.transactionReference
+                dataStore.saveFinalTrail(trail: updated)
+
                 self.showingLogosSuccessAlert = true
             } catch {
                 self.logosPublishError = error.localizedDescription
@@ -749,12 +839,14 @@ private struct EditMomentSheet: View {
                     .background(AppColors.surfaceContainerHigh)
                     .clipShape(Capsule())
 
-                    Button("Save") {
+                    Button {
                         var m = moment
                         m.title = label.trimmingCharacters(in: .whitespaces).isEmpty ? moment.title : label
                         m.narrative = note
                         onSave(m)
                         dismiss()
+                    } label: {
+                        Text("Save")
                     }
                     .font(AppFonts.labelUI)
                     .foregroundColor(AppColors.onPrimary)

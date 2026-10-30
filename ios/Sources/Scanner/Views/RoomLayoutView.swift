@@ -286,27 +286,25 @@ struct RoomLayoutView: View {
     }
 
     private func drawFootstepNodes(_ footsteps: [SIMD3<Float>], scale: CGFloat, offset: CGSize) -> some View {
-        ZStack {
-            ForEach(Array(footsteps.enumerated()), id: \.offset) { index, step in
-                let point = projectTo2D(step, scale: scale, offset: offset)
-                let isLatest = index == footsteps.count - 1
+        Canvas { context, _ in
+            guard !footsteps.isEmpty else { return }
+            let total = footsteps.count
+            // Dynamically stride node dots for long trails (e.g. 50m - 1000m+) to prevent GPU memory spikes
+            let stepInterval: Int = total > 400 ? max(3, total / 100) : 3
 
-                if isLatest {
-                    Circle()
-                        .stroke(AppColors.terracotta.opacity(0.4), lineWidth: 4)
-                        .frame(width: 20, height: 20)
-                        .position(point)
+            for index in stride(from: 0, to: total - 1, by: stepInterval) {
+                let point = projectTo2D(footsteps[index], scale: scale, offset: offset)
+                let rect = CGRect(x: point.x - 2.5, y: point.y - 2.5, width: 5, height: 5)
+                context.fill(Path(ellipseIn: rect), with: .color(AppColors.terracotta.opacity(0.45)))
+            }
 
-                    Circle()
-                        .fill(AppColors.terracotta)
-                        .frame(width: 10, height: 10)
-                        .position(point)
-                } else if index % 3 == 0 {
-                    Circle()
-                        .fill(AppColors.terracotta.opacity(0.45))
-                        .frame(width: 5, height: 5)
-                        .position(point)
-                }
+            // Current latest position node
+            if let latestStep = footsteps.last {
+                let point = projectTo2D(latestStep, scale: scale, offset: offset)
+                let outerRect = CGRect(x: point.x - 10, y: point.y - 10, width: 20, height: 20)
+                context.stroke(Path(ellipseIn: outerRect), with: .color(AppColors.terracotta.opacity(0.4)), lineWidth: 3.5)
+                let innerRect = CGRect(x: point.x - 5, y: point.y - 5, width: 10, height: 10)
+                context.fill(Path(ellipseIn: innerRect), with: .color(AppColors.terracotta))
             }
         }
     }

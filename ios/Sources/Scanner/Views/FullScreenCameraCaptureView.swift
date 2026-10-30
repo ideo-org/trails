@@ -50,9 +50,9 @@ public struct FullScreenCameraCaptureView: View {
             CameraPreviewView(cameraEngine: cameraEngine)
                 .ignoresSafeArea()
                 .overlay(
-                    Color.white
-                        .opacity(isFlashActive ? 0.85 : 0.0)
-                        .animation(.easeOut(duration: 0.15), value: isFlashActive)
+                    Color.black
+                        .opacity(isFlashActive ? 0.35 : 0.0)
+                        .animation(.easeOut(duration: 0.12), value: isFlashActive)
                         .ignoresSafeArea()
                 )
 

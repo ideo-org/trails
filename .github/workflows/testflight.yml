@@ -164,10 +164,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          TEAM_ID="$(grep 'DEVELOPMENT_TEAM =' ios/Shared.xcconfig | cut -d'=' -f2 | xargs || echo 'BBNKWP3S9G')"
           /usr/libexec/PlistBuddy -c "Add :method string app-store-connect" "$EXPORT_OPTIONS"
           /usr/libexec/PlistBuddy -c "Add :signingStyle string automatic" "$EXPORT_OPTIONS"
           /usr/libexec/PlistBuddy -c "Add :uploadSymbols bool true" "$EXPORT_OPTIONS"
           /usr/libexec/PlistBuddy -c "Add :destination string upload" "$EXPORT_OPTIONS"
+          if [ -n "$TEAM_ID" ]; then
+            /usr/libexec/PlistBuddy -c "Add :teamID string $TEAM_ID" "$EXPORT_OPTIONS"
+          fi
 
       - name: Archive
         shell: bash
@@ -213,7 +217,12 @@ jobs:
         run: |
           set -euo pipefail
 
-          APP_DIR="${ARCHIVE_PATH}/Products/Applications/Trails.app"
+          APP_DIR="$(find "${ARCHIVE_PATH}/Products/Applications" -maxdepth 1 -name "*.app" -print -quit)"
+          if [[ -z "${APP_DIR}" || ! -d "${APP_DIR}" ]]; then
+            echo "::error::No .app found in ${ARCHIVE_PATH}/Products/Applications"
+            exit 1
+          fi
+          APP_NAME="$(basename "${APP_DIR}")"
           APP_INFO="${APP_DIR}/Info.plist"
 
           verify_plist() {
@@ -238,7 +247,7 @@ jobs:
             echo "Verified ${label}: ${actual_version} (${actual_build})"
           }
 
-          verify_plist "Trails.app" "$APP_INFO"
+          verify_plist "${APP_NAME}" "$APP_INFO"
 
           PLUGINS_DIR="${APP_DIR}/PlugIns"
           if [[ -d "$PLUGINS_DIR" ]]; then

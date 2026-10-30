@@ -30,7 +30,7 @@ enum AppConfiguration {
     /// - Settings sync to Firestore
     /// - Streaks calculated by Cloud Functions
     static var useFirebase: Bool {
-        !isUITesting && requiresFirebaseBackend
+        (!isUITesting || ProcessInfo.processInfo.environment["TRAILS_UI_TEST_FIREBASE"] == "1") && requiresFirebaseBackend
     }
 
     private static var requiresFirebaseBackend: Bool {
