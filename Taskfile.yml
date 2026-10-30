@@ -7,6 +7,20 @@ tasks:
     cmds:
       - task --list
 
+  kill-dev:
+    desc: Free port 8095 using bunx kill-port
+    cmds:
+      - bunx kill-port 8095
+
+  restart-dev:
+    desc: Kill process on port 8095 and restart the server
+    dir: trails.logos
+    cmds:
+      - task: kill-dev
+      - task: dev
+        vars:
+          CLI_ARGS: '{{.CLI_ARGS}}'
+
   dev:
     desc: Run the trails.logos REST API server on port 8095
     dir: trails.logos

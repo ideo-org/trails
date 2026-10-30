@@ -77,6 +77,15 @@ ship:
 # Alias for pushing to TestFlight.
 testflight: ship
 
+# Kill process using port 8095
+kill-dev:
+    bunx kill-port 8095
+
+# Kill existing process and restart the backend server
+restart-dev *ARGS:
+    bunx kill-port 8095
+    cd trails.logos; just dev {{ARGS}}
+
 # Run the trails.logos backend dev server (port 8095)
 dev *ARGS:
     cd trails.logos; just dev {{ARGS}}
