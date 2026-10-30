@@ -44,6 +44,14 @@ public struct RetraceTrailView: View {
     @State private var hasConfirmedStart: Bool = false
     @State private var showingStartFrameGuidance: Bool = true
 
+    // Reference Vantage & Ghost Alignment Viewfinder
+    @StateObject private var frameMatcher = FrameAlignmentMatcher.shared
+    @State private var isGhostOverlayVisible: Bool = true
+    @State private var ghostOpacity: Double = 0.45
+    @State private var activeReferenceCheckpoint: SpatialMoment? = nil
+    @State private var isCameraExpanded: Bool = false
+    @State private var alignmentTimer: Timer? = nil
+
     // Checkpoint Capture Sheets (Parity with ScannerView)
     @State private var showingVoiceCaptureSheet: Bool = false
     @State private var showingAddNoteSheet: Bool = false
@@ -137,6 +145,59 @@ public struct RetraceTrailView: View {
             if baseHeading < 0 { baseHeading += 360.0 }
         }
         return baseHeading
+    }
+
+    // MARK: - Reference Target Resolution & Match Helpers
+
+    private var currentReferenceImage: UIImage? {
+        if let cp = activeReferenceCheckpoint {
+            if let url = cp.resolvedPhotoURL(trailId: referenceTrail.id, fallbackTrailId: referenceTrail.inspiredByTrailId),
+               let img = UIImage(contentsOfFile: url.path) {
+                return img
+            }
+            if let url = cp.resolvedVideoThumbnailURL(trailId: referenceTrail.id, fallbackTrailId: referenceTrail.inspiredByTrailId),
+               let img = UIImage(contentsOfFile: url.path) {
+                return img
+            }
+        }
+        if let startURL = referenceTrail.resolvedStartFrameURL(),
+           let img = UIImage(contentsOfFile: startURL.path) {
+            return img
+        }
+        return nil
+    }
+
+    private var currentReferenceHeading: Double? {
+        if let cp = activeReferenceCheckpoint {
+            return cp.headingDegrees
+        }
+        return referenceTrail.startHeadingDegrees ?? referenceTrail.moments.first?.headingDegrees
+    }
+
+    private var currentReferenceTitle: String {
+        if let cp = activeReferenceCheckpoint {
+            return "Checkpoint \(cp.index): \(cp.title)"
+        }
+        return "Start Vantage"
+    }
+
+    private var matchBadgeColor: Color {
+        if frameMatcher.matchPercentage >= 72 {
+            return Color.green
+        } else if frameMatcher.matchPercentage >= 42 {
+            return Color(hex: "#00E5FF")
+        } else {
+            return Color(hex: "#FFA000")
+        }
+    }
+
+    private func selectReference(checkpoint: SpatialMoment?) {
+        activeReferenceCheckpoint = checkpoint
+        frameMatcher.setReference(
+            image: currentReferenceImage,
+            heading: currentReferenceHeading,
+            title: currentReferenceTitle
+        )
     }
 
     // Transformed footsteps array for rendering
@@ -421,7 +482,7 @@ public struct RetraceTrailView: View {
             } else {
                 // Split View: LiDAR Camera on Top, Blueprint on Bottom
                 VStack(spacing: 0) {
-                    // Upper Pane: Live LiDAR Camera Viewport
+                    // Upper Pane: Live LiDAR Camera Viewport with Ghost Viewfinder Alignment
                     ZStack(alignment: .center) {
                         if scannerEngine.isSupported {
                             RoomCameraView(engine: scannerEngine)
@@ -440,6 +501,11 @@ public struct RetraceTrailView: View {
                             }
                         }
 
+                        // Ghost Viewfinder Reference Overlay & Alignment Reticle
+                        if isGhostOverlayVisible, let refImg = currentReferenceImage {
+                            ghostViewfinderView(image: refImg)
+                        }
+
                         // Gradient scrim
                         LinearGradient(
                             colors: [Color.clear, Color.black.opacity(0.4)],
@@ -448,8 +514,32 @@ public struct RetraceTrailView: View {
                         )
                         .frame(height: 60)
                         .frame(maxHeight: .infinity, alignment: .bottom)
+
+                        // Camera viewport expand/collapse toggle button
+                        VStack {
+                            HStack {
+                                Spacer()
+                                Button {
+                                    Haptics.light()
+                                    withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                                        isCameraExpanded.toggle()
+                                    }
+                                } label: {
+                                    Image(systemName: isCameraExpanded ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right")
+                                        .font(.system(size: 11, weight: .bold))
+                                        .foregroundColor(.white)
+                                        .frame(width: 32, height: 32)
+                                        .background(Color.black.opacity(0.6))
+                                        .clipShape(Circle())
+                                }
+                                .padding(.top, 56)
+                                .padding(.trailing, 16)
+                            }
+                            Spacer()
+                        }
                     }
-                    .frame(height: UIScreen.main.bounds.height * 0.46)
+                    .frame(height: isCameraExpanded ? (UIScreen.main.bounds.height * 0.72) : (UIScreen.main.bounds.height * 0.46))
+                    .animation(.spring(response: 0.35, dampingFraction: 0.8), value: isCameraExpanded)
 
                     // Lower Pane: 2D Blueprint with Dual Path & Heading Cone
                     ZStack(alignment: .topTrailing) {
@@ -1033,9 +1123,9 @@ public struct RetraceTrailView: View {
                 Text("·")
                     .foregroundColor(Color.white.opacity(0.4))
 
-                Text("\(similarityIndexPercentage)% Match")
+                Text(hasConfirmedStart ? "\(similarityIndexPercentage)% Match" : "Align: \(frameMatcher.matchPercentage)%")
                     .font(AppFonts.labelSpatial)
-                    .foregroundColor(Color(hex: "#00E5FF"))
+                    .foregroundColor(hasConfirmedStart ? Color(hex: "#00E5FF") : matchBadgeColor)
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 8)
@@ -1072,24 +1162,19 @@ public struct RetraceTrailView: View {
 
     @ViewBuilder
     private var startPointGuidanceCard: some View {
-        let startImage: UIImage? = {
-            if let startURL = referenceTrail.resolvedStartFrameURL(),
-               let img = UIImage(contentsOfFile: startURL.path) {
-                return img
-            }
-            return nil
-        }()
+        let startImage = currentReferenceImage
 
         VStack(alignment: .leading, spacing: 10) {
+            // Header with Reference Target title and Dismiss button
             HStack {
                 HStack(spacing: 6) {
                     Circle()
-                        .fill(Color(hex: "#00E5FF"))
+                        .fill(matchBadgeColor)
                         .frame(width: 8, height: 8)
-                    Text("START OF TRAIL REFERENCE")
+                    Text(currentReferenceTitle.uppercased())
                         .font(AppFonts.labelSpatial)
                         .fontWeight(.bold)
-                        .foregroundColor(Color(hex: "#00E5FF"))
+                        .foregroundColor(matchBadgeColor)
                         .tracking(1.0)
                 }
 
@@ -1107,6 +1192,49 @@ public struct RetraceTrailView: View {
                 }
             }
 
+            // Checkpoint / Start Vantage Pill Switcher (if trail has checkpoints)
+            if !referenceTrail.moments.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
+                        Button {
+                            selectReference(checkpoint: nil)
+                        } label: {
+                            HStack(spacing: 4) {
+                                Image(systemName: "flag.fill")
+                                    .font(.system(size: 9))
+                                Text("Start")
+                                    .font(AppFonts.labelSpatial)
+                                    .fontWeight(.bold)
+                            }
+                            .foregroundColor(activeReferenceCheckpoint == nil ? .black : .white)
+                            .padding(.horizontal, 9)
+                            .padding(.vertical, 4)
+                            .background(activeReferenceCheckpoint == nil ? Color(hex: "#00E5FF") : Color.white.opacity(0.12))
+                            .clipShape(Capsule())
+                        }
+
+                        ForEach(referenceTrail.moments) { moment in
+                            Button {
+                                selectReference(checkpoint: moment)
+                            } label: {
+                                HStack(spacing: 4) {
+                                    Text("CP \(moment.index)")
+                                        .font(AppFonts.labelSpatial)
+                                        .fontWeight(.bold)
+                                }
+                                .foregroundColor(activeReferenceCheckpoint?.id == moment.id ? .black : .white)
+                                .padding(.horizontal, 9)
+                                .padding(.vertical, 4)
+                                .background(activeReferenceCheckpoint?.id == moment.id ? Color(hex: "#00E5FF") : Color.white.opacity(0.12))
+                                .clipShape(Capsule())
+                            }
+                        }
+                    }
+                    .padding(.vertical, 2)
+                }
+            }
+
+            // Reference Thumbnail with Live Match Gauge Overlay
             if let img = startImage {
                 ZStack(alignment: .bottomLeading) {
                     Image(uiImage: img)
@@ -1118,52 +1246,117 @@ public struct RetraceTrailView: View {
                         .cornerRadius(12)
                         .overlay(
                             RoundedRectangle(cornerRadius: 12)
-                                .stroke(Color.white.opacity(0.2), lineWidth: 1)
+                                .stroke(matchBadgeColor.opacity(0.4), lineWidth: 1.5)
                         )
 
                     LinearGradient(
-                        colors: [Color.clear, Color.black.opacity(0.75)],
+                        colors: [Color.clear, Color.black.opacity(0.8)],
                         startPoint: .center,
                         endPoint: .bottom
                     )
                     .cornerRadius(12)
 
-                    HStack(spacing: 6) {
-                        Image(systemName: "camera.viewfinder")
-                            .font(.system(size: 12, weight: .bold))
-                            .foregroundColor(Color(hex: "#00E5FF"))
+                    // Guidance & Match text overlay
+                    VStack(alignment: .leading, spacing: 3) {
+                        HStack(spacing: 6) {
+                            Image(systemName: frameMatcher.isWellAligned ? "checkmark.seal.fill" : "camera.viewfinder")
+                                .font(.system(size: 13, weight: .bold))
+                                .foregroundColor(matchBadgeColor)
 
-                        Text("Go to this spot & point camera here")
-                            .font(AppFonts.caption)
-                            .fontWeight(.semibold)
-                            .foregroundColor(.white)
+                            Text(frameMatcher.alignmentGuidanceText)
+                                .font(AppFonts.caption)
+                                .fontWeight(.semibold)
+                                .foregroundColor(.white)
+                                .lineLimit(1)
+                        }
+
+                        if let targetH = currentReferenceHeading {
+                            HStack(spacing: 8) {
+                                Text("Ref: \(Int(targetH))°")
+                                    .font(AppFonts.labelSpatial)
+                                    .foregroundColor(AppColors.mutedBrass)
+                                Text("·")
+                                    .foregroundColor(.white.opacity(0.4))
+                                Text("Live: \(Int(currentHeadingDegrees))°")
+                                    .font(AppFonts.labelSpatial)
+                                    .foregroundColor(Color.white.opacity(0.8))
+                                if abs(frameMatcher.headingDeltaDegrees) > 5 {
+                                    Text("(\(frameMatcher.headingDeltaDegrees > 0 ? "+" : "")\(Int(frameMatcher.headingDeltaDegrees))°)")
+                                        .font(AppFonts.labelSpatial)
+                                        .foregroundColor(matchBadgeColor)
+                                }
+                            }
+                        }
                     }
                     .padding(8)
+
+                    // Live match pill badge top-trailing
+                    VStack {
+                        HStack {
+                            Spacer()
+                            HStack(spacing: 5) {
+                                Circle()
+                                    .fill(matchBadgeColor)
+                                    .frame(width: 7, height: 7)
+                                Text("\(frameMatcher.matchPercentage)%")
+                                    .font(.system(size: 12, weight: .black, design: .rounded))
+                                    .foregroundColor(matchBadgeColor)
+                            }
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(Color.black.opacity(0.85))
+                            .clipShape(Capsule())
+                            .overlay(Capsule().stroke(matchBadgeColor.opacity(0.6), lineWidth: 1))
+                            .padding(8)
+                        }
+                        Spacer()
+                    }
                 }
             } else {
-                Text("Go to the starting point of “\(referenceTrail.title)” and point your camera forward along the path.")
+                Text("Aim phone forward to match the reference view of “\(referenceTrail.title)”.")
                     .font(AppFonts.caption)
                     .foregroundColor(Color.white.opacity(0.85))
             }
 
-            HStack(spacing: 10) {
-                if let heading = referenceTrail.startHeadingDegrees {
-                    HStack(spacing: 4) {
-                        Image(systemName: "location.north.fill")
-                            .font(.system(size: 10))
-                            .foregroundColor(AppColors.mutedBrass)
-                        Text("Facing \(Int(heading))°")
+            // Ghost Opacity Controls
+            HStack(spacing: 6) {
+                Text("Ghost Guide:")
+                    .font(AppFonts.caption)
+                    .foregroundColor(Color.white.opacity(0.7))
+
+                ForEach([0.25, 0.45, 0.70], id: \.self) { val in
+                    Button {
+                        Haptics.light()
+                        ghostOpacity = val
+                        isGhostOverlayVisible = true
+                    } label: {
+                        Text("\(Int(val * 100))%")
                             .font(AppFonts.labelSpatial)
-                            .foregroundColor(Color.white.opacity(0.85))
+                            .fontWeight(.bold)
+                            .foregroundColor(isGhostOverlayVisible && ghostOpacity == val ? .black : .white)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 3)
+                            .background(isGhostOverlayVisible && ghostOpacity == val ? Color(hex: "#00E5FF") : Color.white.opacity(0.12))
+                            .clipShape(Capsule())
                     }
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(Color.white.opacity(0.08))
-                    .clipShape(Capsule())
+                }
+
+                Button {
+                    Haptics.light()
+                    isGhostOverlayVisible.toggle()
+                } label: {
+                    Text(isGhostOverlayVisible ? "Off" : "On")
+                        .font(AppFonts.labelSpatial)
+                        .foregroundColor(.white.opacity(0.7))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(Color.white.opacity(0.08))
+                        .clipShape(Capsule())
                 }
 
                 Spacer()
 
+                // Action CTA Button
                 Button {
                     Haptics.success()
                     hasConfirmedStart = true
@@ -1177,29 +1370,152 @@ public struct RetraceTrailView: View {
                     triggerToast("Starting Point Confirmed · Retrace Active ✓")
                 } label: {
                     HStack(spacing: 6) {
-                        Text(hasConfirmedStart ? "Dismiss" : "I'm Here · Begin Retrace")
-                            .font(AppFonts.labelUI)
-                            .fontWeight(.bold)
-                        Image(systemName: hasConfirmedStart ? "checkmark" : "arrow.right")
-                            .font(.system(size: 11, weight: .bold))
+                        if frameMatcher.isWellAligned {
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.system(size: 11, weight: .bold))
+                            Text("Begin · Aligned (\(frameMatcher.matchPercentage)%)")
+                                .font(AppFonts.labelUI)
+                                .fontWeight(.bold)
+                        } else {
+                            Text(hasConfirmedStart ? "Dismiss" : (frameMatcher.matchPercentage > 40 ? "Begin (\(frameMatcher.matchPercentage)%)" : "I'm Here · Begin"))
+                                .font(AppFonts.labelUI)
+                                .fontWeight(.bold)
+                            Image(systemName: hasConfirmedStart ? "checkmark" : "arrow.right")
+                                .font(.system(size: 10, weight: .bold))
+                        }
                     }
                     .foregroundColor(.black)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 8)
-                    .background(Color(hex: "#00E5FF"))
+                    .padding(.horizontal, 13)
+                    .padding(.vertical, 7)
+                    .background(frameMatcher.isWellAligned ? Color.green : Color(hex: "#00E5FF"))
                     .clipShape(Capsule())
-                    .shadow(color: Color(hex: "#00E5FF").opacity(0.3), radius: 6)
+                    .shadow(color: (frameMatcher.isWellAligned ? Color.green : Color(hex: "#00E5FF")).opacity(0.35), radius: 6)
                 }
             }
         }
         .padding(14)
-        .background(Color(hex: "#10161E").opacity(0.95))
+        .background(Color(hex: "#10161E").opacity(0.96))
         .clipShape(RoundedRectangle(cornerRadius: 16))
         .overlay(
             RoundedRectangle(cornerRadius: 16)
-                .stroke(Color(hex: "#00E5FF").opacity(0.5), lineWidth: 1.5)
+                .stroke(matchBadgeColor.opacity(frameMatcher.isWellAligned ? 0.7 : 0.4), lineWidth: 1.5)
         )
         .shadow(color: Color.black.opacity(0.6), radius: 12)
+    }
+
+    // MARK: - Ghost Viewfinder Overlay (Live Camera Alignment)
+
+    @ViewBuilder
+    private func ghostViewfinderView(image: UIImage) -> some View {
+        ZStack {
+            // Semi-transparent ghost reference photo aligned to camera
+            Image(uiImage: image)
+                .resizable()
+                .scaledToFill()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .clipped()
+                .opacity(ghostOpacity)
+                .allowsHitTesting(false)
+
+            // Viewfinder Reticle & Live Match Gauge Overlay
+            GeometryReader { geo in
+                let frameWidth = geo.size.width * 0.88
+                let frameHeight = geo.size.height * 0.78
+                let bracketColor = matchBadgeColor
+
+                ZStack {
+                    // Outer corner brackets
+                    RoundedRectangle(cornerRadius: 14)
+                        .stroke(bracketColor.opacity(frameMatcher.isWellAligned ? 0.9 : 0.45), style: StrokeStyle(lineWidth: 2, dash: [24, frameWidth / 4, 24]))
+                        .frame(width: frameWidth, height: frameHeight)
+
+                    // Center crosshair
+                    Circle()
+                        .stroke(bracketColor.opacity(0.4), lineWidth: 1)
+                        .frame(width: 32, height: 32)
+
+                    Circle()
+                        .fill(bracketColor)
+                        .frame(width: 4, height: 4)
+
+                    // Match percentage badge floating right inside camera viewport
+                    VStack {
+                        HStack {
+                            Spacer()
+                            HStack(spacing: 6) {
+                                Circle()
+                                    .fill(bracketColor)
+                                    .frame(width: 8, height: 8)
+                                    .scaleEffect(frameMatcher.isWellAligned ? 1.2 : 1.0)
+                                    .animation(.easeInOut(duration: 0.6).repeatForever(autoreverses: true), value: frameMatcher.isWellAligned)
+
+                                Text("\(frameMatcher.matchPercentage)% MATCH")
+                                    .font(AppFonts.labelSpatial)
+                                    .fontWeight(.bold)
+                                    .foregroundColor(bracketColor)
+                            }
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 5)
+                            .background(Color.black.opacity(0.75))
+                            .clipShape(Capsule())
+                            .overlay(Capsule().stroke(bracketColor.opacity(0.6), lineWidth: 1))
+                            .shadow(color: bracketColor.opacity(0.35), radius: 6)
+                            .padding(.top, 14)
+                            .padding(.trailing, 14)
+                        }
+
+                        Spacer()
+
+                        // Quick Ghost Opacity Controls at bottom of camera viewport
+                        HStack(spacing: 8) {
+                            HStack(spacing: 4) {
+                                Image(systemName: "square.2.layers.3d.fill")
+                                    .font(.system(size: 10, weight: .bold))
+                                    .foregroundColor(Color(hex: "#00E5FF"))
+                                Text("Ghost:")
+                                    .font(.system(size: 10, weight: .semibold))
+                                    .foregroundColor(.white.opacity(0.75))
+                            }
+
+                            ForEach([0.25, 0.45, 0.70], id: \.self) { val in
+                                Button {
+                                    Haptics.light()
+                                    ghostOpacity = val
+                                    isGhostOverlayVisible = true
+                                } label: {
+                                    Text("\(Int(val * 100))%")
+                                        .font(.system(size: 10, weight: .bold))
+                                        .foregroundColor(isGhostOverlayVisible && ghostOpacity == val ? .black : .white)
+                                        .padding(.horizontal, 7)
+                                        .padding(.vertical, 3)
+                                        .background(isGhostOverlayVisible && ghostOpacity == val ? Color(hex: "#00E5FF") : Color.white.opacity(0.15))
+                                        .clipShape(Capsule())
+                                }
+                            }
+
+                            Button {
+                                Haptics.light()
+                                isGhostOverlayVisible.toggle()
+                            } label: {
+                                Text(isGhostOverlayVisible ? "Hide" : "Show")
+                                    .font(.system(size: 10, weight: .bold))
+                                    .foregroundColor(.white.opacity(0.8))
+                                    .padding(.horizontal, 7)
+                                    .padding(.vertical, 3)
+                                    .background(Color.white.opacity(0.12))
+                                    .clipShape(Capsule())
+                            }
+                        }
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(Color.black.opacity(0.75))
+                        .clipShape(Capsule())
+                        .padding(.bottom, 8)
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
     }
 
     // MARK: - Navigation Banner
@@ -1289,6 +1605,23 @@ public struct RetraceTrailView: View {
 
             Spacer()
 
+            // Viewfinder Align Button to check vantage alignment at checkpoint
+            Button {
+                Haptics.light()
+                selectReference(checkpoint: moment)
+                withAnimation(.spring(response: 0.35)) {
+                    showingStartFrameGuidance = true
+                    isGhostOverlayVisible = true
+                }
+            } label: {
+                Image(systemName: "camera.viewfinder")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundColor(Color(hex: "#00E5FF"))
+                    .frame(width: 36, height: 36)
+                    .background(Color.white.opacity(0.12))
+                    .clipShape(Circle())
+            }
+
             Button {
                 Haptics.medium()
                 selectedMomentToInspect = moment
@@ -1356,15 +1689,15 @@ public struct RetraceTrailView: View {
                     HStack(spacing: 5) {
                         Image(systemName: "camera.viewfinder")
                             .font(.system(size: 11, weight: .bold))
-                        Text(showingStartFrameGuidance ? "Hide Start" : "Start Vantage")
+                        Text(showingStartFrameGuidance ? "Hide Vantage" : (!hasConfirmedStart ? "Align (\(frameMatcher.matchPercentage)%)" : "Vantage Guide"))
                             .font(AppFonts.labelSpatial)
                     }
-                    .foregroundColor(Color(hex: "#00E5FF"))
+                    .foregroundColor(matchBadgeColor)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 6)
                     .background(Color.black.opacity(0.65))
                     .clipShape(Capsule())
-                    .overlay(Capsule().stroke(Color(hex: "#00E5FF").opacity(0.4), lineWidth: 1))
+                    .overlay(Capsule().stroke(matchBadgeColor.opacity(0.4), lineWidth: 1))
                 }
 
                 // View Mode Toggle [ Split | Full Blueprint ]
@@ -2063,6 +2396,24 @@ public struct RetraceTrailView: View {
             checkForCheckpointProximity()
             updateAlignmentStatusFromSensor()
         }
+
+        // Setup initial reference vantage in FrameAlignmentMatcher
+        frameMatcher.setReference(
+            image: currentReferenceImage,
+            heading: currentReferenceHeading,
+            title: currentReferenceTitle
+        )
+
+        // Alignment tracking timer running at 0.35s intervals
+        alignmentTimer?.invalidate()
+        alignmentTimer = Timer.scheduledTimer(withTimeInterval: 0.35, repeats: true) { _ in
+            Task { @MainActor in
+                frameMatcher.updateLiveFrame(
+                    image: scannerEngine.captureCurrentARFrameImage(),
+                    liveHeading: currentHeadingDegrees
+                )
+            }
+        }
     }
 
     private func startRelocalizationAttempt() {
@@ -2216,6 +2567,9 @@ public struct RetraceTrailView: View {
     private func teardownRetraceSession() {
         sessionTimer?.invalidate()
         sessionTimer = nil
+        alignmentTimer?.invalidate()
+        alignmentTimer = nil
+        frameMatcher.reset()
         scannerEngine.stopScanning()
         cameraEngine.stop()
         if audioManager.isRecording {
