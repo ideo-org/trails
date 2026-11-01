@@ -11,6 +11,7 @@ import Foundation
 import AVFoundation
 import CoreMedia
 import UIKit
+import Combine
 
 @MainActor
 public final class ARVideoRecorder: NSObject, ObservableObject {
