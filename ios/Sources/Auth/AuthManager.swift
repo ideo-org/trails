@@ -83,6 +83,9 @@ class AuthManager: ObservableObject {
 
     @Published var authState: AuthState = .signedOut
     @Published var isCheckingAuth: Bool = true
+    @Published var isFirebaseConfigured: Bool = false
+    @Published var firebaseProjectId: String? = nil
+    @Published var isFirebaseAuthWorking: Bool = false
 
     @Published var localAppleUserId: String? {
         didSet {
@@ -122,6 +125,8 @@ class AuthManager: ObservableObject {
             if FirebaseApp.app() == nil {
                 FirebaseApp.configure()
             }
+            self.isFirebaseConfigured = FirebaseApp.app() != nil
+            self.firebaseProjectId = FirebaseApp.app()?.options.projectID
             db = Firestore.firestore()
             Task {
                 await handleSignInValidationAndProviderChecks()
@@ -173,12 +178,20 @@ class AuthManager: ObservableObject {
             return
         }
 
+        self.isFirebaseConfigured = FirebaseApp.app() != nil
+        self.firebaseProjectId = FirebaseApp.app()?.options.projectID
+
         if Auth.auth().currentUser == nil {
             do {
                 try await signInAnonymously()
+                self.isFirebaseAuthWorking = true
             } catch {
-                debugPrint("Error creating anonymous account: \(error)")
+                debugPrint("Note: Firebase anonymous auth offline/pending setup (\(error.localizedDescription)). Continuing in local author mode.")
+                self.isFirebaseAuthWorking = false
+                setupLocalMode()
             }
+        } else {
+            self.isFirebaseAuthWorking = true
         }
         #else
         setupLocalMode()
@@ -192,9 +205,19 @@ class AuthManager: ObservableObject {
             throw AuthError.firebaseDisabled
         }
 
-        let result = try await Auth.auth().signInAnonymously()
-        debugPrint("Signed in anonymously with user: \(result.user.uid)")
-        updateState(user: result.user)
+        do {
+            let result = try await Auth.auth().signInAnonymously()
+            debugPrint("Signed in anonymously with user: \(result.user.uid)")
+            await MainActor.run {
+                self.isFirebaseAuthWorking = true
+            }
+            updateState(user: result.user)
+        } catch {
+            await MainActor.run {
+                self.isFirebaseAuthWorking = false
+            }
+            throw error
+        }
         #else
         throw AuthError.firebaseDisabled
         #endif

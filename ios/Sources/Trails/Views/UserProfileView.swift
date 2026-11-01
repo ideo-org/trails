@@ -260,6 +260,12 @@ public struct UserProfileView: View {
                                 DiagnosticRow(title: "6DOF Odometry Tracking", value: "Calibrated", isOk: true)
                                 Divider().padding(.leading, 16)
                                 DiagnosticRow(title: "Spatial Audio Field Mic", value: "48 kHz Stereo", isOk: true)
+                                Divider().padding(.leading, 16)
+                                DiagnosticRow(
+                                    title: "Firebase Cloud Backend",
+                                    value: authManager.isFirebaseConfigured ? "Configured (\(authManager.firebaseProjectId ?? "logos-trails"))" : "Disabled",
+                                    isOk: authManager.isFirebaseConfigured
+                                )
                             }
                             .background(AppColors.pureWhite)
                             .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
@@ -466,6 +472,39 @@ public struct UserProfileView: View {
                         }
                     }
 
+                    if authManager.isFirebaseConfigured {
+                        HStack(spacing: 8) {
+                            Image(systemName: "checkmark.seal.fill")
+                                .foregroundColor(AppColors.forestGreen)
+                                .font(.system(size: 14))
+
+                            Text("Firebase Configured")
+                                .font(AppFonts.labelSpatial)
+                                .fontWeight(.semibold)
+                                .foregroundColor(AppColors.deepInk)
+
+                            if let projectId = authManager.firebaseProjectId {
+                                Text("(\(projectId))")
+                                    .font(AppFonts.caption)
+                                    .foregroundColor(AppColors.outline)
+                            }
+
+                            Spacer()
+
+                            Text(authManager.isFirebaseAuthWorking ? "Auth Active" : "Local Mode")
+                                .font(.system(size: 11, weight: .medium, design: .rounded))
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 3)
+                                .background(authManager.isFirebaseAuthWorking ? AppColors.forestGreen.opacity(0.12) : AppColors.surfaceContainerLow)
+                                .foregroundColor(authManager.isFirebaseAuthWorking ? AppColors.forestGreen : AppColors.onSurfaceVariant)
+                                .clipShape(Capsule())
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(AppColors.surfaceContainerLowest)
+                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    }
+
                     if let error = linkErrorMessage {
                         HStack(spacing: 6) {
                             Image(systemName: "exclamationmark.triangle.fill")
@@ -598,7 +637,11 @@ public struct UserProfileView: View {
                     if error.domain == "com.google.GIDSignIn" && error.code == -5 {
                         return
                     }
-                    self.linkErrorMessage = error.localizedDescription
+                    if authManager.isFirebaseConfigured {
+                        self.linkErrorMessage = "Firebase is configured (\(authManager.firebaseProjectId ?? "logos-trails")), but Google Authentication is not yet enabled in the Firebase console. You can continue using your local @\(effectiveUsername) profile!"
+                    } else {
+                        self.linkErrorMessage = error.localizedDescription
+                    }
                 }
             }
         }
@@ -620,6 +663,10 @@ public struct UserProfileView: View {
                     self.isLinkingProvider = false
                     if let message = AppleSignInManager.friendlyErrorMessage(for: error) {
                         self.linkErrorMessage = message
+                    } else if authManager.isFirebaseConfigured {
+                        self.linkErrorMessage = "Firebase is configured (\(authManager.firebaseProjectId ?? "logos-trails")), but Apple Sign-In is not yet enabled in the Firebase console. You can continue using your local @\(effectiveUsername) profile!"
+                    } else {
+                        self.linkErrorMessage = error.localizedDescription
                     }
                 }
             }

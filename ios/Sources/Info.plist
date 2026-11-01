@@ -17,19 +17,7 @@
 	</dict>
 	<key>UILaunchScreen</key>
 	<dict/>
-	<key>GIDClientID</key>
-	<string>792762435488-7nds541nn8q3i0g6s4ia5d9h0i1emecs.apps.googleusercontent.com</string>
-	<key>CFBundleURLTypes</key>
-	<array>
-		<dict>
-			<key>CFBundleTypeRole</key>
-			<string>Editor</string>
-			<key>CFBundleURLSchemes</key>
-			<array>
-				<string>com.googleusercontent.apps.792762435488-7nds541nn8q3i0g6s4ia5d9h0i1emecs</string>
-			</array>
-		</dict>
-	</array>
+
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsLocalNetworking</key>

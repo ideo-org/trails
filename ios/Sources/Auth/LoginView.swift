@@ -25,7 +25,7 @@ public struct LoginView: View {
     @State private var enteredUsername: String = ""
     @State private var showingUsernameInput: Bool = false
 
-    private let logger = Logger(subsystem: "com.app2020.iportal", category: "Auth")
+    private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "com.logos.trails", category: "Auth")
 
     public init() {
         let viewModel = GoogleSignInButtonViewModel()
@@ -54,6 +54,22 @@ public struct LoginView: View {
                         .foregroundColor(.secondary)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 24)
+
+                    if authManager.isFirebaseConfigured {
+                        HStack(spacing: 6) {
+                            Image(systemName: "checkmark.seal.fill")
+                                .foregroundColor(.green)
+                                .font(.system(size: 13))
+                            Text("Firebase Configured (\(authManager.firebaseProjectId ?? "logos-trails"))")
+                                .font(.caption)
+                                .fontWeight(.medium)
+                                .foregroundColor(.secondary)
+                        }
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 4)
+                        .background(Color.secondary.opacity(0.1))
+                        .clipShape(Capsule())
+                    }
                 }
 
                 Spacer()
@@ -240,7 +256,12 @@ public struct LoginView: View {
                 return
             }
             logger.error("Google Sign-In failed: \(error.localizedDescription) (Domain: \(error.domain), Code: \(error.code))")
-            errorMessage = error.localizedDescription
+            let bundleId = Bundle.main.bundleIdentifier ?? "com.logos.trails"
+            if authManager.isFirebaseConfigured {
+                errorMessage = "Firebase is configured for \(bundleId) (\(authManager.firebaseProjectId ?? "logos-trails")), but Google Sign-In is pending console setup. You can continue with your Username!"
+            } else {
+                errorMessage = error.localizedDescription
+            }
         }
     }
 
@@ -277,7 +298,14 @@ public struct LoginView: View {
                 } catch {
                     logger.error("Apple authentication failed: \(error.localizedDescription)")
                     await MainActor.run {
-                        self.errorMessage = AppleSignInManager.friendlyErrorMessage(for: error) ?? error.localizedDescription
+                        if let message = AppleSignInManager.friendlyErrorMessage(for: error) {
+                            self.errorMessage = message
+                        } else if authManager.isFirebaseConfigured {
+                            let bundleId = Bundle.main.bundleIdentifier ?? "com.logos.trails"
+                            self.errorMessage = "Firebase is configured for \(bundleId), but Apple Sign-In is pending console setup. You can continue with your Username!"
+                        } else {
+                            self.errorMessage = error.localizedDescription
+                        }
                     }
                 }
             }

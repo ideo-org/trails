@@ -650,7 +650,12 @@ struct OnboardingView: View {
                     // Cancelled by user
                     return
                 }
-                self.socialAuthError = error.localizedDescription
+                let bundleId = Bundle.main.bundleIdentifier ?? "com.logos.trails"
+                if authManager.isFirebaseConfigured {
+                    self.socialAuthError = "Firebase is configured for \(bundleId), but Google Sign-In is pending console setup. You can continue below with your Username!"
+                } else {
+                    self.socialAuthError = error.localizedDescription
+                }
             }
         }
     }
@@ -671,6 +676,11 @@ struct OnboardingView: View {
                     self.isAuthenticatingSocial = false
                     if let message = AppleSignInManager.friendlyErrorMessage(for: error) {
                         self.socialAuthError = message
+                    } else if authManager.isFirebaseConfigured {
+                        let bundleId = Bundle.main.bundleIdentifier ?? "com.logos.trails"
+                        self.socialAuthError = "Firebase is configured for \(bundleId), but Apple Sign-In is pending console setup. You can continue below with your Username!"
+                    } else {
+                        self.socialAuthError = error.localizedDescription
                     }
                 }
             }
