@@ -20,6 +20,7 @@ import AuthenticationServices
 public struct UserProfileView: View {
     @ObservedObject var authManager = AuthManager.shared
     @ObservedObject var dataStore = TrailsDataStore.shared
+    @ObservedObject var walletStore = TrailsWalletStore.shared
     @AppStorage("trails_discover_include_test_trails") private var includeTestTrails: Bool = false
 
     @State private var showingEditProfile: Bool = false
@@ -31,6 +32,10 @@ public struct UserProfileView: View {
     @State private var draftDisplayName: String = ""
     @State private var draftUsername: String = ""
     @State private var draftIntroduction: String = ""
+    @State private var copiedWalletAddress: Bool = false
+    @State private var showingImportWalletSheet: Bool = false
+    @State private var importWalletInput: String = ""
+    @State private var importErrorMessage: String? = nil
 
     public init() {}
 
@@ -219,6 +224,9 @@ public struct UserProfileView: View {
                         // MARK: - Account & Cloud Identity (Firebase Google Sign-In)
                         accountIdentitySection
 
+                        // MARK: - Logos & Ethereum Wallet Identity
+                        logosWalletSection
+
                         // MARK: - Privacy & Local Storage (PRD 11.3)
                         VStack(alignment: .leading, spacing: 10) {
                             HStack(spacing: 8) {
@@ -343,6 +351,9 @@ public struct UserProfileView: View {
             }
             .sheet(isPresented: $showingUsernameSwitchAlert) {
                 switchUsernameSheet
+            }
+            .sheet(isPresented: $showingImportWalletSheet) {
+                importWalletSheet
             }
         }
     }
@@ -613,6 +624,146 @@ public struct UserProfileView: View {
         .padding(.horizontal, 20)
     }
 
+    // MARK: - Logos & Ethereum Wallet Identity
+
+    private var logosWalletSection: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 10) {
+                Image(systemName: "wallet.pass.fill")
+                    .foregroundColor(AppColors.forestGreen)
+                    .font(.system(size: 24))
+
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 6) {
+                        Text("Logos & Ethereum Wallet")
+                            .font(AppFonts.headlineSmall)
+                            .foregroundColor(AppColors.deepInk)
+
+                        Text("Active")
+                            .font(.system(size: 11, weight: .semibold))
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(AppColors.forestGreen.opacity(0.12))
+                            .foregroundColor(AppColors.forestGreen)
+                            .clipShape(Capsule())
+                    }
+
+                    Text("Non-custodial cryptographic keypair for on-chain trail authorship & ENS.")
+                        .font(AppFonts.caption)
+                        .foregroundColor(AppColors.outline)
+                }
+            }
+
+            VStack(spacing: 10) {
+                // Wallet Address Row
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("ACCOUNT ADDRESS")
+                            .font(.system(size: 10, weight: .bold))
+                            .tracking(1.0)
+                            .foregroundColor(AppColors.outline)
+                        Text(walletStore.shortAddress.isEmpty ? "Generating..." : walletStore.shortAddress)
+                            .font(.system(size: 13, weight: .monospaced))
+                            .foregroundColor(AppColors.deepInk)
+                    }
+
+                    Spacer()
+
+                    Button {
+                        UIPasteboard.general.string = walletStore.activeAddress
+                        Haptics.selection()
+                        copiedWalletAddress = true
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                            copiedWalletAddress = false
+                        }
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: copiedWalletAddress ? "checkmark" : "doc.on.doc")
+                            Text(copiedWalletAddress ? "Copied" : "Copy")
+                        }
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(copiedWalletAddress ? AppColors.forestGreen : AppColors.outline)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(AppColors.surfaceContainerLow)
+                        .clipShape(Capsule())
+                    }
+                }
+                .padding(12)
+                .background(AppColors.surfaceContainerLow.opacity(0.5))
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+
+                // ENS Domain Row
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("CLAIMABLE ENS DOMAIN")
+                            .font(.system(size: 10, weight: .bold))
+                            .tracking(1.0)
+                            .foregroundColor(AppColors.outline)
+                        Text(TrailsIdentityGenerator.formatENS(for: effectiveUsername))
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundColor(AppColors.forestGreen)
+                    }
+
+                    Spacer()
+
+                    Image(systemName: "checkmark.seal.fill")
+                        .foregroundColor(AppColors.forestGreen)
+                }
+                .padding(12)
+                .background(AppColors.surfaceContainerLow.opacity(0.5))
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            }
+
+            HStack(spacing: 12) {
+                Button {
+                    Haptics.selection()
+                    importWalletInput = ""
+                    importErrorMessage = nil
+                    showingImportWalletSheet = true
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "key.fill")
+                        Text("Import Key")
+                    }
+                    .font(AppFonts.labelSpatial)
+                    .foregroundColor(AppColors.forestGreen)
+                }
+
+                Spacer()
+
+                Button {
+                    Haptics.selection()
+                    let newAddress = walletStore.regenerateWallet()
+                    dataStore.updateProfile(
+                        displayName: dataStore.localProfile.displayName,
+                        introduction: dataStore.localProfile.introduction,
+                        username: effectiveUsername,
+                        accountAddress: newAddress
+                    )
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "arrow.triangle.2.circlepath")
+                        Text("Regenerate Wallet")
+                    }
+                    .font(AppFonts.labelSpatial)
+                    .foregroundColor(AppColors.terracotta)
+                }
+            }
+            .padding(.top, 2)
+        }
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(AppColors.pureWhite)
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(AppColors.outlineVariant.opacity(0.4), lineWidth: 1)
+        )
+        .shadow(color: Color.black.opacity(0.03), radius: 6, x: 0, y: 2)
+        .padding(.horizontal, 20)
+    }
+
     // MARK: - Account Linking Actions
 
     private func linkGoogle() {
@@ -764,9 +915,25 @@ public struct UserProfileView: View {
                     }
 
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("USERNAME")
-                            .font(AppFonts.labelSpatial)
-                            .foregroundColor(AppColors.outline)
+                        HStack {
+                            Text("USERNAME")
+                                .font(AppFonts.labelSpatial)
+                                .foregroundColor(AppColors.outline)
+
+                            Spacer()
+
+                            Button {
+                                Haptics.selection()
+                                draftUsername = TrailsIdentityGenerator.generateRandomUsername()
+                            } label: {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "dice.fill")
+                                    Text("Random")
+                                }
+                                .font(AppFonts.labelSpatial)
+                                .foregroundColor(AppColors.forestGreen)
+                            }
+                        }
 
                         HStack(spacing: 4) {
                             Text("@")
@@ -816,12 +983,29 @@ public struct UserProfileView: View {
                         let cleanIntro = draftIntroduction.trimmingCharacters(in: .whitespacesAndNewlines)
                         let cleanUser = draftUsername.trimmingCharacters(in: .whitespacesAndNewlines)
                             .trimmingCharacters(in: CharacterSet(charactersIn: "@"))
+                        let ens = cleanUser.isEmpty ? nil : TrailsIdentityGenerator.formatENS(for: cleanUser)
+                        let wallet = walletStore.activeAddress
+
                         dataStore.updateProfile(
                             displayName: cleanName.isEmpty ? "A trail by you" : cleanName,
                             introduction: cleanIntro,
                             username: cleanUser.isEmpty ? nil : cleanUser,
-                            avatarURL: effectiveAvatarURL?.absoluteString
+                            avatarURL: effectiveAvatarURL?.absoluteString,
+                            accountAddress: wallet,
+                            ensDomain: ens
                         )
+
+                        if !cleanUser.isEmpty {
+                            Task {
+                                _ = try? await TrailsLogosClient.shared.claimCreator(
+                                    username: cleanUser,
+                                    displayName: cleanName.isEmpty ? nil : cleanName,
+                                    accountAddress: wallet,
+                                    bio: cleanIntro.isEmpty ? nil : cleanIntro,
+                                    ensDomain: ens
+                                )
+                            }
+                        }
                         showingEditProfile = false
                     } label: {
                         Text("Save")
@@ -836,6 +1020,75 @@ public struct UserProfileView: View {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") {
                         showingEditProfile = false
+                    }
+                    .foregroundColor(AppColors.forestGreen)
+                }
+            }
+        }
+    }
+
+    private var importWalletSheet: some View {
+        NavigationStack {
+            ZStack {
+                AppColors.canvas
+                    .ignoresSafeArea()
+
+                VStack(alignment: .leading, spacing: 20) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("ETHEREUM / LOGOS ADDRESS OR KEY")
+                            .font(AppFonts.labelSpatial)
+                            .foregroundColor(AppColors.outline)
+
+                        TextField("0x... (address or 64-char key)", text: $importWalletInput)
+                            .font(AppFonts.bodyMedium)
+                            .foregroundColor(AppColors.deepInk)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .padding(14)
+                            .background(AppColors.pureWhite)
+                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                    .stroke(AppColors.outlineVariant.opacity(0.5), lineWidth: 1)
+                            )
+                    }
+
+                    if let err = importErrorMessage {
+                        Text(err)
+                            .font(AppFonts.bodySmall)
+                            .foregroundColor(AppColors.error)
+                    }
+
+                    Text("Import an existing Ethereum or Logos cryptographic identity. Captured trails will be signed with this address.")
+                        .font(AppFonts.labelSpatial)
+                        .foregroundColor(AppColors.outline)
+
+                    Spacer()
+
+                    Button("Import Wallet") {
+                        if walletStore.importAddressOrKey(importWalletInput) {
+                            Haptics.success()
+                            dataStore.updateProfile(
+                                displayName: dataStore.localProfile.displayName,
+                                introduction: dataStore.localProfile.introduction,
+                                username: effectiveUsername,
+                                accountAddress: walletStore.activeAddress
+                            )
+                            showingImportWalletSheet = false
+                        } else {
+                            importErrorMessage = "Invalid 0x address (42 chars) or private key hex (64 chars)."
+                        }
+                    }
+                    .buttonStyle(PrimaryButtonStyle())
+                }
+                .padding(24)
+            }
+            .navigationTitle("Import Wallet")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        showingImportWalletSheet = false
                     }
                     .foregroundColor(AppColors.forestGreen)
                 }

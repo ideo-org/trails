@@ -705,6 +705,7 @@ public struct ReviewPublishTrailView: View {
                     "longitude": lon
                 ]
             }
+            let activeWallet = TrailsWalletStore.shared.activeAddress.isEmpty ? "0x0000000000000000000000000000000000000001" : TrailsWalletStore.shared.activeAddress
             let manifest: [String: Any] = [
                 "schemaVersion": "1.0.0",
                 "trailId": updated.id,
@@ -793,7 +794,7 @@ public struct ReviewPublishTrailView: View {
 
                 // Stage 4: Registering on LEZ
                 publishProgressStage = "Registering on LEZ"
-                let receipt = try await client.publishPackageZip(zipData: packageZip)
+                let receipt = try await client.publishPackageZip(zipData: packageZip, publisherAccount: activeWallet)
 
                 // Stage 5: Confirming
                 publishProgressStage = "Confirming"

@@ -21,6 +21,7 @@ import GoogleSignIn
 struct OnboardingView: View {
     @Binding var isOnboardingDone: Bool
 
+    @StateObject private var walletStore = TrailsWalletStore.shared
     @AppStorage("localCreatorId") private var localCreatorId: String = ""
     @AppStorage("localDisplayName") private var localDisplayName: String = ""
     @AppStorage("localUsername") private var localUsername: String = ""
@@ -34,6 +35,17 @@ struct OnboardingView: View {
     @State private var enteredIntroduction: String = ""
     @State private var isAuthenticatingSocial: Bool = false
     @State private var socialAuthError: String? = nil
+    @State private var usernameAvailability: UsernameAvailabilityState = .idle
+    @State private var checkTask: Task<Void, Never>?
+    @State private var copiedWallet: Bool = false
+
+    enum UsernameAvailabilityState: Equatable {
+        case idle
+        case checking
+        case available(ens: String)
+        case taken(claimedBy: String?)
+        case invalid(reason: String)
+    }
 
     private let totalPages = 4
 
@@ -77,14 +89,18 @@ struct OnboardingView: View {
         }
         .onAppear {
             initializeLocalCreatorId()
+            walletStore.loadOrGenerateWallet()
             if !localDisplayName.isEmpty {
                 enteredDisplayName = localDisplayName
             }
-            if !localUsername.isEmpty {
-                enteredUsername = localUsername
-            }
             if !localIntroduction.isEmpty {
                 enteredIntroduction = localIntroduction
+            }
+            if !localUsername.isEmpty {
+                enteredUsername = localUsername
+                checkAvailability(for: localUsername)
+            } else if enteredUsername.isEmpty {
+                randomizeUsername()
             }
         }
         .task {
@@ -175,7 +191,7 @@ struct OnboardingView: View {
         .padding(.horizontal, 20)
     }
 
-    // MARK: - Page 1: Human Perspective & Moments
+    // MARK: - Page 1: Moments & Human Perspective
 
     private var momentsPage: some View {
         VStack(spacing: 28) {
@@ -184,7 +200,7 @@ struct OnboardingView: View {
             // Visual Emblem
             ZStack {
                 Circle()
-                    .stroke(AppColors.terracotta.opacity(0.18), lineWidth: 1)
+                    .stroke(AppColors.terracotta.opacity(0.12), lineWidth: 1)
                     .frame(width: 190, height: 190)
 
                 Circle()
@@ -192,14 +208,14 @@ struct OnboardingView: View {
                     .frame(width: 140, height: 140)
 
                 Image(systemName: "mappin.and.ellipse")
-                    .font(.system(size: 62, weight: .light))
+                    .font(.system(size: 60, weight: .light))
                     .foregroundColor(AppColors.terracotta)
 
-                // Brass waypoint accent
+                // Small terracotta marker accent
                 Circle()
-                    .fill(AppColors.mutedBrass)
+                    .fill(AppColors.forestGreen)
                     .frame(width: 12, height: 12)
-                    .offset(x: -46, y: -38)
+                    .offset(x: -44, y: 44)
             }
 
             // Copy
@@ -209,7 +225,7 @@ struct OnboardingView: View {
                     .tracking(2.0)
                     .foregroundColor(AppColors.terracotta)
 
-                Text("Mark moments along your journey.")
+                Text("Record sensory notes along your physical path.")
                     .font(AppFonts.headlineLarge)
                     .foregroundColor(AppColors.deepInk)
                     .multilineTextAlignment(.center)
@@ -303,7 +319,7 @@ struct OnboardingView: View {
         .padding(.horizontal, 20)
     }
 
-    // MARK: - Page 3: Identity & Access (Username, Google, Apple)
+    // MARK: - Page 3: Identity & Access (Decentralized Handle, Wallet & Social)
 
     private var identityPage: some View {
         ScrollView(.vertical, showsIndicators: false) {
@@ -322,17 +338,17 @@ struct OnboardingView: View {
 
                 // Headline
                 VStack(spacing: 8) {
-                    Text("CHOOSE YOUR IDENTITY")
+                    Text("DECENTRALIZED IDENTITY")
                         .font(AppFonts.labelSpatial)
                         .tracking(2.0)
                         .foregroundColor(AppColors.mutedBrass)
 
-                    Text("How would you like to start?")
+                    Text("Claim your unique author handle.")
                         .font(AppFonts.headlineLarge)
                         .foregroundColor(AppColors.deepInk)
                         .multilineTextAlignment(.center)
 
-                    Text("Pick a username to start exploring privately right away, or sign in with Google / Apple. You can link accounts anytime in your Profile.")
+                    Text("Every explorer receives a unique handle & non-custodial wallet for verifiable spatial attribution.")
                         .font(AppFonts.bodyMedium)
                         .foregroundColor(AppColors.onSurfaceVariant)
                         .multilineTextAlignment(.center)
@@ -368,36 +384,42 @@ struct OnboardingView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
                     .padding(.horizontal, 16)
                 } else {
-                    // Option 1: Start with Username (Private & Instant)
-                    VStack(alignment: .leading, spacing: 14) {
-                        HStack {
-                            Image(systemName: "person.circle.fill")
-                                .foregroundColor(AppColors.forestGreen)
-                            Text("START WITH USERNAME")
-                                .font(AppFonts.labelSpatial)
-                                .foregroundColor(AppColors.forestGreen)
-                                .tracking(1.2)
-                            Spacer()
-                            Text("100% PRIVATE")
-                                .font(AppFonts.labelSpatial)
-                                .foregroundColor(AppColors.mutedBrass)
-                        }
+                    // Option 1: Unique Handle & Non-Custodial Wallet Card
+                    VStack(alignment: .leading, spacing: 16) {
 
+                        // 1. Unique Username with Randomize Button
                         VStack(alignment: .leading, spacing: 6) {
-                            Text("USERNAME")
-                                .font(AppFonts.labelSpatial)
-                                .foregroundColor(AppColors.outline)
+                            HStack {
+                                Text("UNIQUE HANDLE (ENS READY)")
+                                    .font(AppFonts.labelSpatial)
+                                    .foregroundColor(AppColors.outline)
+                                Spacer()
+                                Button {
+                                    Haptics.selection()
+                                    randomizeUsername()
+                                } label: {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "dice.fill")
+                                        Text("Randomize")
+                                    }
+                                    .font(AppFonts.labelSpatial)
+                                    .foregroundColor(AppColors.forestGreen)
+                                }
+                            }
 
-                            HStack(spacing: 4) {
+                            HStack(spacing: 8) {
                                 Text("@")
-                                    .font(AppFonts.bodyLarge)
+                                    .font(AppFonts.headlineSmall)
                                     .foregroundColor(AppColors.outline)
 
-                                TextField("username (e.g., alex, explorer)", text: $enteredUsername)
-                                    .font(AppFonts.bodyLarge)
+                                TextField("e.g., wandering-cedar-42", text: $enteredUsername)
+                                    .font(AppFonts.headlineSmall)
                                     .foregroundColor(AppColors.deepInk)
+                                    .autocorrectionDisabled()
                                     .textInputAutocapitalization(.never)
-                                    .autocorrectionDisabled(true)
+                                    .onChange(of: enteredUsername) { newValue in
+                                        checkAvailability(for: newValue)
+                                    }
                             }
                             .padding(.horizontal, 14)
                             .padding(.vertical, 12)
@@ -405,16 +427,39 @@ struct OnboardingView: View {
                             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                             .overlay(
                                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                    .stroke(AppColors.outlineVariant.opacity(0.5), lineWidth: 1)
+                                    .stroke(availabilityBorderColor, lineWidth: 1)
                             )
+
+                            // Availability indicator pill
+                            availabilityBadge
                         }
 
+                        // 2. Display Name
                         VStack(alignment: .leading, spacing: 6) {
-                            Text("DISPLAY NAME (OPTIONAL)")
+                            Text("DISPLAY NAME")
                                 .font(AppFonts.labelSpatial)
                                 .foregroundColor(AppColors.outline)
 
-                            TextField("e.g., Alex Chen", text: $enteredDisplayName)
+                            TextField("e.g., Sarah Chen", text: $enteredDisplayName)
+                                .font(AppFonts.bodyLarge)
+                                .foregroundColor(AppColors.deepInk)
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 12)
+                                .background(AppColors.surfaceContainerLow)
+                                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                        .stroke(AppColors.outlineVariant.opacity(0.5), lineWidth: 1)
+                                )
+                        }
+
+                        // 3. Focus / Context
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("CONTEXT / FOCUS (OPTIONAL)")
+                                .font(AppFonts.labelSpatial)
+                                .foregroundColor(AppColors.outline)
+
+                            TextField("e.g., Resident, Architect, Sound Artist", text: $enteredIntroduction)
                                 .font(AppFonts.bodyMedium)
                                 .foregroundColor(AppColors.deepInk)
                                 .padding(.horizontal, 14)
@@ -427,16 +472,54 @@ struct OnboardingView: View {
                                 )
                         }
 
-                        HStack(spacing: 8) {
-                            Image(systemName: "checkmark.shield.fill")
-                                .foregroundColor(AppColors.forestGreen)
-                                .font(.system(size: 13))
+                        Divider()
+                            .padding(.vertical, 2)
 
-                            Text("No password needed. Captures stay on device.")
-                                .font(AppFonts.labelSpatial)
-                                .foregroundColor(AppColors.outline)
+                        // 4. Logos & Ethereum Wallet Identity
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack {
+                                Image(systemName: "wallet.pass.fill")
+                                    .foregroundColor(AppColors.forestGreen)
+                                Text("LOGOS & ETHEREUM WALLET")
+                                    .font(AppFonts.labelSpatial)
+                                    .foregroundColor(AppColors.forestGreen)
+                                Spacer()
+                                Text("Non-Custodial")
+                                    .font(.system(size: 11, weight: .semibold))
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(AppColors.forestGreen.opacity(0.1))
+                                    .foregroundColor(AppColors.forestGreen)
+                                    .clipShape(Capsule())
+                            }
+
+                            HStack {
+                                Text(walletStore.shortAddress.isEmpty ? "Generating..." : walletStore.shortAddress)
+                                    .font(.system(size: 13, weight: .monospaced))
+                                    .foregroundColor(AppColors.deepInk)
+
+                                Spacer()
+
+                                Button {
+                                    UIPasteboard.general.string = walletStore.activeAddress
+                                    Haptics.selection()
+                                    copiedWallet = true
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                                        copiedWallet = false
+                                    }
+                                } label: {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: copiedWallet ? "checkmark" : "doc.on.doc")
+                                        Text(copiedWallet ? "Copied" : "Copy")
+                                    }
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundColor(copiedWallet ? AppColors.forestGreen : AppColors.outline)
+                                }
+                            }
+                            .padding(10)
+                            .background(AppColors.surfaceContainerLow.opacity(0.6))
+                            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                         }
-                        .padding(.top, 2)
 
                         Button {
                             saveIdentityAndComplete()
@@ -543,7 +626,64 @@ struct OnboardingView: View {
         if !clean.isEmpty {
             return "Start as @\(clean)"
         }
-        return "Start Exploring with Username"
+        return "Start Exploring with Handle"
+    }
+
+    private var availabilityBorderColor: Color {
+        switch usernameAvailability {
+        case .available:
+            return AppColors.forestGreen.opacity(0.8)
+        case .taken:
+            return AppColors.terracotta.opacity(0.8)
+        case .invalid:
+            return AppColors.terracotta.opacity(0.5)
+        case .checking, .idle:
+            return AppColors.outlineVariant.opacity(0.5)
+        }
+    }
+
+    @ViewBuilder
+    private var availabilityBadge: some View {
+        switch usernameAvailability {
+        case .checking:
+            HStack(spacing: 6) {
+                ProgressView()
+                    .scaleEffect(0.7)
+                Text("Checking Logos registry & ENS...")
+                    .font(AppFonts.labelSpatial)
+                    .foregroundColor(AppColors.outline)
+            }
+            .padding(.top, 2)
+        case .available(let ens):
+            HStack(spacing: 6) {
+                Image(systemName: "checkmark.seal.fill")
+                    .foregroundColor(AppColors.forestGreen)
+                Text("Available · ENS: \(ens)")
+                    .font(AppFonts.labelSpatial)
+                    .foregroundColor(AppColors.forestGreen)
+            }
+            .padding(.top, 2)
+        case .taken(let claimedBy):
+            HStack(spacing: 6) {
+                Image(systemName: "xmark.circle.fill")
+                    .foregroundColor(AppColors.terracotta)
+                Text(claimedBy != nil ? "Already claimed on-chain" : "Handle taken")
+                    .font(AppFonts.labelSpatial)
+                    .foregroundColor(AppColors.terracotta)
+            }
+            .padding(.top, 2)
+        case .invalid(let reason):
+            HStack(spacing: 6) {
+                Image(systemName: "exclamationmark.circle")
+                    .foregroundColor(AppColors.terracotta)
+                Text(reason)
+                    .font(AppFonts.labelSpatial)
+                    .foregroundColor(AppColors.terracotta)
+            }
+            .padding(.top, 2)
+        case .idle:
+            EmptyView()
+        }
     }
 
     // MARK: - Bottom Controls
@@ -597,6 +737,50 @@ struct OnboardingView: View {
 
     // MARK: - Identity & Completion Logic
 
+    private func randomizeUsername() {
+        let rand = TrailsIdentityGenerator.generateRandomUsername()
+        enteredUsername = rand
+        if enteredDisplayName.isEmpty || enteredDisplayName == "A trail by you" {
+            enteredDisplayName = TrailsIdentityGenerator.generateDisplayName(from: rand)
+        }
+        checkAvailability(for: rand)
+    }
+
+    private func checkAvailability(for name: String) {
+        checkTask?.cancel()
+        let clean = name.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: "@", with: "")
+        guard !clean.isEmpty else {
+            usernameAvailability = .idle
+            return
+        }
+        guard TrailsIdentityGenerator.isValidFormat(clean) else {
+            usernameAvailability = .invalid(reason: "3-64 chars (a-z, 0-9, -, _)")
+            return
+        }
+
+        usernameAvailability = .checking
+        checkTask = Task {
+            try? await Task.sleep(nanoseconds: 350_000_000)
+            guard !Task.isCancelled else { return }
+            do {
+                let res = try await TrailsLogosClient.shared.checkUsernameAvailability(username: clean)
+                if !Task.isCancelled {
+                    if res.available {
+                        let ens = TrailsIdentityGenerator.formatENS(for: clean)
+                        usernameAvailability = .available(ens: ens)
+                    } else {
+                        usernameAvailability = .taken(claimedBy: res.claimedBy)
+                    }
+                }
+            } catch {
+                if !Task.isCancelled {
+                    let ens = TrailsIdentityGenerator.formatENS(for: clean)
+                    usernameAvailability = .available(ens: ens)
+                }
+            }
+        }
+    }
+
     private func initializeLocalCreatorId() {
         if localCreatorId.isEmpty {
             localCreatorId = UUID().uuidString
@@ -605,23 +789,38 @@ struct OnboardingView: View {
 
     private func saveIdentityAndComplete() {
         let trimmedName = enteredDisplayName.trimmingCharacters(in: .whitespacesAndNewlines)
-        let trimmedUsername = enteredUsername.trimmingCharacters(in: .whitespacesAndNewlines)
-            .trimmingCharacters(in: CharacterSet(charactersIn: "@"))
-            .lowercased()
         let trimmedIntro = enteredIntroduction.trimmingCharacters(in: .whitespacesAndNewlines)
+        var cleanUser = enteredUsername.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: "@", with: "").lowercased()
+        if cleanUser.isEmpty {
+            cleanUser = TrailsIdentityGenerator.generateRandomUsername()
+        }
 
         localDisplayName = trimmedName
-        localUsername = trimmedUsername
         localIntroduction = trimmedIntro
+        localUsername = cleanUser
 
-        let effectiveDisplayName = trimmedName.isEmpty ? (trimmedUsername.isEmpty ? "A trail by you" : trimmedUsername.capitalized) : trimmedName
+        let ens = TrailsIdentityGenerator.formatENS(for: cleanUser)
+        let wallet = walletStore.activeAddress
 
-        // Persist to the TrailsDataStore local profile so You tab and trail authorship pick it up
+        // Persist to TrailsDataStore local profile
         TrailsDataStore.shared.updateProfile(
-            displayName: effectiveDisplayName,
+            displayName: trimmedName.isEmpty ? TrailsIdentityGenerator.generateDisplayName(from: cleanUser) : trimmedName,
             introduction: trimmedIntro.isEmpty ? "Spatial explorer documenting living spaces." : trimmedIntro,
-            username: trimmedUsername.isEmpty ? nil : trimmedUsername
+            username: cleanUser,
+            accountAddress: wallet,
+            ensDomain: ens
         )
+
+        // Asynchronously register creator identity on the Logos gateway
+        Task {
+            _ = try? await TrailsLogosClient.shared.claimCreator(
+                username: cleanUser,
+                displayName: trimmedName.isEmpty ? nil : trimmedName,
+                accountAddress: wallet,
+                bio: trimmedIntro.isEmpty ? nil : trimmedIntro,
+                ensDomain: ens
+            )
+        }
 
         completeOnboarding()
     }

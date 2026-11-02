@@ -88,6 +88,13 @@ public struct LogosCreatorsResponse: Codable, Sendable {
     public let items: [CreatorRecord]
 }
 
+public struct LogosCheckUsernameResponse: Codable, Sendable {
+    public let available: Bool
+    public let username: String
+    public let reason: String?
+    public let claimedBy: String?
+}
+
 @MainActor
 public final class TrailsLogosClient: ObservableObject {
     public static let shared = TrailsLogosClient()
@@ -206,6 +213,73 @@ public final class TrailsLogosClient: ObservableObject {
         return decoded.items
     }
 
+    // MARK: - Creator Identity & Username Availability
+
+    public func checkUsernameAvailability(username: String) async throws -> LogosCheckUsernameResponse {
+        var components = URLComponents(url: baseURL.appendingPathComponent("creators").appendingPathComponent("check-username"), resolvingAgainstBaseURL: false)!
+        components.queryItems = [URLQueryItem(name: "username", value: username)]
+        guard let url = components.url else { throw URLError(.badURL) }
+
+        let (data, response) = try await session.data(from: url)
+        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+            let msg = String(data: data, encoding: .utf8) ?? "Failed to check username availability"
+            throw NSError(domain: "TrailsLogosClient", code: (response as? HTTPURLResponse)?.statusCode ?? 500, userInfo: [NSLocalizedDescriptionKey: msg])
+        }
+
+        return try JSONDecoder().decode(LogosCheckUsernameResponse.self, from: data)
+    }
+
+    public func claimCreator(
+        username: String,
+        displayName: String? = nil,
+        accountAddress: String,
+        bio: String? = nil,
+        avatarUrl: String? = nil,
+        ensDomain: String? = nil
+    ) async throws -> CreatorRecord {
+        let url = baseURL.appendingPathComponent("creators").appendingPathComponent("claim")
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        var bodyDict: [String: Any] = [
+            "username": username,
+            "accountAddress": accountAddress
+        ]
+        if let displayName, !displayName.isEmpty {
+            bodyDict["displayName"] = displayName
+        }
+        if let bio, !bio.isEmpty {
+            bodyDict["bio"] = bio
+        }
+        if let avatarUrl, !avatarUrl.isEmpty {
+            bodyDict["avatarUrl"] = avatarUrl
+        }
+        if let ensDomain, !ensDomain.isEmpty {
+            bodyDict["ensDomain"] = ensDomain
+        }
+
+        request.httpBody = try JSONSerialization.data(withJSONObject: bodyDict)
+
+        let (data, response) = try await session.data(for: request)
+        guard let http = response as? HTTPURLResponse, (http.statusCode == 200 || http.statusCode == 201) else {
+            let msg = String(data: data, encoding: .utf8) ?? "Failed to claim username"
+            throw NSError(domain: "TrailsLogosClient", code: (response as? HTTPURLResponse)?.statusCode ?? 500, userInfo: [NSLocalizedDescriptionKey: msg])
+        }
+
+        return try JSONDecoder().decode(CreatorRecord.self, from: data)
+    }
+
+    public func fetchCreator(username: String) async throws -> CreatorRecord {
+        let url = baseURL.appendingPathComponent("creators").appendingPathComponent(username)
+        let (data, response) = try await session.data(from: url)
+        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+            let msg = String(data: data, encoding: .utf8) ?? "Creator not found"
+            throw NSError(domain: "TrailsLogosClient", code: (response as? HTTPURLResponse)?.statusCode ?? 500, userInfo: [NSLocalizedDescriptionKey: msg])
+        }
+        return try JSONDecoder().decode(CreatorRecord.self, from: data)
+    }
+
     public func getPublicationStatus(operationId: String) async throws -> LogosPublicationReceipt {
         let url = baseURL.appendingPathComponent("publications").appendingPathComponent(operationId)
         let (data, response) = try await session.data(from: url)
@@ -265,15 +339,20 @@ public final class TrailsLogosClient: ObservableObject {
 
     // MARK: - Publish Package Archive
 
-    public func publishPackageZip(zipData: Data, publisherAccount: String = "0x0000000000000000000000000000000000000001", operationId: String = UUID().uuidString) async throws -> LogosPublicationReceipt {
+    public func publishPackageZip(
+        zipData: Data,
+        publisherAccount: String? = nil,
+        operationId: String = UUID().uuidString
+    ) async throws -> LogosPublicationReceipt {
         self.isPublishing = true
         defer { self.isPublishing = false }
 
+        let resolvedPublisher = publisherAccount ?? (!TrailsWalletStore.shared.activeAddress.isEmpty ? TrailsWalletStore.shared.activeAddress : "0x0000000000000000000000000000000000000001")
         let url = baseURL.appendingPathComponent("publications")
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/zip", forHTTPHeaderField: "Content-Type")
-        request.setValue(publisherAccount, forHTTPHeaderField: "X-Publisher-Account")
+        request.setValue(resolvedPublisher, forHTTPHeaderField: "X-Publisher-Account")
         request.setValue(operationId, forHTTPHeaderField: "X-Operation-Id")
         request.httpBody = zipData
 

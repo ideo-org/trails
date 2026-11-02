@@ -617,19 +617,28 @@ public struct CreatorRecord: Identifiable, Hashable, Codable, Sendable {
     public let displayName: String
     public let publisherReference: String
     public let trailCount: Int
+    public let bio: String?
+    public let avatarUrl: String?
+    public let ensDomain: String?
 
     public init(
         creatorId: String,
         username: String,
         displayName: String,
         publisherReference: String,
-        trailCount: Int
+        trailCount: Int,
+        bio: String? = nil,
+        avatarUrl: String? = nil,
+        ensDomain: String? = nil
     ) {
         self.creatorId = creatorId
         self.username = username
         self.displayName = displayName
         self.publisherReference = publisherReference
         self.trailCount = trailCount
+        self.bio = bio
+        self.avatarUrl = avatarUrl
+        self.ensDomain = ensDomain
     }
 }
 
@@ -1014,6 +1023,8 @@ public struct LocalProfile: Codable, Hashable {
     public var avatarURL: String?
     public var introduction: String
     public var interests: [String]
+    public var accountAddress: String?
+    public var ensDomain: String?
 
     public init(
         id: String = UUID().uuidString,
@@ -1021,7 +1032,9 @@ public struct LocalProfile: Codable, Hashable {
         username: String? = nil,
         avatarURL: String? = nil,
         introduction: String = "Spatial explorer documenting living spaces.",
-        interests: [String] = []
+        interests: [String] = [],
+        accountAddress: String? = nil,
+        ensDomain: String? = nil
     ) {
         self.id = id
         self.displayName = displayName
@@ -1029,6 +1042,8 @@ public struct LocalProfile: Codable, Hashable {
         self.avatarURL = avatarURL
         self.introduction = introduction
         self.interests = interests
+        self.accountAddress = accountAddress
+        self.ensDomain = ensDomain
     }
 }
 

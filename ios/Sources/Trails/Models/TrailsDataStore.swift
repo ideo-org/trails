@@ -321,7 +321,14 @@ public final class TrailsDataStore: ObservableObject {
         }
     }
 
-    public func updateProfile(displayName: String, introduction: String, username: String? = nil, avatarURL: String? = nil) {
+    public func updateProfile(
+        displayName: String,
+        introduction: String,
+        username: String? = nil,
+        avatarURL: String? = nil,
+        accountAddress: String? = nil,
+        ensDomain: String? = nil
+    ) {
         localProfile.displayName = displayName
         localProfile.introduction = introduction
         if let username {
@@ -329,6 +336,12 @@ public final class TrailsDataStore: ObservableObject {
         }
         if let avatarURL {
             localProfile.avatarURL = avatarURL
+        }
+        if let accountAddress {
+            localProfile.accountAddress = accountAddress
+        }
+        if let ensDomain {
+            localProfile.ensDomain = ensDomain
         }
         packageStore.saveLocalProfile(localProfile)
     }
